@@ -186,92 +186,112 @@ export default function GameInterface() {
     
     setIsEvaluating(true);
     
-    try {
-      let evaluationEndpoint = '/api/evaluate-response';
-      let requestBody: any = { 
-        topic, 
-        response,
-        difficulty: difficulty // Use the single difficulty level
-      };
-      
-      // For the final round with circle enabled, use the special evaluation endpoint
-      if (currentRound === maxRounds && circleEnabled) {
-        evaluationEndpoint = '/api/evaluate-final-response';
-        requestBody = { 
-          currentTopic: topic, 
-          originalTopic: originalTopic, 
+    let retries = 0;
+    const maxRetries = 3;
+    
+    while (retries < maxRetries) {
+      try {
+        let evaluationEndpoint = '/api/evaluate-response';
+        let requestBody: any = { 
+          topic, 
           response,
           difficulty: difficulty // Use the single difficulty level
         };
-      }
-      
-      const res = await fetch(evaluationEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to evaluate response');
-      }
-
-      const data = await res.json();
-      
-      // Handle final round evaluation differently if circle is enabled
-      if (currentRound === maxRounds && circleEnabled) {
-        setCurrentEvaluation({
-          topic,
-          response,
-          player: currentPlayer,
-          evaluation: data.evaluation,
-          finalEvaluation: data.finalEvaluation,
-          scores: data.scores,
-        });
-        setGameCompleted(true);
-      } else {
-        setCurrentEvaluation({
-          topic,
-          response,
-          player: currentPlayer,
-          evaluation: data.evaluation,
-          scores: data.scores,
-        });
         
-        // Set game completed if it's the final round (even without circle)
-        if (currentRound === maxRounds) {
+        // For the final round with circle enabled, use the special evaluation endpoint
+        if (currentRound === maxRounds && circleEnabled) {
+          evaluationEndpoint = '/api/evaluate-final-response';
+          requestBody = { 
+            currentTopic: topic, 
+            originalTopic: originalTopic, 
+            response,
+            difficulty: difficulty // Use the single difficulty level
+          };
+        }
+        
+        console.log(`Evaluation attempt ${retries + 1}/${maxRetries}`);
+        const res = await fetch(evaluationEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          console.error(`HTTP error ${res.status}:`, errorData);
+          throw new Error(`HTTP error ${res.status}: ${errorData.error || 'Unknown error'}`);
+        }
+
+        const data = await res.json();
+        
+        // Handle final round evaluation differently if circle is enabled
+        if (currentRound === maxRounds && circleEnabled) {
+          setCurrentEvaluation({
+            topic,
+            response,
+            player: currentPlayer,
+            evaluation: data.evaluation,
+            finalEvaluation: data.finalEvaluation,
+            scores: data.scores,
+          });
           setGameCompleted(true);
+        } else {
+          setCurrentEvaluation({
+            topic,
+            response,
+            player: currentPlayer,
+            evaluation: data.evaluation,
+            scores: data.scores,
+          });
+          
+          // Set game completed if it's the final round (even without circle)
+          if (currentRound === maxRounds) {
+            setGameCompleted(true);
+          }
+        }
+        
+        setTotalScores(prev => ({
+          ...prev,
+          human: prev.human + data.scores.total
+        }));
+        setShowingResults(true);
+        
+        // Add to game history
+        setGameHistory(prev => [
+          ...prev,
+          {
+            round: currentRound,
+            topic,
+            response,
+            evaluation: data.evaluation,
+            scores: data.scores,
+            player: 'human'
+          }
+        ]);
+        
+        setResponse('');
+        
+        // Success, exit the retry loop
+        break;
+        
+      } catch (error) {
+        console.error(`Evaluation attempt ${retries + 1} failed:`, error);
+        retries++;
+        
+        if (retries >= maxRetries) {
+          alert('Failed to evaluate response after multiple attempts. Please try again.');
+        } else {
+          // Wait before retrying (exponential backoff)
+          const backoffTime = 1000 * Math.pow(2, retries);
+          console.log(`Retrying in ${backoffTime}ms...`);
+          await new Promise(r => setTimeout(r, backoffTime));
         }
       }
-      
-      setTotalScores(prev => ({
-        ...prev,
-        human: prev.human + data.scores.total
-      }));
-      setShowingResults(true);
-      
-      // Add to game history
-      setGameHistory(prev => [
-        ...prev,
-        {
-          round: currentRound,
-          topic,
-          response,
-          evaluation: data.evaluation,
-          scores: data.scores,
-          player: 'human'
-        }
-      ]);
-      
-      setResponse('');
-      
-    } catch (error) {
-      console.error('Error evaluating response:', error);
-      alert('Failed to evaluate response. Please try again.');
-    } finally {
-      setIsEvaluating(false);
     }
+    
+    setIsEvaluating(false);
   };
 
   const evaluateAiResponse = async (aiResponse: string) => {
@@ -279,89 +299,147 @@ export default function GameInterface() {
     
     setIsEvaluating(true);
     
-    try {
-      let evaluationEndpoint = '/api/evaluate-response';
-      let requestBody: any = { 
-        topic, 
-        response: aiResponse,
-        difficulty: difficulty // Use the single difficulty level
-      };
-      
-      // For the final round with circle enabled, use the special evaluation endpoint
-      if (currentRound === maxRounds && circleEnabled) {
-        evaluationEndpoint = '/api/evaluate-final-response';
-        requestBody = { 
-          currentTopic: topic, 
-          originalTopic: originalTopic, 
+    let retries = 0;
+    const maxRetries = 3;
+    
+    while (retries < maxRetries) {
+      try {
+        let evaluationEndpoint = '/api/evaluate-response';
+        let requestBody: any = { 
+          topic, 
           response: aiResponse,
           difficulty: difficulty // Use the single difficulty level
         };
-      }
-      
-      const res = await fetch(evaluationEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to evaluate AI response');
-      }
-
-      const data = await res.json();
-      
-      // Handle final round evaluation differently if circle is enabled
-      if (currentRound === maxRounds && circleEnabled) {
-        setCurrentEvaluation({
-          topic,
-          response: aiResponse,
-          player: 'ai',
-          evaluation: data.evaluation,
-          finalEvaluation: data.finalEvaluation,
-          scores: data.scores,
-        });
-      } else {
-        setCurrentEvaluation({
-          topic,
-          response: aiResponse,
-          player: 'ai',
-          evaluation: data.evaluation,
-          scores: data.scores,
-        });
-      }
-      
-      setTotalScores(prev => ({
-        ...prev,
-        ai: prev.ai + data.scores.total
-      }));
-      setShowingResults(true);
-      
-      // Add to game history
-      setGameHistory(prev => [
-        ...prev,
-        {
-          round: currentRound,
-          topic,
-          response: aiResponse,
-          evaluation: data.evaluation,
-          scores: data.scores,
-          player: 'ai'
+        
+        // For the final round with circle enabled, use the special evaluation endpoint
+        if (currentRound === maxRounds && circleEnabled) {
+          evaluationEndpoint = '/api/evaluate-final-response';
+          requestBody = { 
+            currentTopic: topic, 
+            originalTopic: originalTopic, 
+            response: aiResponse,
+            difficulty: difficulty // Use the single difficulty level
+          };
         }
-      ]);
-      
-      // Set game completed if it's the final round
-      if (currentRound === maxRounds) {
-        setGameCompleted(true);
+        
+        console.log(`AI evaluation attempt ${retries + 1}/${maxRetries}`);
+        const res = await fetch(evaluationEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          console.error(`HTTP error ${res.status}:`, errorData);
+          throw new Error(`HTTP error ${res.status}: ${errorData.error || 'Unknown error'}`);
+        }
+
+        const data = await res.json();
+        
+        // Handle final round evaluation differently if circle is enabled
+        if (currentRound === maxRounds && circleEnabled) {
+          setCurrentEvaluation({
+            topic,
+            response: aiResponse,
+            player: 'ai',
+            evaluation: data.evaluation,
+            finalEvaluation: data.finalEvaluation,
+            scores: data.scores,
+          });
+        } else {
+          setCurrentEvaluation({
+            topic,
+            response: aiResponse,
+            player: 'ai',
+            evaluation: data.evaluation,
+            scores: data.scores,
+          });
+        }
+        
+        setTotalScores(prev => ({
+          ...prev,
+          ai: prev.ai + data.scores.total
+        }));
+        setShowingResults(true);
+        
+        // Add to game history
+        setGameHistory(prev => [
+          ...prev,
+          {
+            round: currentRound,
+            topic,
+            response: aiResponse,
+            evaluation: data.evaluation,
+            scores: data.scores,
+            player: 'ai'
+          }
+        ]);
+        
+        // Set game completed if it's the final round
+        if (currentRound === maxRounds) {
+          setGameCompleted(true);
+        }
+        
+        // Success, exit the retry loop
+        break;
+        
+      } catch (error) {
+        console.error(`AI evaluation attempt ${retries + 1} failed:`, error);
+        retries++;
+        
+        if (retries >= maxRetries) {
+          // If all retries fail, create a fallback evaluation
+          const fallbackScores = {
+            semanticDistance: 5,
+            relevanceQuality: 5,
+            total: 10
+          };
+          
+          setCurrentEvaluation({
+            topic,
+            response: aiResponse,
+            player: 'ai',
+            evaluation: "I couldn't evaluate this response properly. Here's a default score.",
+            scores: fallbackScores,
+          });
+          
+          setTotalScores(prev => ({
+            ...prev,
+            ai: prev.ai + fallbackScores.total
+          }));
+          
+          setShowingResults(true);
+          
+          // Add to game history with fallback evaluation
+          setGameHistory(prev => [
+            ...prev,
+            {
+              round: currentRound,
+              topic,
+              response: aiResponse,
+              evaluation: "Evaluation failed. Default score applied.",
+              scores: fallbackScores,
+              player: 'ai'
+            }
+          ]);
+          
+          // Set game completed if it's the final round
+          if (currentRound === maxRounds) {
+            setGameCompleted(true);
+          }
+        } else {
+          // Wait before retrying (exponential backoff)
+          const backoffTime = 1000 * Math.pow(2, retries);
+          console.log(`Retrying in ${backoffTime}ms...`);
+          await new Promise(r => setTimeout(r, backoffTime));
+        }
       }
-      
-    } catch (error) {
-      console.error('Error evaluating AI response:', error);
-      alert('Failed to evaluate AI response. Please try again.');
-    } finally {
-      setIsEvaluating(false);
     }
+    
+    setIsEvaluating(false);
   };
 
   const handleNextTurn = () => {

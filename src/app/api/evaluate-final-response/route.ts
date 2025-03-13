@@ -44,10 +44,10 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('Preparing to make API request with model: claude-3-opus-20240229');
+    console.log('Preparing to make API request with model: claude-3-sonnet-20240229');
     
     const aiResponse = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
+      model: "claude-3-sonnet-20240229",
       max_tokens: 1000,
       temperature: 0.2,
       system: `You are an expert evaluator for the Glass Bead Game, a game of conceptual connections.

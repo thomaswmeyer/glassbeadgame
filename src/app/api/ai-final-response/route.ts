@@ -108,11 +108,11 @@ export async function POST(request: Request) {
       ? `Avoid these previously used responses: ${previousResponses.join(', ')}.` 
       : '';
 
-    console.log('Preparing to make API request with model: claude-3-opus-20240229');
+    console.log('Preparing to make API request with model: claude-3-sonnet-20240229');
     console.log('Temperature setting:', 0.9);
     
     const aiResponse = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
+      model: "claude-3-sonnet-20240229",
       max_tokens: 100,
       temperature: 0.9,
       system: `You are playing the Glass Bead Game, a game of conceptual connections. 

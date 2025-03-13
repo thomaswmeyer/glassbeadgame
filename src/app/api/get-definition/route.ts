@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const response = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
+      model: "claude-3-sonnet-20240229",
       max_tokens: 250,
       temperature: 0.7,
       system: `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 

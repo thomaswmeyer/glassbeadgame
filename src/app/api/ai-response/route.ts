@@ -84,77 +84,146 @@ export async function POST(request: Request) {
       ? `Avoid these previously used responses: ${previousResponses.join(', ')}.` 
       : '';
 
-    console.log('Preparing to make API request with model: claude-3-opus-20240229');
+    console.log('Preparing to make API request with model: claude-3-sonnet-20240229');
     console.log('Temperature setting:', 0.9);
     
-    const aiResponse = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
-      max_tokens: 50,
-      temperature: 0.9,
-      system: `You are playing the Glass Bead Game, a game of conceptual connections. 
-      
-      Your task is to respond to a given topic with a brief, thoughtful response 
-      (ideally just a few words) that:
-      1. Has a semantic distance from the topic
-      2. Fits well onto the topic, through similar concepts or associations
-      
-      Your response should be brief but profound - a single word or short phrase that 
-      captures a concept related to the topic in an interesting way.
-      
-      IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
-      - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
-      - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
-      - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
-      - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
-      - The best connections reveal surprising parallels between seemingly unrelated concepts
-      
-      ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
-      
-      Be creative and varied in your responses. Avoid obvious associations and clichés. 
-      Try to surprise the player with unexpected but meaningful connections.
-      
-      ${responsesToAvoid}
-      
-      Current timestamp for seed variation: ${timestamp}
-      
-      Consider multiple domains of knowledge when forming your response:
-      - Arts and humanities
-      - Science and technology
-      - Social sciences
-      - Natural world
-      - Abstract concepts
-      
-      DO NOT explain your reasoning. ONLY provide the brief response itself.`,
-      messages: [
-        {
-          role: "user",
-          content: `${historyContext}
+    // Add retry logic with exponential backoff
+    const maxRetries = 3;
+    let lastError;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`API request attempt ${attempt + 1} of ${maxRetries}`);
+        
+        const aiResponse = await anthropic.messages.create({
+          model: "claude-3-sonnet-20240229",
+          max_tokens: 50,
+          temperature: 0.9,
+          system: `You are playing the Glass Bead Game, a game of conceptual connections. 
           
-          Current topic: "${topic}"
+          Your task is to respond to a given topic with a brief, thoughtful response 
+          (ideally just a few words) that:
+          1. Has a semantic distance from the topic
+          2. Fits well onto the topic, through similar concepts or associations
           
-          Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
+          Your response should be brief but profound - a single word or short phrase that 
+          captures a concept related to the topic in an interesting way.
+          
+          IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
+          - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
+          - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
+          - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
+          - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
+          - The best connections reveal surprising parallels between seemingly unrelated concepts
+          
+          ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+          
+          Be creative and varied in your responses. Avoid obvious associations and clichés. 
+          Try to surprise the player with unexpected but meaningful connections.
+          
+          ${responsesToAvoid}
+          
+          Current timestamp for seed variation: ${timestamp}
+          
+          Consider multiple domains of knowledge when forming your response:
+          - Arts and humanities
+          - Science and technology
+          - Social sciences
+          - Natural world
+          - Abstract concepts
+          
+          DO NOT explain your reasoning. ONLY provide the brief response itself.`,
+          messages: [
+            {
+              role: "user",
+              content: `${historyContext}
+              
+              Current topic: "${topic}"
+              
+              Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
+            }
+          ],
+        });
+        
+        // If we get here, the request was successful
+        console.log('API request successful');
+        
+        // Extract the text content from the response
+        const response = aiResponse.content[0].type === 'text' 
+          ? aiResponse.content[0].text.trim() 
+          : 'Failed to generate a response';
+        
+        console.log('AI response:', response);
+        
+        return NextResponse.json({ response });
+      } catch (error: any) {
+        console.error(`Attempt ${attempt + 1} failed:`, error.message);
+        lastError = error;
+        
+        // Check if we should retry
+        if (attempt < maxRetries - 1) {
+          // Calculate backoff time: 1s, 2s, 4s, etc.
+          const backoffTime = 1000 * Math.pow(2, attempt);
+          console.log(`Retrying in ${backoffTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
         }
-      ],
+      }
+    }
+    
+    // If we get here, all retries failed
+    console.error('All retry attempts failed');
+    
+    // Generate a fallback response
+    const fallbackResponse = generateFallbackResponse(topic);
+    console.log('Using fallback response:', fallbackResponse);
+    
+    return NextResponse.json({ 
+      response: fallbackResponse,
+      error: 'Failed to generate AI response after multiple attempts'
     });
-    
-    console.log('API request successful');
-    console.log('Response received:', JSON.stringify(aiResponse, null, 2));
-
-    // Extract the text content from the response
-    const response = aiResponse.content[0].type === 'text' 
-      ? aiResponse.content[0].text.trim() 
-      : '';
-    
-    console.log('Extracted response:', response);
-
-    return NextResponse.json({ response });
-  } catch (error) {
-    console.error('=== AI RESPONSE ERROR ===');
+  } catch (error: any) {
     console.error('Error generating AI response:', error);
     
+    // Provide more detailed error information
+    let errorMessage = 'Failed to generate AI response';
+    let statusCode = 500;
+    
+    if (error.status === 429) {
+      errorMessage = 'Rate limit exceeded, please try again later';
+      statusCode = 429;
+    } else if (error.status === 504 || error.status === 503) {
+      errorMessage = 'Service temporarily unavailable';
+      statusCode = 503;
+    }
+    
+    // Generate a fallback response with a generic topic if the original topic is not available
+    const fallbackResponse = generateFallbackResponse('concept');
+    
     return NextResponse.json(
-      { error: 'Failed to generate AI response' },
-      { status: 500 }
+      { response: fallbackResponse, error: errorMessage },
+      { status: statusCode }
     );
   }
+}
+
+// Helper function to generate a fallback response if API calls fail
+function generateFallbackResponse(topic: string): string {
+  const fallbackResponses = [
+    'Emergent patterns',
+    'Structural resonance',
+    'Recursive systems',
+    'Adaptive complexity',
+    'Harmonic oscillation',
+    'Symmetry breaking',
+    'Threshold effects',
+    'Feedback loops',
+    'Paradigm shifts',
+    'Conceptual frameworks'
+  ];
+  
+  // Generate a pseudo-random index based on the topic and current time
+  const seed = topic.length + Date.now() % 100;
+  const randomIndex = seed % fallbackResponses.length;
+  
+  return fallbackResponses[randomIndex];
 } 

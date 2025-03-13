@@ -181,81 +181,139 @@ export async function POST(request: Request) {
       ? `Avoid these recently used topics: ${recentTopics.join(', ')}.` 
       : '';
 
-    console.log('Preparing to make API request with model: claude-3-opus-20240229');
+    console.log('Preparing to make API request with model: claude-3-sonnet-20240229');
     console.log('Temperature setting:', 0.9);
     
-    try {
-      console.log('Making API request to Anthropic...');
-      const response = await anthropic.messages.create({
-        model: "claude-3-opus-20240229",
-        max_tokens: 100,
-        temperature: 0.9,
-        system: `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
+    // Add retry logic with exponential backoff
+    const maxRetries = 3;
+    let lastError;
+    let topic = '';
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`API request attempt ${attempt + 1} of ${maxRetries}`);
+        console.log('Making API request to Anthropic...');
         
-        The topic should be a single concept, idea, term, or work related to the category: ${category.name}, specifically in the area of ${randomSubcategory}.
+        const response = await anthropic.messages.create({
+          model: "claude-3-sonnet-20240229",
+          max_tokens: 100,
+          temperature: 0.9,
+          system: `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
+          
+          The topic should be a single concept, idea, term, or work related to the category: ${category.name}, specifically in the area of ${randomSubcategory}.
+          
+          ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+          
+          Be creative and varied in your suggestions. Avoid common or overused topics.
+          ${topicsToAvoid}
+          
+          Current timestamp for seed variation: ${timestamp}
+          
+          Examples of good topics at different levels:
+          - Secondary level: Clear, accessible concepts that high school students would understand
+          - University level: More specialized concepts taught in undergraduate courses
+          - Unlimited level: Advanced, specialized concepts that might be discussed in graduate seminars
+          
+          For ${randomSubcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
+          
+          Provide ONLY the topic name without any explanation or additional text.`,
+          messages: [
+            {
+              role: "user",
+              content: `Generate a unique and interesting ${difficulty}-level topic related to ${randomSubcategory} (a type of ${category.name}) for the Glass Bead Game. The topic should be specific and not generic.`
+            }
+          ],
+        });
         
-        ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
-        
-        Be creative and varied in your suggestions. Avoid common or overused topics.
-        ${topicsToAvoid}
-        
-        Current timestamp for seed variation: ${timestamp}
-        
-        Examples of good topics at different levels:
-        - Secondary level: Clear, accessible concepts that high school students would understand
-        - University level: More specialized concepts taught in undergraduate courses
-        - Unlimited level: Advanced, specialized concepts that might be discussed in graduate seminars
-        
-        For ${randomSubcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
-        
-        Provide ONLY the topic name without any explanation or additional text.`,
-        messages: [
-          {
-            role: "user",
-            content: `Generate a unique and interesting ${difficulty}-level topic related to ${randomSubcategory} (a type of ${category.name}) for the Glass Bead Game. The topic should be specific and not generic.`
-          }
-        ],
-      });
-      
-      console.log('API request successful');
+        console.log('API request successful');
 
-      // Extract the text content from the response
-      const topic = response.content[0].type === 'text' 
-        ? response.content[0].text.trim() 
-        : 'Failed to generate a topic';
-      
-      console.log('Extracted topic:', topic);
-
-      // Add to recent topics and maintain max size
-      recentTopics.push(topic);
-      if (recentTopics.length > MAX_RECENT_TOPICS) {
-        recentTopics = recentTopics.slice(-MAX_RECENT_TOPICS);
+        // Extract the text content from the response
+        topic = response.content[0].type === 'text' 
+          ? response.content[0].text.trim() 
+          : 'Failed to generate a topic';
+        
+        console.log('Extracted topic:', topic);
+        
+        // If we get here, the request was successful
+        break;
+      } catch (error: any) {
+        console.error(`Attempt ${attempt + 1} failed:`, error.message);
+        lastError = error;
+        
+        // Check if we should retry
+        if (attempt < maxRetries - 1) {
+          // Calculate backoff time: 1s, 2s, 4s, etc.
+          const backoffTime = 1000 * Math.pow(2, attempt);
+          console.log(`Retrying in ${backoffTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        }
       }
-      
-      console.log('Recent topics count:', recentTopics.length);
-
-      return NextResponse.json({ topic });
-    } catch (apiError: any) {
-      console.error('=== API REQUEST ERROR ===');
-      console.error('Error making API request:', apiError);
-      
-      if (apiError.response) {
-        console.error('Error response status:', apiError.response.status);
-        console.error('Error response data:', JSON.stringify(apiError.response.data));
-      } else if (apiError.request) {
-        console.error('Error request:', apiError.request);
-      } else {
-        console.error('Error message:', apiError.message);
-      }
-      
-      throw apiError;
     }
-  } catch (error) {
-    console.error('=== GENERATE TOPIC ERROR ===');
+    
+    // If all retries failed, use a fallback topic
+    if (!topic) {
+      console.error('All retry attempts failed, using fallback topic');
+      topic = getFallbackTopic(difficulty || 'university', 'general', 'concept');
+    }
+
+    // Add to recent topics and maintain max size
+    recentTopics.push(topic);
+    if (recentTopics.length > MAX_RECENT_TOPICS) {
+      recentTopics.shift();
+    }
+    
+    console.log('Recent topics count:', recentTopics.length);
+    
+    return NextResponse.json({ topic });
+  } catch (error: any) {
     console.error('Error generating topic:', error);
+    
+    // Provide more detailed error information
+    let errorMessage = 'Failed to generate topic';
+    let statusCode = 500;
+    
+    if (error.status === 429) {
+      errorMessage = 'Rate limit exceeded, please try again later';
+      statusCode = 429;
+    } else if (error.status === 504 || error.status === 503) {
+      errorMessage = 'Service temporarily unavailable';
+      statusCode = 503;
+    }
+    
+    // Use a default difficulty level for the fallback topic
+    const defaultDifficulty = 'university';
+    
+    // Generate a fallback topic
+    const fallbackTopic = getFallbackTopic(defaultDifficulty, 'general', 'concept');
+    
     return NextResponse.json(
-      { error: 'Failed to generate topic' },
-      { status: 500 }
+      { topic: fallbackTopic, error: errorMessage },
+      { status: statusCode }
     );
   }
+}
+
+// Helper function to generate a fallback topic if API calls fail
+function getFallbackTopic(difficulty: string, category: string, subcategory: string): string {
+  const fallbackTopics = {
+    secondary: [
+      'Photosynthesis', 'Democracy', 'Gravity', 'Renaissance', 'Ecosystem',
+      'Metaphor', 'Momentum', 'Adaptation', 'Harmony', 'Revolution'
+    ],
+    university: [
+      'Game Theory', 'Cognitive Dissonance', 'Paradigm Shift', 'Emergence',
+      'Dialectic', 'Entropy', 'Phenomenology', 'Symbiosis', 'Hermeneutics'
+    ],
+    unlimited: [
+      'Apophenia', 'Liminality', 'Hyperobject', 'Rhizome', 'Autopoiesis',
+      'Simulacra', 'Epistemic Injustice', 'Heterotopia', 'Panpsychism'
+    ]
+  };
+  
+  const difficultyLevel = difficulty as keyof typeof fallbackTopics;
+  const topicList = fallbackTopics[difficultyLevel] || fallbackTopics.university;
+  
+  // Generate a pseudo-random index based on current time
+  const randomIndex = Math.floor(Date.now() % topicList.length);
+  return topicList[randomIndex];
 } 
