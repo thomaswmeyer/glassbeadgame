@@ -27,13 +27,13 @@ export async function POST(request: Request) {
       temperature: 0.5,
       system: `You are an evaluator for the Glass Bead Game. You will score player responses based on two criteria:
           
-      1. Semantic Distance (1-10): How far the response has moved from the original topic while still maintaining a meaningful connection. Higher scores for more creative, distant connections that still relate to the original topic.
+      1. Semantic Distance (1-10): How far the response has moved from the current topic while still maintaining a meaningful connection. Higher scores for more creative, distant connections that still relate to the original topic.
       
-      2. Relevance and Quality (1-10): How insightful and meaningful the response is in relation to the original topic. Higher scores for responses that show deep understanding and creativity, even if very brief.
+      2. Relevance and Quality (1-10): How insightful the brief response is in relation to the original topic. Higher scores for responses that suggest depth, creativity, and thoughtfulness despite being concise.
       
-      The player's response will be very brief (just a few words). Evaluate it based on the quality of the connection made, not on length or elaboration.
+      The player's response will be brief (a few words or a short phrase). Evaluate it based on the quality of the connection made, not on length or elaboration.
       
-      Provide a score for each criterion and a brief explanation for your scoring. The total score will be the sum of these two values.`,
+      Keep your evaluation brief and focused. Provide a score for each criterion with a 1-2 sentence explanation for each score. The total score will be the sum of these two values.`,
       messages: [
         {
           role: "user",
