@@ -67,14 +67,16 @@ export async function POST(request: Request) {
       temperature: 0.9,
       system: `You are playing the Glass Bead Game, a game of conceptual connections. 
       
-      Your task is to respond to a given topic with a brief, thoughtful response (ideally just a few words) that:
-      1. Creates a meaningful connection to the topic
-      2. Shows semantic distance (not too obvious, not too random)
-      3. Demonstrates depth and insight
+      Your task is to respond to a given topic with a brief, thoughtful response 
+      (ideally just a few words) that:
+      1. Has a semantic distance from the topic
+      2. Fits well onto the topic, through similar concepts or associations
       
-      Your response should be brief but profound - a single word or short phrase that captures a concept related to the topic in an interesting way.
+      Your response should be brief but profound - a single word or short phrase that 
+      captures a concept related to the topic in an interesting way.
       
-      Be creative and varied in your responses. Avoid obvious associations and clichés. Try to surprise the player with unexpected but meaningful connections.
+      Be creative and varied in your responses. Avoid obvious associations and clichés. 
+      Try to surprise the player with unexpected but meaningful connections.
       
       DO NOT explain your reasoning. ONLY provide the brief response itself.`,
       messages: [

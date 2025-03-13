@@ -38,6 +38,9 @@ export default function GameInterface() {
   const [topicDefinition, setTopicDefinition] = useState<string>('');
   const [showDefinition, setShowDefinition] = useState<boolean>(false);
   const [isLoadingDefinition, setIsLoadingDefinition] = useState<boolean>(false);
+  const [originalTopicDefinition, setOriginalTopicDefinition] = useState<string>('');
+  const [showOriginalDefinition, setShowOriginalDefinition] = useState<boolean>(false);
+  const [isLoadingOriginalDefinition, setIsLoadingOriginalDefinition] = useState<boolean>(false);
   const [response, setResponse] = useState<string>('');
   const [evaluation, setEvaluation] = useState<string>('');
   const [scores, setScores] = useState<Score | null>(null);
@@ -53,15 +56,21 @@ export default function GameInterface() {
   const [currentPlayer, setCurrentPlayer] = useState<'human' | 'ai'>('human');
   const [gameCompleted, setGameCompleted] = useState<boolean>(false);
   const [finalEvaluation, setFinalEvaluation] = useState<string>('');
+  
+  // New state variables for user settings
+  const [maxRounds, setMaxRounds] = useState<number>(10);
+  const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
+  const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
 
-  const MAX_ROUNDS = 10;
-  const FINAL_ROUND = MAX_ROUNDS;
+  // Use maxRounds instead of hardcoded value
+  const FINAL_ROUND = maxRounds;
 
   const generateFirstTopic = async () => {
     setIsGeneratingTopic(true);
     setShowingResults(false);
     setCurrentEvaluation(null);
     setShowDefinition(false);
+    setShowOriginalDefinition(false);
     setGameCompleted(false);
     try {
       const result = await axios.post('/api/generate-topic');
@@ -72,7 +81,7 @@ export default function GameInterface() {
       setResponse('');
       setEvaluation('');
       setScores(null);
-      setCurrentPlayer('human');
+      setCurrentPlayer(aiGoesFirst ? 'ai' : 'human'); // Set initial player based on user choice
       setCurrentRound(1);
       setGameHistory([]);
       setTotalScores({ human: 0, ai: 0 });
@@ -104,6 +113,26 @@ export default function GameInterface() {
     }
   };
 
+  const fetchOriginalTopicDefinition = async () => {
+    if (!originalTopic || isLoadingOriginalDefinition) return;
+    
+    setIsLoadingOriginalDefinition(true);
+    try {
+      const result = await axios.post('/api/get-definition', {
+        topic: originalTopic,
+      });
+      
+      setOriginalTopicDefinition(result.data.definition);
+      setShowOriginalDefinition(true);
+    } catch (error) {
+      console.error('Error fetching original topic definition:', error);
+      setOriginalTopicDefinition('Unable to fetch definition at this time.');
+      setShowOriginalDefinition(true);
+    } finally {
+      setIsLoadingOriginalDefinition(false);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && response.trim()) {
       e.preventDefault();
@@ -120,8 +149,8 @@ export default function GameInterface() {
       let evaluationEndpoint = '/api/evaluate-response';
       let requestBody: any = { topic, response };
       
-      // For the final round (round 10), use the special evaluation endpoint
-      if (currentRound === 10) {
+      // For the final round, use the special evaluation endpoint
+      if (currentRound === maxRounds) {
         evaluationEndpoint = '/api/evaluate-final-response';
         requestBody = { 
           currentTopic: topic, 
@@ -145,7 +174,7 @@ export default function GameInterface() {
       const data = await res.json();
       
       // Handle final round evaluation differently
-      if (currentRound === 10) {
+      if (currentRound === maxRounds) {
         setCurrentEvaluation({
           topic,
           response,
@@ -203,8 +232,8 @@ export default function GameInterface() {
       let evaluationEndpoint = '/api/evaluate-response';
       let requestBody: any = { topic, response: aiResponse };
       
-      // For the final round (round 10), use the special evaluation endpoint
-      if (currentRound === 10) {
+      // For the final round, use the special evaluation endpoint
+      if (currentRound === maxRounds) {
         evaluationEndpoint = '/api/evaluate-final-response';
         requestBody = { 
           currentTopic: topic, 
@@ -228,7 +257,7 @@ export default function GameInterface() {
       const data = await res.json();
       
       // Handle final round evaluation differently
-      if (currentRound === 10) {
+      if (currentRound === maxRounds) {
         setCurrentEvaluation({
           topic,
           response: aiResponse,
@@ -336,6 +365,7 @@ export default function GameInterface() {
     setCurrentEvaluation(null);
     setResponse('');
     setShowDefinition(false);
+    setShowOriginalDefinition(false);
     
     // Switch players
     const nextPlayer = currentPlayer === 'human' ? 'ai' : 'human';
@@ -353,11 +383,12 @@ export default function GameInterface() {
         console.log('Original topic:', originalTopic);
         console.log('Game history length:', gameHistory.length);
         console.log('Full game history:', JSON.stringify(gameHistory, null, 2));
+        console.log('Max rounds:', maxRounds);
         
         setIsAiThinking(true);
         try {
           // For the final round, we need to inform the AI that it needs to connect back to the original topic
-          const endpoint = currentRound === FINAL_ROUND ? '/api/ai-final-response' : '/api/ai-response';
+          const endpoint = currentRound === maxRounds ? '/api/ai-final-response' : '/api/ai-response';
           console.log('Using endpoint:', endpoint);
           
           // Prepare game history in the correct format
@@ -455,15 +486,29 @@ export default function GameInterface() {
     };
     
     aiTakeTurn();
-  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory]);
+  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds]);
 
   const handleRestart = () => {
     setGameHistory([]);
     setCurrentRound(1);
     setTotalScores({ human: 0, ai: 0 });
     setShowDefinition(false);
+    setShowOriginalDefinition(false);
+    setOriginalTopicDefinition('');
     setGameCompleted(false);
     generateFirstTopic();
+  };
+
+  // Add function to return to settings screen
+  const handleReturnToSettings = () => {
+    setGameHistory([]);
+    setCurrentRound(1);
+    setTotalScores({ human: 0, ai: 0 });
+    setShowDefinition(false);
+    setShowOriginalDefinition(false);
+    setOriginalTopicDefinition('');
+    setGameCompleted(false);
+    setGameStarted(false);
   };
 
   const getPlayerTurn = () => {
@@ -471,7 +516,7 @@ export default function GameInterface() {
   };
 
   const getRemainingRounds = () => {
-    return MAX_ROUNDS - currentRound + 1;
+    return maxRounds - currentRound + 1;
   };
 
   return (
@@ -482,7 +527,7 @@ export default function GameInterface() {
         <div className="text-center">
           <p className="mb-6 text-lg">
             Welcome to the Glass Bead Game! In this game, you'll compete against an AI opponent
-            in a 10-round journey of connected concepts.
+            in a journey of connected concepts.
           </p>
           <div className="mb-6 text-left max-w-md mx-auto">
             <h3 className="font-bold mb-2">Rules:</h3>
@@ -490,7 +535,7 @@ export default function GameInterface() {
               <li>The game starts with a randomly generated topic.</li>
               <li>You and the AI will take turns responding to the current topic with a brief answer.</li>
               <li>Each response becomes the topic for the next round.</li>
-              <li>The game lasts for 10 rounds (5 turns each).</li>
+              <li>The game lasts for {maxRounds} rounds ({Math.ceil(maxRounds/2)} turns each).</li>
               <li>In the final round, the response must connect back to the original starting topic.</li>
               <li>Responses are evaluated based on:
                 <ul className="list-disc pl-5 mt-1">
@@ -502,6 +547,57 @@ export default function GameInterface() {
               <li>The player with the highest total score at the end wins!</li>
             </ol>
           </div>
+          
+          {/* Game settings */}
+          <div className="mb-8 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h3 className="font-bold mb-3 text-left">Game Settings:</h3>
+            
+            <div className="mb-4">
+              <label className="block text-left mb-2 font-medium">Number of Rounds:</label>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {roundOptions.map(option => (
+                  <button
+                    key={option}
+                    onClick={() => setMaxRounds(option)}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      maxRounds === option 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="mb-2">
+              <label className="block text-left mb-2 font-medium">Who Goes First:</label>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setAiGoesFirst(false)}
+                  className={`px-4 py-2 rounded ${
+                    !aiGoesFirst 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  You First
+                </button>
+                <button
+                  onClick={() => setAiGoesFirst(true)}
+                  className={`px-4 py-2 rounded ${
+                    aiGoesFirst 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  AI First
+                </button>
+              </div>
+            </div>
+          </div>
+          
           <button
             onClick={generateFirstTopic}
             disabled={isGeneratingTopic}
@@ -518,12 +614,12 @@ export default function GameInterface() {
               {currentRound === 1 && (
                 <span className="text-xs bg-yellow-100 px-2 py-1 rounded-full">Starting Topic</span>
               )}
-              {currentRound === FINAL_ROUND && (
+              {currentRound === maxRounds && (
                 <span className="text-xs bg-red-100 px-2 py-1 rounded-full">Final Round - Connect back to "{originalTopic}"</span>
               )}
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">Round {currentRound}/{MAX_ROUNDS}</span>
+              <span className="text-sm text-gray-500">Round {currentRound}/{maxRounds}</span>
               <div className="flex gap-2">
                 <span className="text-sm font-medium bg-blue-100 px-3 py-1 rounded-full">You: {totalScores.human}</span>
                 <span className="text-sm font-medium bg-red-100 px-3 py-1 rounded-full">AI: {totalScores.ai}</span>
@@ -566,10 +662,43 @@ export default function GameInterface() {
             </div>
           )}
 
-          {currentRound === FINAL_ROUND && (
+          {currentRound === maxRounds && (
             <div className="p-3 bg-yellow-50 rounded-lg mb-4 text-sm">
               <p className="font-medium mb-1">Final Round Instructions:</p>
               <p>This is the final round! Your response should connect both to the current topic "{topic}" AND back to the original topic "{originalTopic}".</p>
+              
+              <div className="mt-2 flex justify-end">
+                <button 
+                  onClick={fetchOriginalTopicDefinition}
+                  disabled={isLoadingOriginalDefinition}
+                  className="text-xs px-2 py-1 bg-yellow-200 hover:bg-yellow-300 rounded-full text-yellow-800 flex items-center"
+                  title="Show original topic definition"
+                >
+                  {isLoadingOriginalDefinition ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-yellow-800" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Loading...
+                    </span>
+                  ) : (
+                    <span className="flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Original Topic Definition
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showOriginalDefinition && (
+            <div className="p-3 bg-yellow-100 rounded-lg mb-4 text-sm">
+              <p className="font-medium mb-1">Original Topic Definition ("{originalTopic}"):</p>
+              <p>{originalTopicDefinition}</p>
             </div>
           )}
 
@@ -587,7 +716,7 @@ export default function GameInterface() {
                     onChange={(e) => setResponse(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="w-full p-4 border border-gray-300 rounded-lg"
-                    placeholder={currentRound === FINAL_ROUND 
+                    placeholder={currentRound === maxRounds 
                       ? `Type a response that connects to both "${topic}" and "${originalTopic}"...` 
                       : "Type a brief response and press Enter..."}
                     disabled={isEvaluating}
@@ -620,12 +749,40 @@ export default function GameInterface() {
           ) : currentEvaluation && (
             <div className="mt-4 p-4 bg-gray-100 rounded-lg">
               <h3 className="text-lg font-semibold mb-2">Evaluation Results</h3>
+              
+              {/* Display the response that was evaluated */}
+              <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
+                <p className="font-medium text-gray-700">
+                  {currentEvaluation.player === 'human' ? 'Your' : 'AI'} Response to "{currentEvaluation.topic}":
+                </p>
+                <p className="mt-1 text-lg">{currentEvaluation.response}</p>
+              </div>
+              
               <div className="whitespace-pre-wrap">{currentEvaluation.evaluation}</div>
               
-              {currentRound === FINAL_ROUND && currentEvaluation.finalEvaluation && (
+              {currentRound === maxRounds && currentEvaluation.finalEvaluation && (
                 <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
                   <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
                   <p>{currentEvaluation.finalEvaluation}</p>
+                  
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <h5 className="font-medium text-blue-800 text-sm">Final Round Scoring:</h5>
+                    <div className="grid grid-cols-2 gap-2 mt-1 text-sm">
+                      <div>
+                        <p><strong>Current Topic Connection:</strong></p>
+                        <ul className="list-disc pl-5">
+                          <li>Semantic Distance: {currentEvaluation.scores.semanticDistance}/10</li>
+                          <li>Relevance/Quality: {currentEvaluation.scores.relevanceQuality}/10</li>
+                          <li>Subtotal: {currentEvaluation.scores.semanticDistance + currentEvaluation.scores.relevanceQuality}/20</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <p><strong>Original Topic Connection:</strong></p>
+                        <p className="pl-5">Score: {Math.round(currentEvaluation.scores.total * 1.5 - (currentEvaluation.scores.semanticDistance + currentEvaluation.scores.relevanceQuality))}/10</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 font-medium">Total Score: {currentEvaluation.scores.total}/20</p>
+                  </div>
                 </div>
               )}
               
@@ -644,12 +801,20 @@ export default function GameInterface() {
                           : "It's a tie!"}
                     </p>
                   </div>
-                  <button
-                    onClick={handleRestart}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                  >
-                    Start New Game
-                  </button>
+                  <div className="mt-4 flex gap-3 justify-center">
+                    <button
+                      onClick={handleRestart}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                    >
+                      Start New Game
+                    </button>
+                    <button
+                      onClick={handleReturnToSettings}
+                      className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition"
+                    >
+                      Choose Game Settings
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <button
@@ -677,19 +842,27 @@ export default function GameInterface() {
                     </tr>
                   </thead>
                   <tbody>
-                    {gameHistory.map((round, index) => (
-                      <tr key={index} className="border-t">
-                        <td className="py-2 px-4">{index + 1}</td>
-                        <td className="py-2 px-4">{round.topic}</td>
-                        <td className="py-2 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs ${round.player === 'human' ? 'bg-blue-100' : 'bg-red-100'}`}>
-                            {round.player === 'human' ? 'You' : 'AI'}
-                          </span>
-                        </td>
-                        <td className="py-2 px-4">{round.response}</td>
-                        <td className="py-2 px-4">{round.scores.total}/20</td>
-                      </tr>
-                    ))}
+                    {gameHistory
+                      .slice()
+                      .reverse()
+                      .map((round, index) => {
+                        // Calculate the actual round number for display
+                        const actualRoundNumber = gameHistory.length - index;
+                        
+                        return (
+                          <tr key={index} className="border-t">
+                            <td className="py-2 px-4">{actualRoundNumber}</td>
+                            <td className="py-2 px-4">{round.topic}</td>
+                            <td className="py-2 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs ${round.player === 'human' ? 'bg-blue-100' : 'bg-red-100'}`}>
+                                {round.player === 'human' ? 'You' : 'AI'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-4">{round.response}</td>
+                            <td className="py-2 px-4">{round.scores.total}/20</td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
