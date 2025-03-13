@@ -70,6 +70,14 @@ export async function POST(request: Request) {
       - Semantic Distance (1-10): How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.
       - Similarity (1-10): How well do the ideas map onto each other? For example, stock market crash and flocking behavior.
       
+      IMPORTANT SCORING GUIDELINES:
+      - Scientific names, taxonomic classifications, or technical terms for the same object should NOT be considered a significant semantic leap. For example, "artichoke" → "Cynara scolymus" should receive a LOW semantic distance score (1-3).
+      - Simple translations, synonyms, or alternative names for the same concept should receive a LOW semantic distance score (1-3).
+      - Specific subtypes, variants, or specialized versions of the same concept should receive a VERY LOW semantic distance score (1-2). For example, "synesthesia" → "chromesthesia" (a specific type of synesthesia) should score very low on semantic distance.
+      - Connections that rely solely on specialized knowledge within a SINGLE domain (e.g., "pica" → "kaolin" both within medical terminology) should receive a MODERATE semantic distance score (4-6).
+      - High semantic distance scores (7-10) should be reserved for truly creative connections ACROSS DIFFERENT domains or conceptual frameworks (e.g., connecting a medical concept to architecture, or a historical event to a natural phenomenon).
+      - Similarity scores should reflect how well the ideas actually map onto each other in terms of structure, function, or conceptual parallels.
+      
       For the final evaluation, provide:
       
       1. A thoughtful evaluation of the connection to the current topic (150-200 words)

@@ -71,6 +71,7 @@ export default function GameInterface() {
   // New state variables for user settings
   const [maxRounds, setMaxRounds] = useState<number>(10);
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
+  const [circleEnabled, setCircleEnabled] = useState<boolean>(false);
   const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
   
   // Simplified difficulty level - single setting for both concept and AI
@@ -89,12 +90,23 @@ export default function GameInterface() {
   const FINAL_ROUND = maxRounds;
 
   const generateFirstTopic = async () => {
+    console.log('=== GENERATING FIRST TOPIC ===');
+    console.log('aiGoesFirst setting:', aiGoesFirst);
+    
     setIsGeneratingTopic(true);
+    // Set a temporary loading message as the topic
+    setTopic('Generating new topic...');
     setShowingResults(false);
     setCurrentEvaluation(null);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setGameCompleted(false);
+    
+    // Set the current player immediately based on aiGoesFirst
+    const initialPlayer = aiGoesFirst ? 'ai' : 'human';
+    console.log('Setting initial player to:', initialPlayer);
+    setCurrentPlayer(initialPlayer);
+    
     try {
       const result = await axios.post('/api/generate-topic', {
         difficulty: difficulty
@@ -106,7 +118,9 @@ export default function GameInterface() {
       setResponse('');
       setEvaluation('');
       setScores(null);
-      setCurrentPlayer(aiGoesFirst ? 'ai' : 'human'); // Set initial player based on user choice
+      // Ensure the player is set correctly again after the API call
+      console.log('Confirming player after API call:', initialPlayer);
+      setCurrentPlayer(initialPlayer);
       setCurrentRound(1);
       setGameHistory([]);
       setTotalScores({ human: 0, ai: 0 });
@@ -115,6 +129,8 @@ export default function GameInterface() {
       alert('Failed to generate topic. Please try again.');
     } finally {
       setIsGeneratingTopic(false);
+      // Log the final state
+      console.log('Topic generation completed. Current player:', aiGoesFirst ? 'ai' : 'human');
     }
   };
 
@@ -178,8 +194,8 @@ export default function GameInterface() {
         difficulty: difficulty // Use the single difficulty level
       };
       
-      // For the final round, use the special evaluation endpoint
-      if (currentRound === maxRounds) {
+      // For the final round with circle enabled, use the special evaluation endpoint
+      if (currentRound === maxRounds && circleEnabled) {
         evaluationEndpoint = '/api/evaluate-final-response';
         requestBody = { 
           currentTopic: topic, 
@@ -203,8 +219,8 @@ export default function GameInterface() {
 
       const data = await res.json();
       
-      // Handle final round evaluation differently
-      if (currentRound === maxRounds) {
+      // Handle final round evaluation differently if circle is enabled
+      if (currentRound === maxRounds && circleEnabled) {
         setCurrentEvaluation({
           topic,
           response,
@@ -222,6 +238,11 @@ export default function GameInterface() {
           evaluation: data.evaluation,
           scores: data.scores,
         });
+        
+        // Set game completed if it's the final round (even without circle)
+        if (currentRound === maxRounds) {
+          setGameCompleted(true);
+        }
       }
       
       setTotalScores(prev => ({
@@ -266,8 +287,8 @@ export default function GameInterface() {
         difficulty: difficulty // Use the single difficulty level
       };
       
-      // For the final round, use the special evaluation endpoint
-      if (currentRound === maxRounds) {
+      // For the final round with circle enabled, use the special evaluation endpoint
+      if (currentRound === maxRounds && circleEnabled) {
         evaluationEndpoint = '/api/evaluate-final-response';
         requestBody = { 
           currentTopic: topic, 
@@ -291,8 +312,8 @@ export default function GameInterface() {
 
       const data = await res.json();
       
-      // Handle final round evaluation differently
-      if (currentRound === maxRounds) {
+      // Handle final round evaluation differently if circle is enabled
+      if (currentRound === maxRounds && circleEnabled) {
         setCurrentEvaluation({
           topic,
           response: aiResponse,
@@ -329,6 +350,11 @@ export default function GameInterface() {
           player: 'ai'
         }
       ]);
+      
+      // Set game completed if it's the final round
+      if (currentRound === maxRounds) {
+        setGameCompleted(true);
+      }
       
     } catch (error) {
       console.error('Error evaluating AI response:', error);
@@ -419,11 +445,12 @@ export default function GameInterface() {
         console.log('Full game history:', JSON.stringify(gameHistory, null, 2));
         console.log('Max rounds:', maxRounds);
         console.log('Difficulty level:', difficulty);
+        console.log('Circle enabled:', circleEnabled);
         
         setIsAiThinking(true);
         try {
-          // For the final round, we need to inform the AI that it needs to connect back to the original topic
-          const endpoint = currentRound === maxRounds ? '/api/ai-final-response' : '/api/ai-response';
+          // For the final round with circle enabled, we need to inform the AI that it needs to connect back to the original topic
+          const endpoint = (currentRound === maxRounds && circleEnabled) ? '/api/ai-final-response' : '/api/ai-response';
           console.log('Using endpoint:', endpoint);
           
           // Prepare game history in the correct format
@@ -449,7 +476,8 @@ export default function GameInterface() {
             topic,
             originalTopic,
             gameHistoryCount: formattedHistory.length,
-            difficulty: difficulty
+            difficulty: difficulty,
+            circleEnabled: circleEnabled
           };
           console.log('Request payload (simplified):', JSON.stringify(debugPayload));
           
@@ -459,7 +487,8 @@ export default function GameInterface() {
             topic,
             originalTopic: originalTopic,
             gameHistory: formattedHistory,
-            difficulty: difficulty
+            difficulty: difficulty,
+            circleEnabled: circleEnabled
           });
           
           console.log('Axios request completed');
@@ -524,29 +553,67 @@ export default function GameInterface() {
     };
     
     aiTakeTurn();
-  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, difficulty]);
+  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, difficulty, circleEnabled]);
 
   const handleRestart = () => {
+    console.log('=== RESTARTING GAME ===');
+    console.log('aiGoesFirst setting:', aiGoesFirst);
+    
+    // Immediately clear the topic and response to prevent showing previous game data
+    setTopic('');
+    setOriginalTopic('');
+    setResponse('');
+    
     setGameHistory([]);
     setCurrentRound(1);
     setTotalScores({ human: 0, ai: 0 });
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
+    setTopicDefinition('');
     setGameCompleted(false);
+    setCurrentEvaluation(null);
+    setEvaluation('');
+    setScores(null);
+    setFinalEvaluation('');
+    setShowingResults(false);
+    // Don't set currentPlayer here, let generateFirstTopic handle it
+    
     generateFirstTopic();
+    
+    // Log the current player after generateFirstTopic is called
+    console.log('Current player after restart:', aiGoesFirst ? 'ai' : 'human');
   };
 
   // Add function to return to settings screen
   const handleReturnToSettings = () => {
+    console.log('=== RETURNING TO SETTINGS ===');
+    
+    // First set gameStarted to false to prevent AI from taking a turn
+    setGameStarted(false);
+    
+    // Then reset all other state
     setGameHistory([]);
     setCurrentRound(1);
     setTotalScores({ human: 0, ai: 0 });
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
+    setTopicDefinition('');
     setGameCompleted(false);
-    setGameStarted(false);
+    setCurrentEvaluation(null);
+    setResponse('');
+    setEvaluation('');
+    setScores(null);
+    setFinalEvaluation('');
+    setTopic('');
+    setOriginalTopic('');
+    setShowingResults(false);
+    
+    // Reset to default player (this won't trigger AI turn since gameStarted is false)
+    setCurrentPlayer('human');
+    
+    console.log('Game state reset completed');
   };
 
   const getPlayerTurn = () => {
@@ -567,27 +634,9 @@ export default function GameInterface() {
             Welcome to the Glass Bead Game! In this game, you'll compete against an AI opponent
             in a journey of connected concepts.
           </p>
-          <div className="mb-6 text-left max-w-md mx-auto">
-            <h3 className="font-bold mb-2">Rules:</h3>
-            <ol className="list-decimal pl-5 space-y-2">
-              <li>The game starts with a randomly generated topic.</li>
-              <li>You and the AI will take turns responding to the current topic with a brief answer.</li>
-              <li>Each response becomes the topic for the next round.</li>
-              <li>The game lasts for {maxRounds} rounds ({Math.ceil(maxRounds/2)} turns each).</li>
-              <li>In the final round, the response must connect back to the original starting topic.</li>
-              <li>Responses are evaluated based on:
-                <ul className="list-disc pl-5 mt-1">
-                  <li><strong>Semantic Distance (1-10):</strong> How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.</li>
-                  <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
-                </ul>
-              </li>
-              <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
-              <li>The player with the highest total score at the end wins!</li>
-            </ol>
-          </div>
           
           {/* Game settings */}
-          <div className="mb-8 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
             <h3 className="font-bold mb-3 text-left">Game Settings:</h3>
             
             <div className="mb-4">
@@ -635,8 +684,27 @@ export default function GameInterface() {
               </div>
             </div>
             
+            {/* Circle mode checkbox */}
+            <div className="mb-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="circleEnabled"
+                  checked={circleEnabled}
+                  onChange={(e) => setCircleEnabled(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="circleEnabled" className="ml-2 block text-sm text-gray-900">
+                  Enable Circle Mode
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                In Circle Mode, the final round must connect back to the original starting topic.
+              </p>
+            </div>
+            
             {/* Single difficulty selector */}
-            <div className="mb-6">
+            <div className="mb-0">
               <label className="block text-left mb-2 font-medium">Game Difficulty:</label>
               <select
                 value={difficulty}
@@ -655,13 +723,38 @@ export default function GameInterface() {
             </div>
           </div>
           
-          <button
-            onClick={generateFirstTopic}
-            disabled={isGeneratingTopic}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-          >
-            {isGeneratingTopic ? 'Generating Topic...' : 'Start Game'}
-          </button>
+          <div className="mb-6 text-center">
+            <button
+              onClick={generateFirstTopic}
+              disabled={isGeneratingTopic}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+            >
+              {isGeneratingTopic ? 'Generating Topic...' : 'Start Game'}
+            </button>
+          </div>
+          
+          <div className="mb-6 text-left max-w-md mx-auto">
+            <h3 className="font-bold mb-2">Rules:</h3>
+            <ol className="list-decimal pl-5 space-y-2">
+              <li>The game starts with a randomly generated topic.</li>
+              <li>You and the AI will take turns responding to the current topic with a brief answer.</li>
+              <li>Each response becomes the topic for the next round.</li>
+              <li>The game lasts for {maxRounds} rounds ({Math.ceil(maxRounds/2)} turns each).</li>
+              {circleEnabled && (
+                <li>In the final round, the response must connect back to the original starting topic.</li>
+              )}
+              <li>Responses are evaluated based on:
+                <ul className="list-disc pl-5 mt-1">
+                  <li><strong>Semantic Distance (1-10):</strong> How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.</li>
+                  <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
+                </ul>
+              </li>
+              {circleEnabled && (
+                <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
+              )}
+              <li>The player with the highest total score at the end wins!</li>
+            </ol>
+          </div>
         </div>
       ) : (
         <div>
@@ -671,8 +764,11 @@ export default function GameInterface() {
               {currentRound === 1 && (
                 <span className="text-xs bg-yellow-100 px-2 py-1 rounded-full">Starting Topic</span>
               )}
-              {currentRound === maxRounds && (
+              {currentRound === maxRounds && circleEnabled && (
                 <span className="text-xs bg-red-100 px-2 py-1 rounded-full">Final Round - Connect back to "{originalTopic}"</span>
+              )}
+              {currentRound === maxRounds && !circleEnabled && (
+                <span className="text-xs bg-orange-100 px-2 py-1 rounded-full">Final Round</span>
               )}
             </div>
             <div className="flex items-center gap-4">
@@ -685,10 +781,22 @@ export default function GameInterface() {
           </div>
           <div className="p-4 bg-gray-100 rounded-lg mb-2">
             <div className="flex items-center justify-between">
-              <p className="text-xl font-medium">{topic}</p>
+              <p className="text-xl font-medium">
+                {isGeneratingTopic ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating new topic...
+                  </span>
+                ) : (
+                  topic
+                )}
+              </p>
               <button 
                 onClick={fetchTopicDefinition}
-                disabled={isLoadingDefinition}
+                disabled={isLoadingDefinition || isGeneratingTopic}
                 className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-700 flex items-center"
                 title="Show definition"
               >
@@ -719,7 +827,7 @@ export default function GameInterface() {
             </div>
           )}
 
-          {currentRound === maxRounds && (
+          {currentRound === maxRounds && circleEnabled && (
             <div className="p-3 bg-yellow-50 rounded-lg mb-4 text-sm">
               <p className="font-medium mb-1">Final Round Instructions:</p>
               <p>This is the final round! Your response should connect both to the current topic "{topic}" AND back to the original topic "{originalTopic}".</p>
@@ -773,7 +881,7 @@ export default function GameInterface() {
                     onChange={(e) => setResponse(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="w-full p-4 border border-gray-300 rounded-lg"
-                    placeholder={currentRound === maxRounds 
+                    placeholder={currentRound === maxRounds && circleEnabled
                       ? `Type a response that connects to both "${topic}" and "${originalTopic}"...` 
                       : "Type a brief response and press Enter..."}
                     disabled={isEvaluating}
@@ -818,7 +926,7 @@ export default function GameInterface() {
               <div className="whitespace-pre-wrap">{currentEvaluation.evaluation}</div>
               
               {/* Score breakdown for regular rounds */}
-              {currentRound !== maxRounds && (
+              {(currentRound !== maxRounds || !circleEnabled) && (
                 <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
                   <h4 className="font-medium text-blue-800 text-sm">Score Breakdown:</h4>
                   <div className="mt-1 text-sm">
@@ -831,8 +939,8 @@ export default function GameInterface() {
                 </div>
               )}
               
-              {/* Final round score breakdown */}
-              {currentRound === maxRounds && currentEvaluation.finalEvaluation && (
+              {/* Final round score breakdown for circle mode */}
+              {currentRound === maxRounds && circleEnabled && currentEvaluation.finalEvaluation && (
                 <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
                   <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
                   <p>{currentEvaluation.finalEvaluation}</p>

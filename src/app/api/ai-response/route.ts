@@ -44,11 +44,13 @@ export async function POST(request: Request) {
     console.log('Request body received:', JSON.stringify({
       topic: body.topic,
       difficulty: body.difficulty,
-      gameHistoryLength: body.gameHistory?.length || 0
+      gameHistoryLength: body.gameHistory?.length || 0,
+      circleEnabled: body.circleEnabled
     }));
 
-    const { topic, gameHistory, difficulty = 'university' } = body;
+    const { topic, gameHistory, difficulty = 'university', circleEnabled = false } = body;
     console.log('Using difficulty level:', difficulty);
+    console.log('Circle mode enabled:', circleEnabled);
 
     if (!topic) {
       console.error('Topic is required but was not provided');
@@ -98,6 +100,13 @@ export async function POST(request: Request) {
       
       Your response should be brief but profound - a single word or short phrase that 
       captures a concept related to the topic in an interesting way.
+      
+      IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
+      - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
+      - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
+      - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
+      - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
+      - The best connections reveal surprising parallels between seemingly unrelated concepts
       
       ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
       

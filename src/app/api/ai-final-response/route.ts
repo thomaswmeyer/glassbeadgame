@@ -27,10 +27,6 @@ const difficultyPrompts = {
 
 export async function POST(request: Request) {
   console.log('=== AI FINAL RESPONSE ROUTE CALLED ===');
-  console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
-  console.log('API Key length:', process.env.ANTHROPIC_API_KEY?.length);
-  console.log('API Key first 10 chars:', process.env.ANTHROPIC_API_KEY?.substring(0, 10));
-  console.log('API Key last 10 chars:', process.env.ANTHROPIC_API_KEY?.substring(process.env.ANTHROPIC_API_KEY.length - 10));
   
   try {
     // Check for API key
@@ -45,11 +41,40 @@ export async function POST(request: Request) {
       topic: body.topic,
       originalTopic: body.originalTopic,
       difficulty: body.difficulty,
-      gameHistoryLength: body.gameHistory?.length || 0
+      gameHistoryLength: body.gameHistory?.length || 0,
+      circleEnabled: body.circleEnabled
     }));
 
-    const { topic, originalTopic, gameHistory, difficulty = 'university' } = body;
+    const { topic, originalTopic, gameHistory, difficulty = 'university', circleEnabled = true } = body;
     console.log('Using difficulty level:', difficulty);
+    console.log('Circle mode enabled:', circleEnabled);
+
+    // If circle mode is disabled, use the regular AI response endpoint
+    if (!circleEnabled) {
+      console.log('Circle mode is disabled, redirecting to regular AI response endpoint');
+      
+      // Create a new request body without the originalTopic
+      const regularRequestBody = {
+        topic,
+        gameHistory,
+        difficulty
+      };
+      
+      // Call the regular AI response endpoint
+      const regularResponse = await fetch('/api/ai-response', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(regularRequestBody),
+      });
+      
+      if (!regularResponse.ok) {
+        throw new Error('Failed to get regular AI response');
+      }
+      
+      return regularResponse;
+    }
 
     if (!topic || !originalTopic) {
       console.error('Current topic and original topic are required but not provided');
@@ -99,6 +124,13 @@ export async function POST(request: Request) {
       
       Your response should be brief but profound - a single concept or short phrase that 
       creates a meaningful bridge between the current topic and the original topic.
+      
+      IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
+      - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
+      - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
+      - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
+      - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
+      - The best connections reveal surprising parallels between seemingly unrelated concepts
       
       ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
       
