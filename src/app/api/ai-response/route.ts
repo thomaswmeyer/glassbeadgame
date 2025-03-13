@@ -60,12 +60,27 @@ export async function POST(request: Request) {
 
     // Format game history for context
     let historyContext = '';
+    let previousResponses: string[] = [];
+    
     if (gameHistory && gameHistory.length > 0) {
       historyContext = 'Previous rounds:\n';
       gameHistory.slice(-5).forEach((item: GameHistoryItem, index: number) => {
         historyContext += `Round ${gameHistory.length - 5 + index + 1}: Topic "${item.topic}" → ${item.player === 'human' ? 'Human' : 'AI'} responded "${item.response}"\n`;
+        
+        // Collect previous AI responses to avoid repetition
+        if (item.player === 'ai') {
+          previousResponses.push(item.response);
+        }
       });
     }
+    
+    // Create a timestamp to ensure different results each time
+    const timestamp = new Date().toISOString();
+    
+    // Create a list of responses to explicitly avoid
+    const responsesToAvoid = previousResponses.length > 0 
+      ? `Avoid these previously used responses: ${previousResponses.join(', ')}.` 
+      : '';
 
     console.log('Preparing to make API request with model: claude-3-opus-20240229');
     console.log('Temperature setting:', 0.9);
@@ -89,6 +104,17 @@ export async function POST(request: Request) {
       Be creative and varied in your responses. Avoid obvious associations and clichés. 
       Try to surprise the player with unexpected but meaningful connections.
       
+      ${responsesToAvoid}
+      
+      Current timestamp for seed variation: ${timestamp}
+      
+      Consider multiple domains of knowledge when forming your response:
+      - Arts and humanities
+      - Science and technology
+      - Social sciences
+      - Natural world
+      - Abstract concepts
+      
       DO NOT explain your reasoning. ONLY provide the brief response itself.`,
       messages: [
         {
@@ -97,7 +123,7 @@ export async function POST(request: Request) {
           
           Current topic: "${topic}"
           
-          Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections.`
+          Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
         }
       ],
     });

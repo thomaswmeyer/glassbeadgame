@@ -62,35 +62,49 @@ export async function POST(request: Request) {
       
       Your task is to evaluate the player's response based on:
       
-      1. How well it connects to the CURRENT topic (semantic distance and relevance/quality)
+      1. How well it connects to the CURRENT topic
       2. How well it connects back to the ORIGINAL topic
+      
+      Use the SAME criteria for both connections:
+      
+      - Semantic Distance (1-10): How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.
+      - Similarity (1-10): How well do the ideas map onto each other? For example, stock market crash and flocking behavior.
       
       For the final evaluation, provide:
       
       1. A thoughtful evaluation of the connection to the current topic (150-200 words)
       2. A separate evaluation of how well the response connects back to the original topic (100-150 words)
-      3. Numerical scores:
-         - Semantic Distance (1-10): How creative yet meaningful is the connection to the current topic? (Higher is better)
-         - Relevance/Quality (1-10): How insightful and well-developed is the connection to the current topic? (Higher is better)
-         - Original Topic Connection (1-10): How well does it connect back to the original topic? (Higher is better)
+      3. Numerical scores for BOTH connections:
+         - Current Topic Connection:
+           * Semantic Distance (1-10)
+           * Similarity (1-10)
+         - Original Topic Connection:
+           * Semantic Distance (1-10)
+           * Similarity (1-10)
       
-      The total score should be out of 20 points, with 10 points for the current topic connection (semantic distance + relevance/quality) and 10 points for the original topic connection.
+      The final score should be calculated as follows:
+      - Current Topic Score = Current Topic Semantic Distance + Current Topic Similarity (max 20 points)
+      - Original Topic Score = Original Topic Semantic Distance + Original Topic Similarity (max 20 points)
+      - Final Score = (Current Topic Score + Original Topic Score) / 2 (max 20 points)
       
       Format your response as a JSON object with the following structure:
       {
         "evaluation": "Your evaluation of the connection to the current topic...",
         "finalEvaluation": "Your evaluation of the connection to the original topic...",
         "scores": {
-          "semanticDistance": X,
-          "relevanceQuality": Y,
-          "total": Z
+          "currentConnection": {
+            "semanticDistance": X,
+            "similarity": Y,
+            "subtotal": X+Y
+          },
+          "originalConnection": {
+            "semanticDistance": A,
+            "similarity": B,
+            "subtotal": A+B
+          },
+          "total": (X+Y+A+B)/2
         }
       }
-      
-      The total score should be the sum of:
-      - semanticDistance (max 5 points)
-      - relevanceQuality (max 5 points)
-      - Original topic connection (max 10 points)
       
       IMPORTANT: Your response must be valid JSON that can be parsed by JavaScript's JSON.parse().`,
       messages: [
@@ -100,7 +114,7 @@ export async function POST(request: Request) {
           Original starting topic: "${originalTopic}"
           Player's response: "${response}"
           
-          Please evaluate this final round response at a ${difficulty} difficulty level, considering both the connection to the current topic AND the connection back to the original topic.`
+          Please evaluate this final round response at a ${difficulty} difficulty level, considering both the connection to the current topic AND the connection back to the original topic using the same criteria for both.`
         }
       ],
     });
@@ -121,34 +135,22 @@ export async function POST(request: Request) {
       console.error('Error parsing evaluation JSON:', error);
       console.error('Raw evaluation text:', evaluationText);
       
-      // Attempt to extract scores using regex as a fallback
-      const semanticDistanceMatch = evaluationText.match(/semanticDistance"?\s*:\s*(\d+)/);
-      const relevanceQualityMatch = evaluationText.match(/relevanceQuality"?\s*:\s*(\d+)/);
-      const totalMatch = evaluationText.match(/total"?\s*:\s*(\d+)/);
-      
-      const semanticDistance = semanticDistanceMatch ? parseInt(semanticDistanceMatch[1]) : 5;
-      const relevanceQuality = relevanceQualityMatch ? parseInt(relevanceQualityMatch[1]) : 5;
-      const total = totalMatch ? parseInt(totalMatch[1]) : 10;
-      
-      // Extract evaluation text sections
-      const evaluationMatch = evaluationText.match(/evaluation"?\s*:\s*"([^"]+)"/);
-      const finalEvaluationMatch = evaluationText.match(/finalEvaluation"?\s*:\s*"([^"]+)"/);
-      
-      const evaluation = evaluationMatch 
-        ? evaluationMatch[1] 
-        : "The response shows an interesting connection to the current topic.";
-      
-      const finalEvaluation = finalEvaluationMatch
-        ? finalEvaluationMatch[1]
-        : "The response makes a thoughtful connection back to the original topic.";
-      
+      // Fallback response with default values
       return NextResponse.json({
-        evaluation,
-        finalEvaluation,
+        evaluation: "The response shows an interesting connection to the current topic.",
+        finalEvaluation: "The response makes a thoughtful connection back to the original topic.",
         scores: {
-          semanticDistance,
-          relevanceQuality,
-          total
+          currentConnection: {
+            semanticDistance: 5,
+            similarity: 5,
+            subtotal: 10
+          },
+          originalConnection: {
+            semanticDistance: 5,
+            similarity: 5,
+            subtotal: 10
+          },
+          total: 10
         }
       });
     }

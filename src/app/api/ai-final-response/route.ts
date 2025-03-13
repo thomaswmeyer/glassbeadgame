@@ -61,33 +61,60 @@ export async function POST(request: Request) {
 
     // Format game history for context
     let historyContext = '';
+    let previousResponses: string[] = [];
+    
     if (gameHistory && gameHistory.length > 0) {
       historyContext = 'Previous rounds:\n';
       gameHistory.slice(-5).forEach((item: GameHistoryItem, index: number) => {
         historyContext += `Round ${gameHistory.length - 5 + index + 1}: Topic "${item.topic}" → ${item.player === 'human' ? 'Human' : 'AI'} responded "${item.response}"\n`;
+        
+        // Collect previous AI responses to avoid repetition
+        if (item.player === 'ai') {
+          previousResponses.push(item.response);
+        }
       });
     }
+    
+    // Create a timestamp to ensure different results each time
+    const timestamp = new Date().toISOString();
+    
+    // Create a list of responses to explicitly avoid
+    const responsesToAvoid = previousResponses.length > 0 
+      ? `Avoid these previously used responses: ${previousResponses.join(', ')}.` 
+      : '';
 
     console.log('Preparing to make API request with model: claude-3-opus-20240229');
     console.log('Temperature setting:', 0.9);
     
     const aiResponse = await anthropic.messages.create({
       model: "claude-3-opus-20240229",
-      max_tokens: 50,
+      max_tokens: 100,
       temperature: 0.9,
-      system: `You are playing the Glass Bead Game, a game of conceptual connections. This is the final round.
+      system: `You are playing the Glass Bead Game, a game of conceptual connections. 
       
-      Your task is to respond to the current topic with a brief, thoughtful response (ideally just a few words) that:
-      1. Creates a meaningful connection to the current topic
-      2. ALSO connects back to the original starting topic of the game
-      3. Shows semantic distance (not too obvious, not too random)
-      4. Demonstrates depth and insight
+      This is the FINAL ROUND of the game. Your task is to respond to the current topic with a brief, thoughtful response 
+      that connects to BOTH:
+      1. The current topic: "${topic}"
+      2. The original starting topic: "${originalTopic}"
       
-      Your response should be brief but profound - a single word or short phrase that captures a concept related to both topics in an interesting way.
+      Your response should be brief but profound - a single concept or short phrase that 
+      creates a meaningful bridge between the current topic and the original topic.
       
       ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
       
-      Be creative in your response. Avoid obvious associations and clichés. Try to find a concept that bridges both topics in a surprising but meaningful way.
+      Be creative and varied in your responses. Avoid obvious associations and clichés. 
+      Try to surprise the player with unexpected but meaningful connections.
+      
+      ${responsesToAvoid}
+      
+      Current timestamp for seed variation: ${timestamp}
+      
+      Consider multiple domains of knowledge when forming your response:
+      - Arts and humanities
+      - Science and technology
+      - Social sciences
+      - Natural world
+      - Abstract concepts
       
       DO NOT explain your reasoning. ONLY provide the brief response itself.`,
       messages: [
@@ -95,16 +122,15 @@ export async function POST(request: Request) {
           role: "user",
           content: `${historyContext}
           
-          Original starting topic: "${originalTopic}"
           Current topic: "${topic}"
+          Original starting topic: "${originalTopic}"
           
-          Please provide your brief final response at a ${difficulty} difficulty level that connects to both the current topic AND the original starting topic. Be creative and avoid obvious connections.`
+          This is the FINAL ROUND. Please provide your brief response that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
         }
       ],
     });
     
     console.log('API request successful');
-    console.log('Response received:', JSON.stringify(aiResponse, null, 2));
 
     // Extract the text content from the response
     const response = aiResponse.content[0].type === 'text' 

@@ -57,8 +57,8 @@ export async function POST(request: Request) {
       
       Your task is to evaluate the player's response based on two criteria:
       
-      1. Semantic Distance (1-10): How creative yet meaningful is the connection? Higher scores for connections that are not obvious but still meaningful.
-      2. Relevance/Quality (1-10): How insightful and well-developed is the connection? Higher scores for responses that show depth of understanding.
+      1. Semantic Distance (1-10): How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.
+      2. Similarity (1-10): How well do the ideas map onto each other? For example, stock market crash and flocking behavior.
       
       For the evaluation, provide:
       

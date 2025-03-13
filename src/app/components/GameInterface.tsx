@@ -7,6 +7,17 @@ interface Score {
   semanticDistance: number;
   relevanceQuality: number;
   total: number;
+  originalTopicConnection?: number;
+  currentConnection?: {
+    semanticDistance: number;
+    similarity: number;
+    subtotal: number;
+  };
+  originalConnection?: {
+    semanticDistance: number;
+    similarity: number;
+    subtotal: number;
+  };
 }
 
 interface GameHistory {
@@ -62,10 +73,9 @@ export default function GameInterface() {
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
   
-  // Add difficulty level settings
+  // Simplified difficulty level - single setting for both concept and AI
   type DifficultyLevel = 'secondary' | 'university' | 'unlimited';
-  const [conceptDifficulty, setConceptDifficulty] = useState<DifficultyLevel>('university');
-  const [aiDifficulty, setAiDifficulty] = useState<DifficultyLevel>('university');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('university');
   const difficultyLevels: DifficultyLevel[] = ['secondary', 'university', 'unlimited'];
   
   // Difficulty level descriptions
@@ -87,7 +97,7 @@ export default function GameInterface() {
     setGameCompleted(false);
     try {
       const result = await axios.post('/api/generate-topic', {
-        difficulty: conceptDifficulty
+        difficulty: difficulty
       });
       const newTopic = result.data.topic;
       setTopic(newTopic);
@@ -165,7 +175,7 @@ export default function GameInterface() {
       let requestBody: any = { 
         topic, 
         response,
-        difficulty: aiDifficulty // Use the same difficulty level for evaluating human responses
+        difficulty: difficulty // Use the single difficulty level
       };
       
       // For the final round, use the special evaluation endpoint
@@ -175,7 +185,7 @@ export default function GameInterface() {
           currentTopic: topic, 
           originalTopic: originalTopic, 
           response,
-          difficulty: aiDifficulty // Use the same difficulty level for evaluating human responses
+          difficulty: difficulty // Use the single difficulty level
         };
       }
       
@@ -253,7 +263,7 @@ export default function GameInterface() {
       let requestBody: any = { 
         topic, 
         response: aiResponse,
-        difficulty: aiDifficulty
+        difficulty: difficulty // Use the single difficulty level
       };
       
       // For the final round, use the special evaluation endpoint
@@ -263,7 +273,7 @@ export default function GameInterface() {
           currentTopic: topic, 
           originalTopic: originalTopic, 
           response: aiResponse,
-          difficulty: aiDifficulty
+          difficulty: difficulty // Use the single difficulty level
         };
       }
       
@@ -408,7 +418,7 @@ export default function GameInterface() {
         console.log('Game history length:', gameHistory.length);
         console.log('Full game history:', JSON.stringify(gameHistory, null, 2));
         console.log('Max rounds:', maxRounds);
-        console.log('AI difficulty:', aiDifficulty);
+        console.log('Difficulty level:', difficulty);
         
         setIsAiThinking(true);
         try {
@@ -431,7 +441,7 @@ export default function GameInterface() {
             topic,
             originalTopic,
             gameHistoryLength: formattedHistory.length,
-            difficulty: aiDifficulty
+            difficulty: difficulty
           });
           
           // Create a simplified payload for debugging
@@ -439,7 +449,7 @@ export default function GameInterface() {
             topic,
             originalTopic,
             gameHistoryCount: formattedHistory.length,
-            difficulty: aiDifficulty
+            difficulty: difficulty
           };
           console.log('Request payload (simplified):', JSON.stringify(debugPayload));
           
@@ -449,7 +459,7 @@ export default function GameInterface() {
             topic,
             originalTopic: originalTopic,
             gameHistory: formattedHistory,
-            difficulty: aiDifficulty
+            difficulty: difficulty
           });
           
           console.log('Axios request completed');
@@ -514,7 +524,7 @@ export default function GameInterface() {
     };
     
     aiTakeTurn();
-  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, aiDifficulty]);
+  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, difficulty]);
 
   const handleRestart = () => {
     setGameHistory([]);
@@ -567,8 +577,8 @@ export default function GameInterface() {
               <li>In the final round, the response must connect back to the original starting topic.</li>
               <li>Responses are evaluated based on:
                 <ul className="list-disc pl-5 mt-1">
-                  <li><strong>Semantic Distance (1-10):</strong> How far your response moves from the current topic while maintaining a meaningful connection.</li>
-                  <li><strong>Conceptual Mapping (1-10):</strong> How well your brief response maps to the other topic.</li>
+                  <li><strong>Semantic Distance (1-10):</strong> How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.</li>
+                  <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
                 </ul>
               </li>
               <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
@@ -625,31 +635,12 @@ export default function GameInterface() {
               </div>
             </div>
             
-            {/* Initial concept difficulty */}
-            <div className="mb-4">
-              <label className="block text-left mb-2 font-medium">Initial Concept Difficulty:</label>
-              <select
-                value={conceptDifficulty}
-                onChange={(e) => setConceptDifficulty(e.target.value as DifficultyLevel)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {difficultyLevels.map(level => (
-                  <option key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                {difficultyDescriptions[conceptDifficulty]}
-              </p>
-            </div>
-            
-            {/* AI response difficulty */}
+            {/* Single difficulty selector */}
             <div className="mb-6">
-              <label className="block text-left mb-2 font-medium">AI Response Difficulty:</label>
+              <label className="block text-left mb-2 font-medium">Game Difficulty:</label>
               <select
-                value={aiDifficulty}
-                onChange={(e) => setAiDifficulty(e.target.value as DifficultyLevel)}
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as DifficultyLevel)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {difficultyLevels.map(level => (
@@ -659,7 +650,7 @@ export default function GameInterface() {
                 ))}
               </select>
               <p className="text-sm text-gray-500 mt-1">
-                {difficultyDescriptions[aiDifficulty]}
+                {difficultyDescriptions[difficulty]}
               </p>
             </div>
           </div>
@@ -826,6 +817,21 @@ export default function GameInterface() {
               
               <div className="whitespace-pre-wrap">{currentEvaluation.evaluation}</div>
               
+              {/* Score breakdown for regular rounds */}
+              {currentRound !== maxRounds && (
+                <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+                  <h4 className="font-medium text-blue-800 text-sm">Score Breakdown:</h4>
+                  <div className="mt-1 text-sm">
+                    <ul className="list-disc pl-5">
+                      <li>Semantic Distance: {currentEvaluation.scores.semanticDistance}/10</li>
+                      <li>Similarity: {currentEvaluation.scores.relevanceQuality}/10</li>
+                      <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}/20</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+              
+              {/* Final round score breakdown */}
               {currentRound === maxRounds && currentEvaluation.finalEvaluation && (
                 <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
                   <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
@@ -837,17 +843,21 @@ export default function GameInterface() {
                       <div>
                         <p><strong>Current Topic Connection:</strong></p>
                         <ul className="list-disc pl-5">
-                          <li>Semantic Distance: {currentEvaluation.scores.semanticDistance}/10</li>
-                          <li>Relevance/Quality: {currentEvaluation.scores.relevanceQuality}/10</li>
-                          <li>Subtotal: {currentEvaluation.scores.semanticDistance + currentEvaluation.scores.relevanceQuality}/20</li>
+                          <li>Semantic Distance: {currentEvaluation.scores.currentConnection?.semanticDistance || 0}/10</li>
+                          <li>Similarity: {currentEvaluation.scores.currentConnection?.similarity || 0}/10</li>
+                          <li>Subtotal: {currentEvaluation.scores.currentConnection?.subtotal || 0}/20</li>
                         </ul>
                       </div>
                       <div>
                         <p><strong>Original Topic Connection:</strong></p>
-                        <p className="pl-5">Score: {Math.round(currentEvaluation.scores.total * 1.5 - (currentEvaluation.scores.semanticDistance + currentEvaluation.scores.relevanceQuality))}/10</p>
+                        <ul className="list-disc pl-5">
+                          <li>Semantic Distance: {currentEvaluation.scores.originalConnection?.semanticDistance || 0}/10</li>
+                          <li>Similarity: {currentEvaluation.scores.originalConnection?.similarity || 0}/10</li>
+                          <li>Subtotal: {currentEvaluation.scores.originalConnection?.subtotal || 0}/20</li>
+                        </ul>
                       </div>
                     </div>
-                    <p className="mt-2 font-medium">Total Score: {currentEvaluation.scores.total}/20</p>
+                    <p className="mt-2 font-medium">Final Score: {currentEvaluation.scores.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span></p>
                   </div>
                 </div>
               )}
