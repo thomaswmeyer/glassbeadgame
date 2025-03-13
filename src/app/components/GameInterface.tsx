@@ -61,6 +61,19 @@ export default function GameInterface() {
   const [maxRounds, setMaxRounds] = useState<number>(10);
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
+  
+  // Add difficulty level settings
+  type DifficultyLevel = 'secondary' | 'university' | 'unlimited';
+  const [conceptDifficulty, setConceptDifficulty] = useState<DifficultyLevel>('university');
+  const [aiDifficulty, setAiDifficulty] = useState<DifficultyLevel>('university');
+  const difficultyLevels: DifficultyLevel[] = ['secondary', 'university', 'unlimited'];
+  
+  // Difficulty level descriptions
+  const difficultyDescriptions = {
+    secondary: "High school level concepts and vocabulary",
+    university: "Undergraduate level academic concepts",
+    unlimited: "Advanced, specialized, and abstract concepts"
+  };
 
   // Use maxRounds instead of hardcoded value
   const FINAL_ROUND = maxRounds;
@@ -73,7 +86,9 @@ export default function GameInterface() {
     setShowOriginalDefinition(false);
     setGameCompleted(false);
     try {
-      const result = await axios.post('/api/generate-topic');
+      const result = await axios.post('/api/generate-topic', {
+        difficulty: conceptDifficulty
+      });
       const newTopic = result.data.topic;
       setTopic(newTopic);
       setOriginalTopic(newTopic); // Store the original topic
@@ -147,7 +162,11 @@ export default function GameInterface() {
     
     try {
       let evaluationEndpoint = '/api/evaluate-response';
-      let requestBody: any = { topic, response };
+      let requestBody: any = { 
+        topic, 
+        response,
+        difficulty: aiDifficulty // Use the same difficulty level for evaluating human responses
+      };
       
       // For the final round, use the special evaluation endpoint
       if (currentRound === maxRounds) {
@@ -155,7 +174,8 @@ export default function GameInterface() {
         requestBody = { 
           currentTopic: topic, 
           originalTopic: originalTopic, 
-          response 
+          response,
+          difficulty: aiDifficulty // Use the same difficulty level for evaluating human responses
         };
       }
       
@@ -224,13 +244,17 @@ export default function GameInterface() {
   };
 
   const evaluateAiResponse = async (aiResponse: string) => {
-    if (!topic) return;
+    if (!topic || !aiResponse) return;
     
     setIsEvaluating(true);
     
     try {
       let evaluationEndpoint = '/api/evaluate-response';
-      let requestBody: any = { topic, response: aiResponse };
+      let requestBody: any = { 
+        topic, 
+        response: aiResponse,
+        difficulty: aiDifficulty
+      };
       
       // For the final round, use the special evaluation endpoint
       if (currentRound === maxRounds) {
@@ -238,7 +262,8 @@ export default function GameInterface() {
         requestBody = { 
           currentTopic: topic, 
           originalTopic: originalTopic, 
-          response: aiResponse 
+          response: aiResponse,
+          difficulty: aiDifficulty
         };
       }
       
@@ -261,17 +286,16 @@ export default function GameInterface() {
         setCurrentEvaluation({
           topic,
           response: aiResponse,
-          player: currentPlayer,
+          player: 'ai',
           evaluation: data.evaluation,
           finalEvaluation: data.finalEvaluation,
           scores: data.scores,
         });
-        setGameCompleted(true);
       } else {
         setCurrentEvaluation({
           topic,
           response: aiResponse,
-          player: currentPlayer,
+          player: 'ai',
           evaluation: data.evaluation,
           scores: data.scores,
         });
@@ -384,6 +408,7 @@ export default function GameInterface() {
         console.log('Game history length:', gameHistory.length);
         console.log('Full game history:', JSON.stringify(gameHistory, null, 2));
         console.log('Max rounds:', maxRounds);
+        console.log('AI difficulty:', aiDifficulty);
         
         setIsAiThinking(true);
         try {
@@ -405,14 +430,16 @@ export default function GameInterface() {
             endpoint,
             topic,
             originalTopic,
-            gameHistoryLength: formattedHistory.length
+            gameHistoryLength: formattedHistory.length,
+            difficulty: aiDifficulty
           });
           
           // Create a simplified payload for debugging
           const debugPayload = {
             topic,
             originalTopic,
-            gameHistoryCount: formattedHistory.length
+            gameHistoryCount: formattedHistory.length,
+            difficulty: aiDifficulty
           };
           console.log('Request payload (simplified):', JSON.stringify(debugPayload));
           
@@ -421,7 +448,8 @@ export default function GameInterface() {
           const result = await axios.post(endpoint, {
             topic,
             originalTopic: originalTopic,
-            gameHistory: formattedHistory
+            gameHistory: formattedHistory,
+            difficulty: aiDifficulty
           });
           
           console.log('Axios request completed');
@@ -486,7 +514,7 @@ export default function GameInterface() {
     };
     
     aiTakeTurn();
-  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds]);
+  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, aiDifficulty]);
 
   const handleRestart = () => {
     setGameHistory([]);
@@ -540,7 +568,7 @@ export default function GameInterface() {
               <li>Responses are evaluated based on:
                 <ul className="list-disc pl-5 mt-1">
                   <li><strong>Semantic Distance (1-10):</strong> How far your response moves from the current topic while maintaining a meaningful connection.</li>
-                  <li><strong>Relevance and Quality (1-10):</strong> How insightful your brief response is in relation to the topic.</li>
+                  <li><strong>Conceptual Mapping (1-10):</strong> How well your brief response maps to the other topic.</li>
                 </ul>
               </li>
               <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
@@ -571,7 +599,7 @@ export default function GameInterface() {
               </div>
             </div>
             
-            <div className="mb-2">
+            <div className="mb-4">
               <label className="block text-left mb-2 font-medium">Who Goes First:</label>
               <div className="flex gap-3 justify-center">
                 <button
@@ -595,6 +623,44 @@ export default function GameInterface() {
                   AI First
                 </button>
               </div>
+            </div>
+            
+            {/* Initial concept difficulty */}
+            <div className="mb-4">
+              <label className="block text-left mb-2 font-medium">Initial Concept Difficulty:</label>
+              <select
+                value={conceptDifficulty}
+                onChange={(e) => setConceptDifficulty(e.target.value as DifficultyLevel)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {difficultyLevels.map(level => (
+                  <option key={level} value={level}>
+                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                {difficultyDescriptions[conceptDifficulty]}
+              </p>
+            </div>
+            
+            {/* AI response difficulty */}
+            <div className="mb-6">
+              <label className="block text-left mb-2 font-medium">AI Response Difficulty:</label>
+              <select
+                value={aiDifficulty}
+                onChange={(e) => setAiDifficulty(e.target.value as DifficultyLevel)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {difficultyLevels.map(level => (
+                  <option key={level} value={level}>
+                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                {difficultyDescriptions[aiDifficulty]}
+              </p>
             </div>
           </div>
           

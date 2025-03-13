@@ -18,6 +18,13 @@ interface GameHistoryItem {
   player: 'human' | 'ai';
 }
 
+// Difficulty level descriptions for the system prompt
+const difficultyPrompts = {
+  secondary: "Your response should use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology.",
+  university: "Your response can use undergraduate university level concepts and some specialized terminology that would be taught in college courses.",
+  unlimited: "Your response can use advanced, specialized, and abstract concepts. Feel free to use graduate-level concepts, obscure references, and specialized terminology from any field."
+};
+
 export async function POST(request: Request) {
   console.log('=== AI FINAL RESPONSE ROUTE CALLED ===');
   console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
@@ -37,10 +44,12 @@ export async function POST(request: Request) {
     console.log('Request body received:', JSON.stringify({
       topic: body.topic,
       originalTopic: body.originalTopic,
+      difficulty: body.difficulty,
       gameHistoryLength: body.gameHistory?.length || 0
     }));
 
-    const { topic, originalTopic, gameHistory } = body;
+    const { topic, originalTopic, gameHistory, difficulty = 'university' } = body;
+    console.log('Using difficulty level:', difficulty);
 
     if (!topic || !originalTopic) {
       console.error('Current topic and original topic are required but not provided');
@@ -76,6 +85,8 @@ export async function POST(request: Request) {
       
       Your response should be brief but profound - a single word or short phrase that captures a concept related to both topics in an interesting way.
       
+      ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+      
       Be creative in your response. Avoid obvious associations and clichés. Try to find a concept that bridges both topics in a surprising but meaningful way.
       
       DO NOT explain your reasoning. ONLY provide the brief response itself.`,
@@ -87,7 +98,7 @@ export async function POST(request: Request) {
           Original starting topic: "${originalTopic}"
           Current topic: "${topic}"
           
-          Please provide your brief final response that connects to both the current topic AND the original starting topic. Be creative and avoid obvious connections.`
+          Please provide your brief final response at a ${difficulty} difficulty level that connects to both the current topic AND the original starting topic. Be creative and avoid obvious connections.`
         }
       ],
     });

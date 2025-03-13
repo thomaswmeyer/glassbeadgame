@@ -18,6 +18,13 @@ interface GameHistoryItem {
   player: 'human' | 'ai';
 }
 
+// Difficulty level descriptions for the system prompt
+const difficultyPrompts = {
+  secondary: "Your response should use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology.",
+  university: "Your response can use undergraduate university level concepts and some specialized terminology that would be taught in college courses.",
+  unlimited: "Your response can use advanced, specialized, and abstract concepts. Feel free to use graduate-level concepts, obscure references, and specialized terminology from any field."
+};
+
 export async function POST(request: Request) {
   console.log('=== AI RESPONSE ROUTE CALLED ===');
   console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
@@ -36,10 +43,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body received:', JSON.stringify({
       topic: body.topic,
+      difficulty: body.difficulty,
       gameHistoryLength: body.gameHistory?.length || 0
     }));
 
-    const { topic, gameHistory } = body;
+    const { topic, gameHistory, difficulty = 'university' } = body;
+    console.log('Using difficulty level:', difficulty);
 
     if (!topic) {
       console.error('Topic is required but was not provided');
@@ -75,6 +84,8 @@ export async function POST(request: Request) {
       Your response should be brief but profound - a single word or short phrase that 
       captures a concept related to the topic in an interesting way.
       
+      ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+      
       Be creative and varied in your responses. Avoid obvious associations and clichés. 
       Try to surprise the player with unexpected but meaningful connections.
       
@@ -86,7 +97,7 @@ export async function POST(request: Request) {
           
           Current topic: "${topic}"
           
-          Please provide your brief response to this topic. Be creative and avoid obvious connections.`
+          Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections.`
         }
       ],
     });

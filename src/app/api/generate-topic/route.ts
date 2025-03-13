@@ -25,7 +25,14 @@ const topicCategories = [
   "architectural style"
 ];
 
-export async function POST() {
+// Difficulty level descriptions for the system prompt
+const difficultyPrompts = {
+  secondary: "The topic should be appropriate for high school students, using concepts and vocabulary that would be taught in secondary education. Avoid specialized academic terminology.",
+  university: "The topic should be at an undergraduate university level, using concepts that would be taught in college courses. Some specialized terminology is acceptable.",
+  unlimited: "The topic can be advanced, specialized, and abstract. Feel free to use graduate-level concepts, obscure references, and specialized terminology from any field."
+};
+
+export async function POST(request: Request) {
   console.log('=== GENERATE TOPIC ROUTE CALLED ===');
   console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
   console.log('API Key length:', process.env.ANTHROPIC_API_KEY?.length);
@@ -37,6 +44,11 @@ export async function POST() {
       console.error('ANTHROPIC_API_KEY is not defined');
       throw new Error('ANTHROPIC_API_KEY is not defined');
     }
+    
+    // Parse request body to get difficulty level
+    const body = await request.json();
+    const difficulty = body.difficulty || 'university'; // Default to university level
+    console.log('Requested difficulty level:', difficulty);
 
     // Select a random category to focus on
     const randomCategory = topicCategories[Math.floor(Math.random() * topicCategories.length)];
@@ -50,10 +62,12 @@ export async function POST() {
       const response = await anthropic.messages.create({
         model: "claude-3-opus-20240229",
         max_tokens: 100,
-        temperature: 0.9, // Changed from any value > 1 to 0.9
+        temperature: 0.9,
         system: `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
         
         The topic should be a single concept, idea, term, or work related to the category: ${randomCategory}.
+        
+        ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
         
         Be creative and varied in your suggestions. Avoid common or overused topics like "Samsara", "Entropy", or "Duality".
         
@@ -66,7 +80,7 @@ export async function POST() {
         messages: [
           {
             role: "user",
-            content: `Generate a unique and interesting topic related to ${randomCategory} for the Glass Bead Game.`
+            content: `Generate a unique and interesting ${difficulty}-level topic related to ${randomCategory} for the Glass Bead Game.`
           }
         ],
       });

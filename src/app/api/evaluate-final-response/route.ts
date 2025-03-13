@@ -6,133 +6,157 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
+// Difficulty level descriptions for the system prompt
+const difficultyPrompts = {
+  secondary: "Evaluate at a high school level. Use simple language and focus on basic connections between concepts.",
+  university: "Evaluate at an undergraduate university level. You can use some specialized terminology and consider more nuanced connections.",
+  unlimited: "Evaluate at an advanced level. Consider complex, abstract, and specialized connections between concepts."
+};
+
 export async function POST(request: Request) {
   console.log('=== EVALUATE FINAL RESPONSE ROUTE CALLED ===');
   console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY);
-  console.log('API Key length:', process.env.ANTHROPIC_API_KEY?.length);
-  console.log('API Key first 10 chars:', process.env.ANTHROPIC_API_KEY?.substring(0, 10));
-  console.log('API Key last 10 chars:', process.env.ANTHROPIC_API_KEY?.substring(process.env.ANTHROPIC_API_KEY.length - 10));
   
   try {
+    // Check for API key
     if (!process.env.ANTHROPIC_API_KEY) {
       console.error('ANTHROPIC_API_KEY is not defined');
       throw new Error('ANTHROPIC_API_KEY is not defined');
     }
 
-    const { currentTopic, originalTopic, response } = await request.json();
-    console.log('Request body received:', { currentTopic, originalTopic, response });
+    // Parse request body
+    const body = await request.json();
+    console.log('Request body received:', JSON.stringify({
+      currentTopic: body.currentTopic,
+      originalTopic: body.originalTopic,
+      responseLength: body.response?.length || 0,
+      difficulty: body.difficulty
+    }));
+
+    const { currentTopic, originalTopic, response, difficulty = 'university' } = body;
+    console.log('Using difficulty level:', difficulty);
 
     if (!currentTopic || !originalTopic || !response) {
-      console.error('Missing required parameters:', { currentTopic, originalTopic, response });
+      console.error('Current topic, original topic, and response are required');
       return NextResponse.json(
         { error: 'Current topic, original topic, and response are required' },
         { status: 400 }
       );
     }
 
-    console.log('Evaluating connection to current topic...');
-    // First evaluate the connection to the current topic
-    const currentTopicEvaluation = await anthropic.messages.create({
+    console.log('Preparing to make API request with model: claude-3-opus-20240229');
+    
+    const aiResponse = await anthropic.messages.create({
       model: "claude-3-opus-20240229",
-      max_tokens: 500,
-      temperature: 0.5,
-      system: `You are an evaluator for the Glass Bead Game. You will score player responses 
-      based on two criteria:
-          
-      1. Semantic Distance (1-10): How far the response has moved from the current topic.  Completely
-         different areas are preferred over obvious connections.
+      max_tokens: 1000,
+      temperature: 0.2,
+      system: `You are an expert evaluator for the Glass Bead Game, a game of conceptual connections.
+
+      In this game, players take turns responding to concepts with related concepts, creating a chain of meaningful connections.
       
-      2. Relevance and Quality (1-10): How closely the response maps onto the existing topic.
+      This is the FINAL ROUND of the game, where the player must connect to BOTH:
+      1. The current topic
+      2. The original starting topic from the beginning of the game
       
-      The player's response will be brief (a few words or a short phrase). Evaluate it based 
-      on the quality of the connection made, not on length or elaboration.
+      ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
       
-      Keep your evaluation brief and focused. Provide a score for each criterion with a 1-2 sentence explanation for each score. 
-      The total score will be the sum of these two values.`,
-      messages: [
-        {
-          role: "user",
-          content: `Original topic: "${currentTopic}"
-          
-          Player response: "${response}"
-          
-          Please evaluate this brief response.`
+      Your task is to evaluate the player's response based on:
+      
+      1. How well it connects to the CURRENT topic (semantic distance and relevance/quality)
+      2. How well it connects back to the ORIGINAL topic
+      
+      For the final evaluation, provide:
+      
+      1. A thoughtful evaluation of the connection to the current topic (150-200 words)
+      2. A separate evaluation of how well the response connects back to the original topic (100-150 words)
+      3. Numerical scores:
+         - Semantic Distance (1-10): How creative yet meaningful is the connection to the current topic? (Higher is better)
+         - Relevance/Quality (1-10): How insightful and well-developed is the connection to the current topic? (Higher is better)
+         - Original Topic Connection (1-10): How well does it connect back to the original topic? (Higher is better)
+      
+      The total score should be out of 20 points, with 10 points for the current topic connection (semantic distance + relevance/quality) and 10 points for the original topic connection.
+      
+      Format your response as a JSON object with the following structure:
+      {
+        "evaluation": "Your evaluation of the connection to the current topic...",
+        "finalEvaluation": "Your evaluation of the connection to the original topic...",
+        "scores": {
+          "semanticDistance": X,
+          "relevanceQuality": Y,
+          "total": Z
         }
-      ],
-    });
-
-    // Extract the text content from the response
-    const evaluation = currentTopicEvaluation.content[0].type === 'text' 
-      ? currentTopicEvaluation.content[0].text 
-      : 'Failed to evaluate the response';
-
-    // Extract scores using regex
-    const semanticDistanceMatch = evaluation?.match(/Semantic Distance:?\s*(\d+)/i);
-    const relevanceQualityMatch = evaluation?.match(/Relevance and Quality:?\s*(\d+)/i);
-
-    const semanticDistanceScore = semanticDistanceMatch ? parseInt(semanticDistanceMatch[1]) : 5;
-    const relevanceQualityScore = relevanceQualityMatch ? parseInt(relevanceQualityMatch[1]) : 5;
-    
-    console.log('Evaluating connection to original topic...');
-    // Now evaluate the connection back to the original topic
-    const originalTopicEvaluation = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
-      max_tokens: 500,
-      temperature: 0.5,
-      system: `You are an evaluator for the Glass Bead Game. In the final round, players must connect their response
-      back to the original starting topic of the game. You will evaluate how well the player's response connects
-      to the original topic on a scale of 1-10.
-      
-      The player's response will be brief (a few words or a short phrase). Evaluate it based 
-      on the quality of the connection made, not on length or elaboration.
-      
-      Keep your evaluation brief and focused. Provide a score with a 2-3 sentence explanation.`,
-      messages: [
-        {
-          role: "user",
-          content: `Original starting topic: "${originalTopic}"
-          Current topic: "${currentTopic}"
-          Player response: "${response}"
-          
-          Please evaluate how well this response connects back to the original starting topic "${originalTopic}".`
-        }
-      ],
-    });
-
-    // Extract the text content from the response
-    const finalEvaluation = originalTopicEvaluation.content[0].type === 'text' 
-      ? originalTopicEvaluation.content[0].text 
-      : 'Failed to evaluate the connection to the original topic';
-
-    // Extract original topic connection score using regex
-    const originalTopicScoreMatch = finalEvaluation?.match(/score:?\s*(\d+)/i) || finalEvaluation?.match(/(\d+)\/10/i);
-    const originalTopicScore = originalTopicScoreMatch ? parseInt(originalTopicScoreMatch[1]) : 5;
-    
-    console.log('Scores:', {
-      semanticDistance: semanticDistanceScore,
-      relevanceQuality: relevanceQualityScore,
-      originalTopicConnection: originalTopicScore
-    });
-    
-    // Calculate final score as average of current topic total and original topic connection
-    const currentTopicTotal = semanticDistanceScore + relevanceQualityScore;
-    const finalScore = Math.round((currentTopicTotal + originalTopicScore) / 1.5); // Weighted slightly toward current topic
-    
-    console.log('Final score:', finalScore);
-
-    return NextResponse.json({
-      evaluation,
-      finalEvaluation,
-      scores: {
-        semanticDistance: semanticDistanceScore,
-        relevanceQuality: relevanceQualityScore,
-        total: finalScore
       }
+      
+      The total score should be the sum of:
+      - semanticDistance (max 5 points)
+      - relevanceQuality (max 5 points)
+      - Original topic connection (max 10 points)
+      
+      IMPORTANT: Your response must be valid JSON that can be parsed by JavaScript's JSON.parse().`,
+      messages: [
+        {
+          role: "user",
+          content: `Current topic: "${currentTopic}"
+          Original starting topic: "${originalTopic}"
+          Player's response: "${response}"
+          
+          Please evaluate this final round response at a ${difficulty} difficulty level, considering both the connection to the current topic AND the connection back to the original topic.`
+        }
+      ],
     });
+    
+    console.log('API request successful');
+    
+    // Extract the text content from the response
+    const evaluationText = aiResponse.content[0].type === 'text' 
+      ? aiResponse.content[0].text 
+      : '';
+    
+    // Parse the JSON response
+    try {
+      const evaluationData = JSON.parse(evaluationText);
+      console.log('Evaluation data parsed successfully');
+      return NextResponse.json(evaluationData);
+    } catch (error) {
+      console.error('Error parsing evaluation JSON:', error);
+      console.error('Raw evaluation text:', evaluationText);
+      
+      // Attempt to extract scores using regex as a fallback
+      const semanticDistanceMatch = evaluationText.match(/semanticDistance"?\s*:\s*(\d+)/);
+      const relevanceQualityMatch = evaluationText.match(/relevanceQuality"?\s*:\s*(\d+)/);
+      const totalMatch = evaluationText.match(/total"?\s*:\s*(\d+)/);
+      
+      const semanticDistance = semanticDistanceMatch ? parseInt(semanticDistanceMatch[1]) : 5;
+      const relevanceQuality = relevanceQualityMatch ? parseInt(relevanceQualityMatch[1]) : 5;
+      const total = totalMatch ? parseInt(totalMatch[1]) : 10;
+      
+      // Extract evaluation text sections
+      const evaluationMatch = evaluationText.match(/evaluation"?\s*:\s*"([^"]+)"/);
+      const finalEvaluationMatch = evaluationText.match(/finalEvaluation"?\s*:\s*"([^"]+)"/);
+      
+      const evaluation = evaluationMatch 
+        ? evaluationMatch[1] 
+        : "The response shows an interesting connection to the current topic.";
+      
+      const finalEvaluation = finalEvaluationMatch
+        ? finalEvaluationMatch[1]
+        : "The response makes a thoughtful connection back to the original topic.";
+      
+      return NextResponse.json({
+        evaluation,
+        finalEvaluation,
+        scores: {
+          semanticDistance,
+          relevanceQuality,
+          total
+        }
+      });
+    }
   } catch (error) {
     console.error('Error evaluating final response:', error);
+    
     return NextResponse.json(
-      { error: 'Failed to evaluate final response' },
+      { error: 'Failed to evaluate response' },
       { status: 500 }
     );
   }
