@@ -115,8 +115,9 @@ export async function generateTopic(
   difficulty: string,
   recentTopics: string[] = []
 ): Promise<string> {
-  console.log('Preparing to make API request with model:', currentModelConfig.model);
-  console.log('Provider:', currentModelConfig.provider);
+  // Log current model configuration to help debug provider issues
+  console.log('=== GENERATE TOPIC API CALL ===');
+  console.log('Current model config:', JSON.stringify(currentModelConfig));
   
   // Create a timestamp to ensure different results each time
   const timestamp = new Date().toISOString();
@@ -150,8 +151,11 @@ export async function generateTopic(
   // User message for topic generation
   const userMessage = `Generate a unique and interesting ${difficulty}-level topic related to ${subcategory} (a type of ${category}) for the Glass Bead Game. The topic should be specific and not generic.`;
   
+  // Always use the current provider from currentModelConfig
+  // This ensures we're using the most up-to-date provider setting
   if (currentModelConfig.provider === 'anthropic') {
     // Use Anthropic API
+    console.log('Using Anthropic API with model:', currentModelConfig.model);
     const response = await callWithRetry(() => 
       anthropic.messages.create({
         model: currentModelConfig.model,
@@ -177,6 +181,7 @@ export async function generateTopic(
     return topic;
   } else if (currentModelConfig.provider === 'deepseek') {
     // Use DeepSeek API
+    console.log('Using DeepSeek API with model:', currentModelConfig.model);
     const messages = convertToOpenAIMessages(systemPrompt, [
       { role: 'user', content: userMessage }
     ]);
@@ -206,6 +211,10 @@ export async function generateTopic(
 
 // Get a definition for a topic
 export async function getDefinition(topic: string): Promise<string> {
+  // Log current model configuration to help debug provider issues
+  console.log('=== GET DEFINITION API CALL ===');
+  console.log('Current model config:', JSON.stringify(currentModelConfig));
+  
   // System prompt for definition
   const systemPrompt = `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
     
@@ -223,8 +232,10 @@ export async function getDefinition(topic: string): Promise<string> {
   const userMessage = `Please provide a concise definition for: "${topic}"`;
   
   try {
+    // Always use the current provider from currentModelConfig
     if (currentModelConfig.provider === 'anthropic') {
       // Use Anthropic API
+      console.log('Using Anthropic API with model:', currentModelConfig.model);
       const response = await callWithRetry(() => 
         anthropic.messages.create({
           model: currentModelConfig.model,
@@ -248,6 +259,7 @@ export async function getDefinition(topic: string): Promise<string> {
       return definition;
     } else if (currentModelConfig.provider === 'deepseek') {
       // Use DeepSeek API
+      console.log('Using DeepSeek API with model:', currentModelConfig.model);
       const messages = convertToOpenAIMessages(systemPrompt, [
         { role: 'user', content: userMessage }
       ]);
@@ -286,8 +298,9 @@ export async function getAiResponse(
   circleEnabled: boolean,
   isFinalRound: boolean
 ): Promise<string> {
-  console.log('Preparing to make API request with model:', currentModelConfig.model);
-  console.log('Provider:', currentModelConfig.provider);
+  // Log current model configuration to help debug provider issues
+  console.log('=== GET AI RESPONSE API CALL ===');
+  console.log('Current model config:', JSON.stringify(currentModelConfig));
   
   // Format game history for context
   let historyContext = '';
@@ -508,8 +521,9 @@ export async function evaluateResponse(
   originalTopic?: string,
   isFinalRound?: boolean
 ): Promise<any> {
-  console.log('Preparing to make evaluation request with model:', currentModelConfig.model);
-  console.log('Provider:', currentModelConfig.provider);
+  // Log current model configuration to help debug provider issues
+  console.log('=== EVALUATE RESPONSE API CALL ===');
+  console.log('Current model config:', JSON.stringify(currentModelConfig));
   
   try {
     if (isFinalRound && originalTopic) {
@@ -567,8 +581,10 @@ export async function evaluateResponse(
         
         Please evaluate how well this response connects to BOTH the current topic AND the original starting topic.`;
       
+      // Always use the current provider from currentModelConfig
       if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
+        console.log('Using Anthropic API with model:', currentModelConfig.model);
         const result = await callWithRetry(() => 
           anthropic.messages.create({
             model: currentModelConfig.model,
@@ -661,6 +677,7 @@ export async function evaluateResponse(
         }
       } else if (currentModelConfig.provider === 'deepseek') {
         // Use DeepSeek API
+        console.log('Using DeepSeek API with model:', currentModelConfig.model);
         const messages = convertToOpenAIMessages(systemPrompt, [
           { role: 'user', content: userMessage }
         ]);
@@ -789,8 +806,10 @@ export async function evaluateResponse(
         
         Please evaluate how well this response connects to the topic.`;
       
+      // Always use the current provider from currentModelConfig
       if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
+        console.log('Using Anthropic API with model:', currentModelConfig.model);
         const result = await callWithRetry(() => 
           anthropic.messages.create({
             model: currentModelConfig.model,
@@ -874,6 +893,7 @@ export async function evaluateResponse(
         }
       } else if (currentModelConfig.provider === 'deepseek') {
         // Use DeepSeek API
+        console.log('Using DeepSeek API with model:', currentModelConfig.model);
         const messages = convertToOpenAIMessages(systemPrompt, [
           { role: 'user', content: userMessage }
         ]);
