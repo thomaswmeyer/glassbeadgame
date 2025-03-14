@@ -4,6 +4,21 @@ import { generateTopic } from '@/services/llm';
 
 export async function POST(request: Request) {
   try {
+    // Check if we're in production mode
+    if (LLM_CONFIG.production.isProduction) {
+      return NextResponse.json(
+        { 
+          error: 'Model selection is disabled in production mode',
+          config: {
+            model: currentModelConfig.model,
+            provider: currentModelConfig.provider,
+            displayName: LLM_CONFIG.models[LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models].displayName
+          }
+        },
+        { status: 403 }
+      );
+    }
+    
     const body = await request.json();
     const { model } = body;
     

@@ -69,11 +69,22 @@ export const LLM_CONFIG = {
     definition: 250,
     response: 100,
     evaluation: 1000
+  },
+  
+  // Production mode settings
+  production: {
+    // Check if we're in production mode (NEXT_PUBLIC_ prefix makes it available on client-side)
+    isProduction: process.env.NEXT_PUBLIC_PRODUCTION_MODE === 'true',
+    // Default model to use in production mode
+    defaultModel: 'deepseek_chat'
   }
 };
 
 // Current model configuration (to be used by the LLM service)
-const defaultModel = 'sonnet'; // Set the default model key here
+// In production mode, always use the production default model
+const defaultModel = LLM_CONFIG.production.isProduction 
+  ? LLM_CONFIG.production.defaultModel 
+  : 'sonnet'; // Development default
 
 export let currentModelConfig = {
   model: '',
@@ -85,6 +96,12 @@ updateModel(defaultModel);
 
 // Update the current model based on the selected model key
 export function updateModel(modelKey: string): void {
+  // In production mode, only allow changing to the production default model
+  if (LLM_CONFIG.production.isProduction && modelKey !== LLM_CONFIG.production.defaultModel) {
+    console.warn(`In production mode, only ${LLM_CONFIG.production.defaultModel} is allowed. Ignoring request to change to ${modelKey}.`);
+    modelKey = LLM_CONFIG.production.defaultModel;
+  }
+  
   if (!LLM_CONFIG.models[modelKey as keyof typeof LLM_CONFIG.models]) {
     console.error(`Invalid model key: ${modelKey}`);
     return;

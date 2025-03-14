@@ -5,7 +5,12 @@ import axios from 'axios';
 import { LLM_CONFIG } from '@/config/llm';
 
 export default function ModelSelector() {
-  const [selectedModel, setSelectedModel] = useState<string>('deepseek_chat');
+  // If in production mode, use the production default model
+  const initialModel = LLM_CONFIG.production.isProduction 
+    ? LLM_CONFIG.production.defaultModel 
+    : 'deepseek_chat';
+    
+  const [selectedModel, setSelectedModel] = useState<string>(initialModel);
   const [isChanging, setIsChanging] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -31,6 +36,12 @@ export default function ModelSelector() {
   }, []);
 
   const handleModelChange = async (model: string) => {
+    // In production mode, don't allow changing the model
+    if (LLM_CONFIG.production.isProduction) {
+      console.warn('Model selection is disabled in production mode');
+      return;
+    }
+    
     setIsChanging(true);
     setMessage('');
     setError('');
@@ -54,6 +65,11 @@ export default function ModelSelector() {
       setIsChanging(false);
     }
   };
+
+  // If in production mode, don't render the model selector UI
+  if (LLM_CONFIG.production.isProduction) {
+    return null;
+  }
 
   return (
     <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">

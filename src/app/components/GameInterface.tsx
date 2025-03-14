@@ -4,6 +4,7 @@ import { useState, KeyboardEvent, useEffect } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
+import { LLM_CONFIG } from '@/config/llm';
 
 interface Score {
   semanticDistance: number;
@@ -885,8 +886,18 @@ export default function GameInterface() {
             </div>
           </div>
           
-          {/* Add the ModelSelector component */}
-          <ModelSelector />
+          {/* Add the ModelSelector component if not in production mode */}
+          {!LLM_CONFIG.production.isProduction && <ModelSelector />}
+          
+          {/* Display model info in production mode */}
+          {LLM_CONFIG.production.isProduction && (
+            <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="font-bold mb-2 text-left">AI Model:</h3>
+              <p className="text-sm">
+                This game uses {LLM_CONFIG.models[LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models].displayName} for all AI interactions.
+              </p>
+            </div>
+          )}
           
           <div className="mb-6 text-center">
             <button
