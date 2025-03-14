@@ -81,6 +81,33 @@ function convertToOpenAIMessages(systemPrompt: string, userMessages: { role: str
   return messages;
 }
 
+// Add a wrapper function for DeepSeek API calls with detailed logging
+async function callDeepSeekAPI(params: any) {
+  // Log the complete request details
+  console.log('=== DEEPSEEK API REQUEST DETAILS ===');
+  console.log('Base URL:', LLM_CONFIG.endpoints.deepseek);
+  console.log('API Key (first 5 chars):', process.env.DEEPSEEK_API_KEY ? process.env.DEEPSEEK_API_KEY.substring(0, 5) + '...' : 'undefined');
+  console.log('Model:', params.model);
+  console.log('Request params:', JSON.stringify({
+    ...params,
+    // Don't log the full messages content to keep logs cleaner
+    messages: params.messages ? `[${params.messages.length} messages]` : undefined
+  }, null, 2));
+  
+  try {
+    const response = await deepseekClient.chat.completions.create(params);
+    console.log('DeepSeek API request successful');
+    return response;
+  } catch (error: any) {
+    console.error('=== DEEPSEEK API ERROR ===');
+    console.error('Error status:', error.status);
+    console.error('Error message:', error.message);
+    console.error('Error details:', error.response?.data || 'No detailed error data');
+    console.error('Error headers:', error.response?.headers || 'No headers');
+    throw error;
+  }
+}
+
 // Generate a topic for the game
 export async function generateTopic(
   category: string,
@@ -154,8 +181,11 @@ export async function generateTopic(
       { role: 'user', content: userMessage }
     ]);
     
+    // Log the full messages for debugging
+    console.log('DeepSeek request messages:', JSON.stringify(messages, null, 2));
+    
     const response = await callWithRetry(() => 
-      deepseekClient.chat.completions.create({
+      callDeepSeekAPI({
         model: currentModelConfig.model,
         messages: messages as any,
         max_tokens: 100,
@@ -222,8 +252,11 @@ export async function getDefinition(topic: string): Promise<string> {
         { role: 'user', content: userMessage }
       ]);
       
+      // Log the full messages for debugging
+      console.log('DeepSeek request messages:', JSON.stringify(messages, null, 2));
+      
       const response = await callWithRetry(() => 
-        deepseekClient.chat.completions.create({
+        callDeepSeekAPI({
           model: currentModelConfig.model,
           messages: messages as any,
           max_tokens: 250,
@@ -357,7 +390,7 @@ export async function getAiResponse(
         ]);
         
         const response = await callWithRetry(() => 
-          deepseekClient.chat.completions.create({
+          callDeepSeekAPI({
             model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: 100,
@@ -445,7 +478,7 @@ export async function getAiResponse(
         ]);
         
         const response = await callWithRetry(() => 
-          deepseekClient.chat.completions.create({
+          callDeepSeekAPI({
             model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: 100,
@@ -636,7 +669,7 @@ export async function evaluateResponse(
         const responseFormat = { type: "json_object" as const };
         
         const result = await callWithRetry(() => 
-          deepseekClient.chat.completions.create({
+          callDeepSeekAPI({
             model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: LLM_CONFIG.maxTokens.evaluation,
@@ -849,7 +882,7 @@ export async function evaluateResponse(
         const responseFormat = { type: "json_object" as const };
         
         const result = await callWithRetry(() => 
-          deepseekClient.chat.completions.create({
+          callDeepSeekAPI({
             model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: LLM_CONFIG.maxTokens.evaluation,

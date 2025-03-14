@@ -1,11 +1,5 @@
 // LLM Configuration
 export const LLM_CONFIG = {
-  // The model to use for all requests
-  model: "claude-3-7-sonnet-latest",
-  
-  // The provider of the current model
-  provider: "anthropic",
-  
   // Models configuration with name, provider, and descriptions
   models: {
     // Anthropic models
@@ -79,10 +73,15 @@ export const LLM_CONFIG = {
 };
 
 // Current model configuration (to be used by the LLM service)
+const defaultModel = 'sonnet'; // Set the default model key here
+
 export let currentModelConfig = {
-  model: LLM_CONFIG.model,
-  provider: LLM_CONFIG.provider
+  model: '',
+  provider: ''
 };
+
+// Initialize the current model configuration using the default model
+updateModel(defaultModel);
 
 // Update the current model based on the selected model key
 export function updateModel(modelKey: string): void {
@@ -92,10 +91,6 @@ export function updateModel(modelKey: string): void {
   }
   
   const modelConfig = LLM_CONFIG.models[modelKey as keyof typeof LLM_CONFIG.models];
-  
-  // Update the global LLM_CONFIG
-  LLM_CONFIG.model = modelConfig.name;
-  LLM_CONFIG.provider = modelConfig.provider;
   
   // Update the current model configuration
   currentModelConfig = {

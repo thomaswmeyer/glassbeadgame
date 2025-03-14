@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, KeyboardEvent, useEffect, useRef } from 'react';
+import { useState, KeyboardEvent, useEffect } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
@@ -751,10 +751,31 @@ export default function GameInterface() {
 
   // Function to handle showing the tooltip
   const handleScoreMouseEnter = (e: React.MouseEvent, score: Score, isCircleRound: boolean) => {
+    // Calculate tooltip position to ensure it stays within viewport
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Initial position (offset from cursor)
+    let xPos = e.clientX + 10;
+    let yPos = e.clientY + 10;
+    
+    // Estimate tooltip dimensions (we'll adjust these based on content)
+    const estimatedWidth = isCircleRound ? 300 : 250;
+    const estimatedHeight = isCircleRound ? 350 : 200;
+    
+    // Adjust position if tooltip would go off-screen
+    if (xPos + estimatedWidth > viewportWidth - 20) {
+      xPos = Math.max(20, e.clientX - estimatedWidth - 10); // Show on left side of cursor
+    }
+    
+    if (yPos + estimatedHeight > viewportHeight - 20) {
+      yPos = Math.max(20, e.clientY - estimatedHeight - 10); // Show above cursor
+    }
+    
     setTooltipData({
       visible: true,
-      x: e.clientX,
-      y: e.clientY,
+      x: xPos,
+      y: yPos,
       score,
       isCircleMode: isCircleRound
     });
@@ -1229,38 +1250,67 @@ export default function GameInterface() {
         <div 
           className="fixed bg-white shadow-lg rounded-md p-3 z-50 border border-gray-200 text-sm"
           style={{
-            left: `${tooltipData.x + 10}px`,
-            top: `${tooltipData.y + 10}px`,
-            maxWidth: '300px'
+            left: `${tooltipData.x}px`,
+            top: `${tooltipData.y}px`,
+            maxWidth: '300px',
+            maxHeight: '80vh',
+            overflowY: 'auto'
           }}
         >
           <h4 className="font-medium text-blue-800 mb-2">Score Breakdown:</h4>
           
           {!tooltipData.isCircleMode ? (
-            <ul className="list-disc pl-5">
-              <li>Semantic Distance: {tooltipData.score.semanticDistance}/10</li>
-              <li>Similarity: {tooltipData.score.relevanceQuality}/10</li>
-              <li className="font-medium mt-1">Total Score: {tooltipData.score.total}/20</li>
-            </ul>
+            <div>
+              <ul className="list-disc pl-5 mb-2">
+                <li>
+                  <span className="font-medium">Semantic Distance: {tooltipData.score.semanticDistance}/10</span>
+                  <p className="text-xs text-gray-600 ml-1">Measures how well the concepts are connected intellectually.</p>
+                </li>
+                <li>
+                  <span className="font-medium">Similarity: {tooltipData.score.relevanceQuality}/10</span>
+                  <p className="text-xs text-gray-600 ml-1">Measures how relevant and appropriate the response is to the topic.</p>
+                </li>
+                <li className="font-medium mt-2">Total Score: {tooltipData.score.total}/20</li>
+              </ul>
+              <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
+                <p><strong>What makes a good connection?</strong></p>
+                <p>The best connections balance novelty with relevance - they should be unexpected yet clearly related to the topic.</p>
+              </div>
+            </div>
           ) : (
             <div>
-              <div className="mb-2">
-                <p><strong>Current Topic Connection:</strong></p>
+              <div className="mb-3">
+                <p className="font-medium">Current Topic Connection:</p>
                 <ul className="list-disc pl-5">
-                  <li>Semantic Distance: {tooltipData.score.currentConnection?.semanticDistance || 0}/10</li>
-                  <li>Similarity: {tooltipData.score.currentConnection?.similarity || 0}/10</li>
+                  <li>
+                    <span>Semantic Distance: {tooltipData.score.currentConnection?.semanticDistance || 0}/10</span>
+                    <p className="text-xs text-gray-600 ml-1">Connection quality to the current topic.</p>
+                  </li>
+                  <li>
+                    <span>Similarity: {tooltipData.score.currentConnection?.similarity || 0}/10</span>
+                    <p className="text-xs text-gray-600 ml-1">Relevance to the current topic.</p>
+                  </li>
                   <li>Subtotal: {tooltipData.score.currentConnection?.subtotal || 0}/20</li>
                 </ul>
               </div>
-              <div>
-                <p><strong>Original Topic Connection:</strong></p>
+              <div className="mb-3">
+                <p className="font-medium">Original Topic Connection:</p>
                 <ul className="list-disc pl-5">
-                  <li>Semantic Distance: {tooltipData.score.originalConnection?.semanticDistance || 0}/10</li>
-                  <li>Similarity: {tooltipData.score.originalConnection?.similarity || 0}/10</li>
+                  <li>
+                    <span>Semantic Distance: {tooltipData.score.originalConnection?.semanticDistance || 0}/10</span>
+                    <p className="text-xs text-gray-600 ml-1">Connection quality to the original topic.</p>
+                  </li>
+                  <li>
+                    <span>Similarity: {tooltipData.score.originalConnection?.similarity || 0}/10</span>
+                    <p className="text-xs text-gray-600 ml-1">Relevance to the original topic.</p>
+                  </li>
                   <li>Subtotal: {tooltipData.score.originalConnection?.subtotal || 0}/20</li>
                 </ul>
               </div>
-              <p className="mt-2 font-medium">Final Score: {tooltipData.score.total}/20</p>
+              <p className="mt-2 font-medium">Final Score: {tooltipData.score.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span></p>
+              <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
+                <p><strong>Circle Mode:</strong> In the final round, your response must connect both to the current topic and back to the original starting topic.</p>
+              </div>
             </div>
           )}
         </div>

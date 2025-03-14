@@ -5,10 +5,11 @@ import axios from 'axios';
 import { LLM_CONFIG } from '@/config/llm';
 
 export default function ModelSelector() {
-  const [selectedModel, setSelectedModel] = useState<string>('sonnet');
+  const [selectedModel, setSelectedModel] = useState<string>('deepseek_chat');
   const [isChanging, setIsChanging] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [apiTestError, setApiTestError] = useState<string | null>(null);
   const [anthropicModels, setAnthropicModels] = useState<string[]>([]);
   const [deepseekModels, setDeepseekModels] = useState<string[]>([]);
 
@@ -33,11 +34,19 @@ export default function ModelSelector() {
     setIsChanging(true);
     setMessage('');
     setError('');
+    setApiTestError(null);
     
     try {
       const response = await axios.post('/api/set-model', { model });
       setSelectedModel(model);
       setMessage(`Model changed to ${LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName}`);
+      
+      // Check if there was an API test error
+      if (response.data.testError) {
+        const errorDetails = response.data.testError;
+        setApiTestError(`API Test Error: ${errorDetails.message}`);
+        console.error('API Test Error Details:', errorDetails);
+      }
     } catch (error: any) {
       console.error('Error changing model:', error);
       setError(error.response?.data?.error || 'Failed to change model');
@@ -71,23 +80,29 @@ export default function ModelSelector() {
       </div>
       
       <div className="mb-2">
-        <h4 className="text-sm font-medium mb-2 text-left">DeepSeek Models (Currently Unavailable):</h4>
+        <h4 className="text-sm font-medium mb-2 text-left">DeepSeek Models:</h4>
         <div className="flex flex-wrap gap-2 justify-center">
           {deepseekModels.map(model => (
             <button
               key={model}
               onClick={() => handleModelChange(model)}
-              disabled={true}
-              className="px-3 py-1 rounded-full text-sm bg-gray-300 text-gray-500 cursor-not-allowed"
-              title="DeepSeek models are currently unavailable"
+              disabled={isChanging}
+              className={`px-3 py-1 rounded-full text-sm ${
+                selectedModel === model 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
               {LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName}
             </button>
           ))}
         </div>
-        <p className="text-xs text-red-500 mt-1">
-          Note: DeepSeek models are currently returning 404 errors and are disabled.
-        </p>
+        
+        {apiTestError && (
+          <p className="text-xs text-orange-500 mt-1">
+            Note: {apiTestError}. The model is selected but API requests may fail.
+          </p>
+        )}
       </div>
       
       {isChanging && (
@@ -112,7 +127,7 @@ export default function ModelSelector() {
             </span>
           );
         })}
-        <strong>DeepSeek Models (Unavailable):</strong><br />
+        <strong>DeepSeek Models:</strong><br />
         {deepseekModels.map(model => {
           const config = LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models];
           return (

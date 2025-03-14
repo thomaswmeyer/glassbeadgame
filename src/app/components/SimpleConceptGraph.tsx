@@ -163,8 +163,8 @@ const forceSimulation = (nodes: Node[], links: Link[], iterations = 300, existin
         const distance = Math.sqrt(dx * dx + dy * dy) || 1;
         
         // Use semantic distance to determine link length
-        // Higher semantic distance = longer link
-        const idealDistance = 100 + (10 - link.semanticDistance) * 20;
+        // Higher semantic distance = longer link (linear correlation)
+        const idealDistance = 50 + link.semanticDistance * 20;
         const force = (distance - idealDistance) / 30;
         
         const fx = (dx / distance) * force;
@@ -328,8 +328,129 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
   const nodePositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
   const prevGameHistoryLengthRef = useRef<number>(0);
   const nodeMapRef = useRef<Map<string, Node>>(new Map());
+  
+  // Add a continuous animation flag to ensure animation keeps running
+  const continuousAnimation = useRef<boolean>(true);
 
-  // Function to build graph data from game history
+  // Animation loop using requestAnimationFrame
+  const animate = useCallback(() => {
+    if (!continuousAnimation.current && !isAnimating.current) {
+      // If we're not in continuous mode and not animating, just request the next frame
+      animationRef.current = requestAnimationFrame(animate);
+      return;
+    }
+    
+    setGraphData(prevData => {
+      const updatedNodes = [...prevData.nodes];
+      let stillAnimating = false;
+      
+      // Create node map for quick lookups
+      const nodeMap = new Map<string, Node>();
+      updatedNodes.forEach(node => nodeMap.set(node.id, node));
+      
+      // Apply angular forces to maintain even distribution
+      applyAngularForces(updatedNodes, nodeMap);
+      
+      // Update node positions with spring physics
+      updatedNodes.forEach(node => {
+        // Spring force
+        const springFactor = 0.08;
+        const dampingFactor = 0.8;
+        
+        // For nodes with explicit targets
+        if (node.targetX !== undefined && node.targetY !== undefined) {
+          // Calculate spring force
+          const dx = node.targetX - node.x;
+          const dy = node.targetY - node.y;
+          
+          // Update velocity with spring force and damping
+          if (!node.vx) node.vx = 0;
+          if (!node.vy) node.vy = 0;
+          
+          node.vx = node.vx * dampingFactor + dx * springFactor;
+          node.vy = node.vy * dampingFactor + dy * springFactor;
+          
+          // Update position
+          node.x += node.vx;
+          node.y += node.vy;
+          
+          // Check if still animating
+          const isMoving = Math.abs(node.vx) > 0.01 || Math.abs(node.vy) > 0.01;
+          stillAnimating = stillAnimating || isMoving;
+        } 
+        // For nodes without explicit targets, apply small random movement for visual interest
+        else if (node.isNew || continuousAnimation.current) {
+          // Initialize velocity if not set
+          if (!node.vx) node.vx = 0;
+          if (!node.vy) node.vy = 0;
+          
+          // Add small random movement - reduced for continuous animation
+          const randomFactor = continuousAnimation.current ? 0.1 : 0.5;
+          node.vx = node.vx * dampingFactor + (Math.random() - 0.5) * randomFactor;
+          node.vy = node.vy * dampingFactor + (Math.random() - 0.5) * randomFactor;
+          
+          // Update position
+          node.x += node.vx;
+          node.y += node.vy;
+          
+          // Always consider as still animating in continuous mode
+          stillAnimating = true;
+        }
+      });
+      
+      // In continuous mode, always keep animating
+      isAnimating.current = continuousAnimation.current || stillAnimating;
+      
+      return { nodes: updatedNodes, links: prevData.links };
+    });
+    
+    // Always request the next animation frame
+    animationRef.current = requestAnimationFrame(animate);
+  }, []);
+
+  // Start animation on mount and ensure it keeps running
+  useEffect(() => {
+    // Start animation if not already running
+    if (!animationRef.current) {
+      isAnimating.current = true;
+      animationRef.current = requestAnimationFrame(animate);
+    }
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [animate]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.clientWidth;
+        const containerHeight = Math.min(500, Math.max(300, containerWidth * 0.8));
+        
+        // Recalculate node positions to fit the new viewport
+        setGraphData(prevData => {
+          const updatedNodes = [...prevData.nodes];
+          fitGraphToView(updatedNodes, containerWidth, containerHeight);
+          isAnimating.current = true;
+          return { nodes: updatedNodes, links: prevData.links };
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Handle node click
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(selectedNode === nodeId ? null : nodeId);
+  };
+
+  // Process game history to build graph data
   useEffect(() => {
     if (!gameHistory.length && !originalTopic) return;
 
@@ -357,7 +478,8 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
       vy: 0,
       color: '#4299e1', // Blue color for original topic
       size: 20, // Larger size for the original topic
-      isOriginal: true
+      isOriginal: true,
+      isNew: !existingNodePositions.has(originalTopic)
     });
     nodeIds.add(originalTopic);
 
@@ -371,7 +493,8 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
         vy: 0,
         color: '#f6ad55', // Orange color for current topic
         size: 18, // Slightly smaller than original but larger than responses
-        isCurrent: true
+        isCurrent: true,
+        isNew: !existingNodePositions.has(currentTopic)
       });
       nodeIds.add(currentTopic);
     }
@@ -390,6 +513,7 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
           vy: 0,
           color: item.player === 'human' ? '#63b3ed' : '#fc8181', // Blue for human, red for AI
           size: 15, // Standard size for responses
+          isNew: !existingNodePositions.has(item.response)
         });
         nodeIds.add(item.response);
       }
@@ -452,99 +576,6 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
     setGraphData(simulatedData);
   }, [gameHistory, originalTopic, currentTopic, width, height, graphData.nodes]);
 
-  // Animation loop using requestAnimationFrame
-  const animate = useCallback(() => {
-    setGraphData(prevData => {
-      const updatedNodes = [...prevData.nodes];
-      let stillAnimating = false;
-      
-      // Create node map for quick lookups
-      const nodeMap = new Map<string, Node>();
-      updatedNodes.forEach(node => nodeMap.set(node.id, node));
-      
-      // Apply angular forces to maintain even distribution
-      applyAngularForces(updatedNodes, nodeMap);
-      
-      // Update node positions with spring physics
-      updatedNodes.forEach(node => {
-        if (node.targetX !== undefined && node.targetY !== undefined) {
-          // Spring force
-          const springFactor = 0.08;
-          const dampingFactor = 0.8;
-          
-          // Calculate spring force
-          const dx = node.targetX - node.x;
-          const dy = node.targetY - node.y;
-          
-          // Update velocity with spring force and damping
-          if (!node.vx) node.vx = 0;
-          if (!node.vy) node.vy = 0;
-          
-          node.vx = node.vx * dampingFactor + dx * springFactor;
-          node.vy = node.vy * dampingFactor + dy * springFactor;
-          
-          // Update position
-          node.x += node.vx;
-          node.y += node.vy;
-          
-          // Check if still animating
-          const isMoving = Math.abs(node.vx) > 0.01 || Math.abs(node.vy) > 0.01;
-          stillAnimating = stillAnimating || isMoving;
-        }
-      });
-      
-      // Continue or stop animation
-      isAnimating.current = stillAnimating;
-      
-      return { nodes: updatedNodes, links: prevData.links };
-    });
-    
-    // Continue animation if needed
-    if (isAnimating.current) {
-      animationRef.current = requestAnimationFrame(animate);
-    }
-  }, []);
-
-  // Start/stop animation
-  useEffect(() => {
-    if (isAnimating.current && !animationRef.current) {
-      animationRef.current = requestAnimationFrame(animate);
-    }
-    
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-    };
-  }, [animate, graphData]);
-
-  // Handle window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current) {
-        const containerWidth = containerRef.current.clientWidth;
-        const containerHeight = Math.min(500, Math.max(300, containerWidth * 0.8));
-        
-        // Recalculate node positions to fit the new viewport
-        setGraphData(prevData => {
-          const updatedNodes = [...prevData.nodes];
-          fitGraphToView(updatedNodes, containerWidth, containerHeight);
-          isAnimating.current = true;
-          return { nodes: updatedNodes, links: prevData.links };
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Handle node click
-  const handleNodeClick = (nodeId: string) => {
-    setSelectedNode(selectedNode === nodeId ? null : nodeId);
-  };
-
   if (!gameHistory.length && !originalTopic) {
     return <div className="h-full flex items-center justify-center text-gray-500">No game data yet</div>;
   }
@@ -554,7 +585,7 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
       <div className="p-3 bg-gray-50 border-b">
         <h3 className="font-medium text-gray-700">Concept Connections</h3>
         <p className="text-xs text-gray-500">
-          Line length = semantic distance, line width = connection strength
+          Line length = semantic distance (longer = more distant), line width = connection strength
         </p>
       </div>
       
