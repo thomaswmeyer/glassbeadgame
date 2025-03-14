@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import { setModel, getModelConfig } from '@/services/llm';
-import { updateModel } from '@/config/llm';
+import { LLM_CONFIG, updateModel } from '@/config/llm';
 
 export async function POST(request: Request) {
-  console.log('=== SET MODEL ROUTE CALLED ===');
-  
   try {
-    const { model } = await request.json();
+    const body = await request.json();
+    const { model } = body;
     
     if (!model) {
       return NextResponse.json(
@@ -15,32 +13,31 @@ export async function POST(request: Request) {
       );
     }
     
-    console.log('Requested model change to:', model);
+    // Get the list of valid model keys from the LLM_CONFIG
+    const validModels = Object.keys(LLM_CONFIG.models);
     
-    // Check if the model is valid
-    const validModels = ['sonnet', 'haiku', 'opus', 'deepseek_coder', 'deepseek_lite', 'deepseek_v2'];
     if (!validModels.includes(model)) {
       return NextResponse.json(
-        { error: `Invalid model name. Must be one of: ${validModels.join(', ')}` },
+        { error: `Invalid model name. Valid models are: ${validModels.join(', ')}` },
         { status: 400 }
       );
     }
     
     // Update the model
-    const newModelId = updateModel(model as any); // Using 'any' as a temporary workaround
-    setModel(newModelId);
+    updateModel(model);
     
-    // Get the current configuration
-    const currentConfig = getModelConfig();
-    
-    console.log('Model changed successfully to:', newModelId);
-    return NextResponse.json({ 
-      success: true, 
-      model: newModelId,
-      config: currentConfig
+    // Return the current configuration
+    return NextResponse.json({
+      success: true,
+      message: `Model changed to ${LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName}`,
+      config: {
+        model: LLM_CONFIG.model,
+        provider: LLM_CONFIG.provider,
+        displayName: LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName
+      }
     });
   } catch (error) {
-    console.error('Error in set-model route:', error);
+    console.error('Error setting model:', error);
     return NextResponse.json(
       { error: 'Failed to set model' },
       { status: 500 }

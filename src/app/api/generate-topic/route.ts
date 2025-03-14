@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateTopic, getFallbackTopic } from '@/services/llm';
+import { generateTopic } from '@/services/llm';
 
 // Categories and subcategories for topic generation
 const categories = [
@@ -107,44 +107,28 @@ export async function POST(request: Request) {
     console.log('Selected random category:', randomCategory.name);
     console.log('Selected random subcategory:', randomSubcategory);
     
-    try {
-      // Generate a topic using our LLM service
-      const topic = await generateTopic(
-        randomCategory.name,
-        randomSubcategory,
-        difficulty,
-        recentTopics
-      );
-      
-      // Add to recent topics and maintain max length
-      recentTopics.push(topic);
-      if (recentTopics.length > MAX_RECENT_TOPICS) {
-        recentTopics.shift();
-      }
-      
-      console.log('Extracted topic:', topic);
-      console.log('Recent topics count:', recentTopics.length);
-      
-      return NextResponse.json({ topic });
-    } catch (error) {
-      console.error('Error generating topic with API:', error);
-      
-      // Use fallback topic generation if API fails
-      const fallbackTopic = getFallbackTopic(difficulty, randomCategory.name, randomSubcategory);
-      console.log('Using fallback topic:', fallbackTopic);
-      
-      // Add fallback topic to recent topics
-      recentTopics.push(fallbackTopic);
-      if (recentTopics.length > MAX_RECENT_TOPICS) {
-        recentTopics.shift();
-      }
-      
-      return NextResponse.json({ topic: fallbackTopic });
+    // Generate a topic using our LLM service
+    const topic = await generateTopic(
+      randomCategory.name,
+      randomSubcategory,
+      difficulty,
+      recentTopics
+    );
+    
+    // Add to recent topics and maintain max length
+    recentTopics.push(topic);
+    if (recentTopics.length > MAX_RECENT_TOPICS) {
+      recentTopics.shift();
     }
+    
+    console.log('Extracted topic:', topic);
+    console.log('Recent topics count:', recentTopics.length);
+    
+    return NextResponse.json({ topic });
   } catch (error) {
-    console.error('Error in generate-topic route:', error);
+    console.error('Error generating topic:', error);
     return NextResponse.json(
-      { error: 'Failed to generate topic' },
+      { error: 'Failed to generate topic. Please try again or check API connectivity.' },
       { status: 500 }
     );
   }

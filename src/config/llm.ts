@@ -1,33 +1,52 @@
 // LLM Configuration
 export const LLM_CONFIG = {
   // The model to use for all requests
-  model: "claude-3-sonnet-20240229",
+  model: "claude-3-7-sonnet-latest",
   
   // The provider of the current model
   provider: "anthropic",
   
-  // Alternative models that can be used
+  // Models configuration with name, provider, and descriptions
   models: {
     // Anthropic models
-    sonnet: "claude-3-sonnet-20240229",
-    haiku: "claude-3-haiku-20240307",
-    opus: "claude-3-opus-20240229",
+    sonnet: {
+      name: "claude-3-7-sonnet-latest",
+      provider: "anthropic",
+      displayName: "Claude 3.7 Sonnet",
+      description: "Latest and most capable model",
+      category: "anthropic"
+    },
+    haiku: {
+      name: "claude-3-5-haiku-latest",
+      provider: "anthropic",
+      displayName: "Claude 3.5 Haiku",
+      description: "Fast and efficient model",
+      category: "anthropic"
+    },
+    opus: {
+      name: "claude-3-opus-latest",
+      provider: "anthropic",
+      displayName: "Claude 3 Opus",
+      description: "Highest quality, but slower and more expensive",
+      category: "anthropic"
+    },
     
     // DeepSeek models
-    deepseek_coder: "deepseek-coder-33b-instruct",
-    deepseek_lite: "deepseek-llm-67b-chat",
-    deepseek_v2: "deepseek-v2"
+    deepseek_chat: {
+      name: "deepseek-chat",
+      provider: "deepseek",
+      displayName: "DeepSeek Chat",
+      description: "General-purpose chat model with strong reasoning capabilities",
+      category: "deepseek"
+    },
+    deepseek_reasoner: {
+      name: "deepseek-reasoner",
+      provider: "deepseek",
+      displayName: "DeepSeek Reasoner",
+      description: "Specialized for complex reasoning and problem-solving",
+      category: "deepseek"
+    }
   },
-  
-  // Map of models to their providers
-  providers: {
-    "claude-3-sonnet-20240229": "anthropic",
-    "claude-3-haiku-20240307": "anthropic",
-    "claude-3-opus-20240229": "anthropic",
-    "deepseek-coder-33b-instruct": "deepseek",
-    "deepseek-llm-67b-chat": "deepseek",
-    "deepseek-v2": "deepseek"
-  } as Record<string, string>,
   
   // Default temperature settings for different types of requests
   temperature: {
@@ -40,12 +59,49 @@ export const LLM_CONFIG = {
   endpoints: {
     anthropic: "",  // Uses the Anthropic SDK directly
     deepseek: "https://api.deepseek.com/v1/chat/completions"  // DeepSeek API endpoint
+  },
+  
+  // Response format settings for different providers
+  responseFormat: {
+    anthropic: null, // Anthropic doesn't support direct JSON response format in the same way as OpenAI
+    deepseek: {
+      json: { type: "json_object" as const } // Use const assertion to ensure correct type
+    }
+  },
+  
+  // Max tokens settings for different request types
+  maxTokens: {
+    topic: 100,
+    definition: 250,
+    response: 100,
+    evaluation: 1000
   }
 };
 
-// Function to update the model
-export function updateModel(modelKey: 'sonnet' | 'haiku' | 'opus' | 'deepseek_coder' | 'deepseek_lite' | 'deepseek_v2') {
-  LLM_CONFIG.model = LLM_CONFIG.models[modelKey];
-  LLM_CONFIG.provider = LLM_CONFIG.providers[LLM_CONFIG.model];
-  return LLM_CONFIG.model;
+// Current model configuration (to be used by the LLM service)
+export let currentModelConfig = {
+  model: LLM_CONFIG.model,
+  provider: LLM_CONFIG.provider
+};
+
+// Update the current model based on the selected model key
+export function updateModel(modelKey: string): void {
+  if (!LLM_CONFIG.models[modelKey as keyof typeof LLM_CONFIG.models]) {
+    console.error(`Invalid model key: ${modelKey}`);
+    return;
+  }
+  
+  const modelConfig = LLM_CONFIG.models[modelKey as keyof typeof LLM_CONFIG.models];
+  
+  // Update the global LLM_CONFIG
+  LLM_CONFIG.model = modelConfig.name;
+  LLM_CONFIG.provider = modelConfig.provider;
+  
+  // Update the current model configuration
+  currentModelConfig = {
+    model: modelConfig.name,
+    provider: modelConfig.provider
+  };
+  
+  console.log(`Model updated to: ${currentModelConfig.model} (${currentModelConfig.provider})`);
 } 

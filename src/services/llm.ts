@@ -1,16 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { OpenAI } from 'openai';
-import { LLM_CONFIG } from '@/config/llm';
+import { LLM_CONFIG, currentModelConfig } from '@/config/llm';
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
-// Initialize OpenAI client for DeepSeek API
-const openai = new OpenAI({
+// Initialize DeepSeek client using OpenAI SDK
+const deepseekClient = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
-  baseURL: 'https://api.deepseek.com/v1',
+  baseURL: LLM_CONFIG.endpoints.deepseek,
 });
 
 // Difficulty level descriptions for the system prompt
@@ -56,22 +56,16 @@ async function callWithRetry<T>(
   throw lastError;
 }
 
-// Function to set the model
-export function setModel(model: string) {
-  console.log(`Setting model to: ${model}`);
-  return model;
-}
-
 // Function to get the current model configuration
 export function getModelConfig() {
   return {
-    model: LLM_CONFIG.model,
-    provider: LLM_CONFIG.provider,
+    model: currentModelConfig.model,
+    provider: currentModelConfig.provider,
     temperature: LLM_CONFIG.temperature
   };
 }
 
-// Helper function to convert Anthropic-style messages to OpenAI format
+// Helper function to convert Anthropic-style messages to DeepSeek/OpenAI format
 function convertToOpenAIMessages(systemPrompt: string, userMessages: { role: string, content: string }[]) {
   const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [
     { role: 'system', content: systemPrompt }
@@ -94,9 +88,8 @@ export async function generateTopic(
   difficulty: string,
   recentTopics: string[] = []
 ): Promise<string> {
-  console.log('Preparing to make API request with model:', LLM_CONFIG.model);
-  console.log('Temperature setting:', LLM_CONFIG.temperature.creative);
-  console.log('Provider:', LLM_CONFIG.provider);
+  console.log('Preparing to make API request with model:', currentModelConfig.model);
+  console.log('Provider:', currentModelConfig.provider);
   
   // Create a timestamp to ensure different results each time
   const timestamp = new Date().toISOString();
@@ -130,57 +123,54 @@ export async function generateTopic(
   // User message for topic generation
   const userMessage = `Generate a unique and interesting ${difficulty}-level topic related to ${subcategory} (a type of ${category}) for the Glass Bead Game. The topic should be specific and not generic.`;
   
-  try {
-    if (LLM_CONFIG.provider === 'anthropic') {
-      // Use Anthropic API
-      const response = await callWithRetry(() => 
-        anthropic.messages.create({
-          model: LLM_CONFIG.model,
-          max_tokens: 100,
-          temperature: LLM_CONFIG.temperature.creative,
-          system: systemPrompt,
-          messages: [
-            {
-              role: "user",
-              content: userMessage
-            }
-          ],
-        })
-      );
-      
-      console.log('API request successful');
-      
-      // Extract the text content from the response
-      const topic = response.content[0].type === 'text' 
-        ? response.content[0].text.trim() 
-        : 'Failed to generate a topic';
-      
-      return topic;
-    } else {
-      // Use DeepSeek API via OpenAI client
-      const messages = convertToOpenAIMessages(systemPrompt, [
-        { role: 'user', content: userMessage }
-      ]);
-      
-      const response = await callWithRetry(() => 
-        openai.chat.completions.create({
-          model: LLM_CONFIG.model,
-          messages: messages as any,
-          max_tokens: 100,
-          temperature: LLM_CONFIG.temperature.creative,
-        })
-      );
-      
-      console.log('API request successful');
-      
-      // Extract the text content from the response
-      const topic = response.choices?.[0]?.message?.content?.trim() || 'Failed to generate a topic';
-      
-      return topic;
-    }
-  } catch (error) {
-    console.error('Error generating topic:', error);
-    throw error;
+  if (currentModelConfig.provider === 'anthropic') {
+    // Use Anthropic API
+    const response = await callWithRetry(() => 
+      anthropic.messages.create({
+        model: currentModelConfig.model,
+        max_tokens: 100,
+        temperature: LLM_CONFIG.temperature.creative,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: userMessage
+          }
+        ],
+      })
+    );
+    
+    console.log('API request successful');
+    
+    // Extract the text content from the response
+    const topic = response.content[0].type === 'text' 
+      ? response.content[0].text.trim() 
+      : 'Failed to generate a topic';
+    
+    return topic;
+  } else if (currentModelConfig.provider === 'deepseek') {
+    // Use DeepSeek API
+    const messages = convertToOpenAIMessages(systemPrompt, [
+      { role: 'user', content: userMessage }
+    ]);
+    
+    const response = await callWithRetry(() => 
+      deepseekClient.chat.completions.create({
+        model: currentModelConfig.model,
+        messages: messages as any,
+        max_tokens: 100,
+        temperature: LLM_CONFIG.temperature.creative,
+      })
+    );
+    
+    console.log('API request successful');
+    
+    // Extract the text content from the response
+    const topic = response.choices?.[0]?.message?.content?.trim() || 'Failed to generate a topic';
+    
+    return topic;
+  } else {
+    throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
   }
 }
 
@@ -203,11 +193,11 @@ export async function getDefinition(topic: string): Promise<string> {
   const userMessage = `Please provide a concise definition for: "${topic}"`;
   
   try {
-    if (LLM_CONFIG.provider === 'anthropic') {
+    if (currentModelConfig.provider === 'anthropic') {
       // Use Anthropic API
       const response = await callWithRetry(() => 
         anthropic.messages.create({
-          model: LLM_CONFIG.model,
+          model: currentModelConfig.model,
           max_tokens: 250,
           temperature: LLM_CONFIG.temperature.factual,
           system: systemPrompt,
@@ -226,15 +216,15 @@ export async function getDefinition(topic: string): Promise<string> {
         : 'Definition not available.';
       
       return definition;
-    } else {
-      // Use DeepSeek API via OpenAI client
+    } else if (currentModelConfig.provider === 'deepseek') {
+      // Use DeepSeek API
       const messages = convertToOpenAIMessages(systemPrompt, [
         { role: 'user', content: userMessage }
       ]);
       
       const response = await callWithRetry(() => 
-        openai.chat.completions.create({
-          model: LLM_CONFIG.model,
+        deepseekClient.chat.completions.create({
+          model: currentModelConfig.model,
           messages: messages as any,
           max_tokens: 250,
           temperature: LLM_CONFIG.temperature.factual,
@@ -245,6 +235,8 @@ export async function getDefinition(topic: string): Promise<string> {
       const definition = response.choices?.[0]?.message?.content?.trim() || 'Definition not available.';
       
       return definition;
+    } else {
+      throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
     }
   } catch (error) {
     console.error('Error fetching definition:', error);
@@ -261,9 +253,8 @@ export async function getAiResponse(
   circleEnabled: boolean,
   isFinalRound: boolean
 ): Promise<string> {
-  console.log('Preparing to make API request with model:', LLM_CONFIG.model);
-  console.log('Temperature setting:', LLM_CONFIG.temperature.creative);
-  console.log('Provider:', LLM_CONFIG.provider);
+  console.log('Preparing to make API request with model:', currentModelConfig.model);
+  console.log('Provider:', currentModelConfig.provider);
   
   // Format game history for context
   let historyContext = '';
@@ -336,11 +327,11 @@ export async function getAiResponse(
         
         This is the FINAL ROUND. Please provide your brief response that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
-      if (LLM_CONFIG.provider === 'anthropic') {
+      if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
         const response = await callWithRetry(() => 
           anthropic.messages.create({
-            model: LLM_CONFIG.model,
+            model: currentModelConfig.model,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
             system: systemPrompt,
@@ -356,18 +347,18 @@ export async function getAiResponse(
         // Extract the text content from the response
         const aiResponse = response.content[0].type === 'text' 
           ? response.content[0].text.trim() 
-          : generateFallbackResponse(topic);
+          : 'Connection not found';
         
         return aiResponse;
-      } else {
-        // Use DeepSeek API via OpenAI client
+      } else if (currentModelConfig.provider === 'deepseek') {
+        // Use DeepSeek API
         const messages = convertToOpenAIMessages(systemPrompt, [
           { role: 'user', content: userMessage }
         ]);
         
         const response = await callWithRetry(() => 
-          openai.chat.completions.create({
-            model: LLM_CONFIG.model,
+          deepseekClient.chat.completions.create({
+            model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
@@ -375,9 +366,11 @@ export async function getAiResponse(
         );
         
         // Extract the text content from the response
-        const aiResponse = response.choices?.[0]?.message?.content?.trim() || generateFallbackResponse(topic);
+        const aiResponse = response.choices?.[0]?.message?.content?.trim() || 'Connection not found';
         
         return aiResponse;
+      } else {
+        throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
     } else {
       // Regular round
@@ -419,11 +412,11 @@ export async function getAiResponse(
         
         Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
-      if (LLM_CONFIG.provider === 'anthropic') {
+      if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
         const response = await callWithRetry(() => 
           anthropic.messages.create({
-            model: LLM_CONFIG.model,
+            model: currentModelConfig.model,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
             system: systemPrompt,
@@ -439,18 +432,18 @@ export async function getAiResponse(
         // Extract the text content from the response
         const aiResponse = response.content[0].type === 'text' 
           ? response.content[0].text.trim() 
-          : generateFallbackResponse(topic);
+          : 'Connection not found';
         
         return aiResponse;
-      } else {
-        // Use DeepSeek API via OpenAI client
+      } else if (currentModelConfig.provider === 'deepseek') {
+        // Use DeepSeek API
         const messages = convertToOpenAIMessages(systemPrompt, [
           { role: 'user', content: userMessage }
         ]);
         
         const response = await callWithRetry(() => 
-          openai.chat.completions.create({
-            model: LLM_CONFIG.model,
+          deepseekClient.chat.completions.create({
+            model: currentModelConfig.model,
             messages: messages as any,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
@@ -458,35 +451,17 @@ export async function getAiResponse(
         );
         
         // Extract the text content from the response
-        const aiResponse = response.choices?.[0]?.message?.content?.trim() || generateFallbackResponse(topic);
+        const aiResponse = response.choices?.[0]?.message?.content?.trim() || 'Connection not found';
         
         return aiResponse;
+      } else {
+        throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
     }
   } catch (error) {
     console.error('Error getting AI response:', error);
-    return generateFallbackResponse(topic);
+    throw error;
   }
-}
-
-// Generate a fallback response if the API call fails
-export function generateFallbackResponse(topic: string): string {
-  const fallbackResponses = [
-    `Conceptual framework of ${topic}`,
-    `${topic} in modern context`,
-    `Philosophical implications of ${topic}`,
-    `${topic} as metaphor`,
-    `Structural analysis of ${topic}`,
-    `${topic} and its counterparts`,
-    `Emergent properties of ${topic}`,
-    `${topic} reconsidered`,
-    `Transformative aspects of ${topic}`,
-    `${topic} in relation to human experience`
-  ];
-  
-  // Select a random fallback response
-  const randomIndex = Math.floor(Math.random() * fallbackResponses.length);
-  return fallbackResponses[randomIndex];
 }
 
 // Evaluate a response
@@ -497,9 +472,8 @@ export async function evaluateResponse(
   originalTopic?: string,
   isFinalRound?: boolean
 ): Promise<any> {
-  console.log('Preparing to make evaluation request with model:', LLM_CONFIG.model);
-  console.log('Temperature setting:', LLM_CONFIG.temperature.evaluation);
-  console.log('Provider:', LLM_CONFIG.provider);
+  console.log('Preparing to make evaluation request with model:', currentModelConfig.model);
+  console.log('Provider:', currentModelConfig.provider);
   
   try {
     if (isFinalRound && originalTopic) {
@@ -525,7 +499,7 @@ export async function evaluateResponse(
         
         The final score will be the average of these two connections.
         
-        Your response should be in JSON format with the following structure:
+        IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
           "evaluation": "Your evaluation of the connection to the current topic",
           "finalEvaluation": "Your evaluation of the connection to the original topic",
@@ -542,7 +516,9 @@ export async function evaluateResponse(
             },
             "total": Z // Average of the two subtotals (max 20)
           }
-        }`;
+        }
+        
+        Do not include any text before or after the JSON. Only return the JSON object.`;
       
       // User message for final round evaluation
       const userMessage = `Current topic: "${topic}"
@@ -551,12 +527,12 @@ export async function evaluateResponse(
         
         Please evaluate how well this response connects to BOTH the current topic AND the original starting topic.`;
       
-      if (LLM_CONFIG.provider === 'anthropic') {
+      if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
         const result = await callWithRetry(() => 
           anthropic.messages.create({
-            model: LLM_CONFIG.model,
-            max_tokens: 1000,
+            model: currentModelConfig.model,
+            max_tokens: LLM_CONFIG.maxTokens.evaluation,
             temperature: LLM_CONFIG.temperature.evaluation,
             system: systemPrompt,
             messages: [
@@ -575,21 +551,143 @@ export async function evaluateResponse(
         
         // Parse the JSON response
         try {
-          // Find JSON in the response
-          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-          
-          const evaluationData = JSON.parse(jsonString);
-          console.log('Evaluation data parsed successfully');
-          
-          return evaluationData;
+          // First try to parse the entire response as JSON
+          try {
+            const evaluationData = JSON.parse(evaluationText);
+            console.log('Evaluation data parsed successfully as direct JSON');
+            return evaluationData;
+          } catch (directParseError) {
+            // If direct parsing fails, try to extract JSON using regex
+            console.log('Direct JSON parsing failed, trying regex extraction');
+            
+            // Find JSON in the response - look for the most complete JSON object
+            const jsonMatch = evaluationText.match(/(\{[\s\S]*\})/g);
+            
+            if (!jsonMatch || jsonMatch.length === 0) {
+              console.error('No JSON object found in the response');
+              console.error('Raw evaluation text:', evaluationText);
+              throw new Error('No JSON object found in the response');
+            }
+            
+            // Find the longest JSON match (most likely to be complete)
+            let jsonString = jsonMatch[0];
+            if (jsonMatch.length > 1) {
+              jsonString = jsonMatch.reduce((longest: string, current: string) => 
+                current.length > longest.length ? current : longest, jsonMatch[0]);
+              console.log(`Found ${jsonMatch.length} JSON objects, using the longest one`);
+            }
+            
+            // Add debugging output
+            console.log('Raw evaluation text:', evaluationText);
+            console.log('Extracted JSON string:', jsonString);
+            
+            // Try to fix common JSON issues
+            // Replace single quotes with double quotes
+            let fixedJsonString = jsonString.replace(/'/g, '"');
+            // Fix unquoted property names
+            fixedJsonString = fixedJsonString.replace(/(\w+):/g, '"$1":');
+            
+            console.log('Fixed JSON string:', fixedJsonString);
+            
+            const evaluationData = JSON.parse(fixedJsonString);
+            console.log('Evaluation data parsed successfully after fixes');
+            
+            return evaluationData;
+          }
         } catch (parseError) {
           console.error('Error parsing evaluation JSON:', parseError);
+          // Add debugging output for the error case
+          console.error('Raw evaluation text that caused the error:');
+          console.error(evaluationText);
           
-          // Provide a fallback evaluation
+          // Return a fallback evaluation object
           return {
-            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
-            finalEvaluation: "I couldn't evaluate the connection to the original topic properly.",
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
+            finalEvaluation: "Error parsing the evaluation.",
+            scores: {
+              currentConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              originalConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              total: 10
+            }
+          };
+        }
+      } else if (currentModelConfig.provider === 'deepseek') {
+        // Use DeepSeek API
+        const messages = convertToOpenAIMessages(systemPrompt, [
+          { role: 'user', content: userMessage }
+        ]);
+        
+        // Create a properly typed response format object
+        const responseFormat = { type: "json_object" as const };
+        
+        const result = await callWithRetry(() => 
+          deepseekClient.chat.completions.create({
+            model: currentModelConfig.model,
+            messages: messages as any,
+            max_tokens: LLM_CONFIG.maxTokens.evaluation,
+            temperature: LLM_CONFIG.temperature.evaluation,
+            response_format: responseFormat
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.choices?.[0]?.message?.content?.trim() || '{}';
+        
+        // Parse the JSON response
+        try {
+          // First try to parse the entire response as JSON
+          try {
+            const evaluationData = JSON.parse(evaluationText);
+            console.log('Evaluation data parsed successfully as direct JSON');
+            return evaluationData;
+          } catch (directParseError) {
+            // If direct parsing fails, try to extract JSON using regex
+            console.log('Direct JSON parsing failed, trying regex extraction');
+            
+            // Find JSON in the response
+            const jsonMatch = evaluationText.match(/(\{[\s\S]*\})/g);
+            
+            if (!jsonMatch || jsonMatch.length === 0) {
+              console.error('No JSON object found in the response');
+              console.error('Raw evaluation text:', evaluationText);
+              throw new Error('No JSON object found in the response');
+            }
+            
+            // Find the longest JSON match (most likely to be complete)
+            let jsonString = jsonMatch[0];
+            if (jsonMatch.length > 1) {
+              jsonString = jsonMatch.reduce((longest: string, current: string) => 
+                current.length > longest.length ? current : longest, jsonMatch[0]);
+              console.log(`Found ${jsonMatch.length} JSON objects, using the longest one`);
+            }
+            
+            // Add debugging output
+            console.log('Raw evaluation text:', evaluationText);
+            console.log('Extracted JSON string:', jsonString);
+            
+            const evaluationData = JSON.parse(jsonString);
+            console.log('Evaluation data parsed successfully');
+            
+            return evaluationData;
+          }
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          // Add debugging output for the error case
+          console.error('Raw evaluation text that caused the error:');
+          console.error(evaluationText);
+          
+          // Return a fallback evaluation object
+          return {
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
+            finalEvaluation: "Error parsing the evaluation.",
             scores: {
               currentConnection: {
                 semanticDistance: 5,
@@ -606,56 +704,7 @@ export async function evaluateResponse(
           };
         }
       } else {
-        // Use DeepSeek API via OpenAI client
-        const messages = convertToOpenAIMessages(systemPrompt, [
-          { role: 'user', content: userMessage }
-        ]);
-        
-        const result = await callWithRetry(() => 
-          openai.chat.completions.create({
-            model: LLM_CONFIG.model,
-            messages: messages as any,
-            max_tokens: 1000,
-            temperature: LLM_CONFIG.temperature.evaluation,
-            response_format: { type: "json_object" }
-          })
-        );
-        
-        // Extract the text content from the response
-        const evaluationText = result.choices?.[0]?.message?.content?.trim() || '{}';
-        
-        // Parse the JSON response
-        try {
-          // Find JSON in the response
-          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-          
-          const evaluationData = JSON.parse(jsonString);
-          console.log('Evaluation data parsed successfully');
-          
-          return evaluationData;
-        } catch (parseError) {
-          console.error('Error parsing evaluation JSON:', parseError);
-          
-          // Provide a fallback evaluation
-          return {
-            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
-            finalEvaluation: "I couldn't evaluate the connection to the original topic properly.",
-            scores: {
-              currentConnection: {
-                semanticDistance: 5,
-                similarity: 5,
-                subtotal: 10
-              },
-              originalConnection: {
-                semanticDistance: 5,
-                similarity: 5,
-                subtotal: 10
-              },
-              total: 10
-            }
-          };
-        }
+        throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
     } else {
       // Regular round evaluation
@@ -677,7 +726,7 @@ export async function evaluateResponse(
         Provide a thoughtful evaluation explaining the connection between the topic and response, 
         and why it deserves the scores you've assigned.
         
-        Your response should be in JSON format with the following structure:
+        IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
           "evaluation": "Your evaluation text here, explaining the connection and justifying the scores",
           "scores": {
@@ -685,7 +734,9 @@ export async function evaluateResponse(
             "relevanceQuality": Y, // 1-10 score
             "total": Z // Sum of the two scores (max 20)
           }
-        }`;
+        }
+        
+        Do not include any text before or after the JSON. Only return the JSON object.`;
       
       // User message for regular evaluation
       const userMessage = `Topic: "${topic}"
@@ -693,12 +744,12 @@ export async function evaluateResponse(
         
         Please evaluate how well this response connects to the topic.`;
       
-      if (LLM_CONFIG.provider === 'anthropic') {
+      if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
         const result = await callWithRetry(() => 
           anthropic.messages.create({
-            model: LLM_CONFIG.model,
-            max_tokens: 1000,
+            model: currentModelConfig.model,
+            max_tokens: LLM_CONFIG.maxTokens.evaluation,
             temperature: LLM_CONFIG.temperature.evaluation,
             system: systemPrompt,
             messages: [
@@ -717,20 +768,58 @@ export async function evaluateResponse(
         
         // Parse the JSON response
         try {
-          // Find JSON in the response
-          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-          
-          const evaluationData = JSON.parse(jsonString);
-          console.log('Evaluation data parsed successfully');
-          
-          return evaluationData;
+          // First try to parse the entire response as JSON
+          try {
+            const evaluationData = JSON.parse(evaluationText);
+            console.log('Evaluation data parsed successfully as direct JSON');
+            return evaluationData;
+          } catch (directParseError) {
+            // If direct parsing fails, try to extract JSON using regex
+            console.log('Direct JSON parsing failed, trying regex extraction');
+            
+            // Find JSON in the response
+            const jsonMatch = evaluationText.match(/(\{[\s\S]*\})/g);
+            
+            if (!jsonMatch || jsonMatch.length === 0) {
+              console.error('No JSON object found in the response');
+              console.error('Raw evaluation text:', evaluationText);
+              throw new Error('No JSON object found in the response');
+            }
+            
+            // Find the longest JSON match (most likely to be complete)
+            let jsonString = jsonMatch[0];
+            if (jsonMatch.length > 1) {
+              jsonString = jsonMatch.reduce((longest: string, current: string) => 
+                current.length > longest.length ? current : longest, jsonMatch[0]);
+              console.log(`Found ${jsonMatch.length} JSON objects, using the longest one`);
+            }
+            
+            // Add debugging output
+            console.log('Raw evaluation text:', evaluationText);
+            console.log('Extracted JSON string:', jsonString);
+            
+            // Try to fix common JSON issues
+            // Replace single quotes with double quotes
+            let fixedJsonString = jsonString.replace(/'/g, '"');
+            // Fix unquoted property names
+            fixedJsonString = fixedJsonString.replace(/(\w+):/g, '"$1":');
+            
+            console.log('Fixed JSON string:', fixedJsonString);
+            
+            const evaluationData = JSON.parse(fixedJsonString);
+            console.log('Evaluation data parsed successfully after fixes');
+            
+            return evaluationData;
+          }
         } catch (parseError) {
           console.error('Error parsing evaluation JSON:', parseError);
+          // Add debugging output for the error case
+          console.error('Raw evaluation text that caused the error:');
+          console.error(evaluationText);
           
-          // Provide a fallback evaluation
+          // Return a fallback evaluation object
           return {
-            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
             scores: {
               semanticDistance: 5,
               relevanceQuality: 5,
@@ -738,19 +827,22 @@ export async function evaluateResponse(
             }
           };
         }
-      } else {
-        // Use DeepSeek API via OpenAI client
+      } else if (currentModelConfig.provider === 'deepseek') {
+        // Use DeepSeek API
         const messages = convertToOpenAIMessages(systemPrompt, [
           { role: 'user', content: userMessage }
         ]);
         
+        // Create a properly typed response format object
+        const responseFormat = { type: "json_object" as const };
+        
         const result = await callWithRetry(() => 
-          openai.chat.completions.create({
-            model: LLM_CONFIG.model,
+          deepseekClient.chat.completions.create({
+            model: currentModelConfig.model,
             messages: messages as any,
-            max_tokens: 1000,
+            max_tokens: LLM_CONFIG.maxTokens.evaluation,
             temperature: LLM_CONFIG.temperature.evaluation,
-            response_format: { type: "json_object" }
+            response_format: responseFormat
           })
         );
         
@@ -759,20 +851,50 @@ export async function evaluateResponse(
         
         // Parse the JSON response
         try {
-          // Find JSON in the response
-          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-          
-          const evaluationData = JSON.parse(jsonString);
-          console.log('Evaluation data parsed successfully');
-          
-          return evaluationData;
+          // First try to parse the entire response as JSON
+          try {
+            const evaluationData = JSON.parse(evaluationText);
+            console.log('Evaluation data parsed successfully as direct JSON');
+            return evaluationData;
+          } catch (directParseError) {
+            // If direct parsing fails, try to extract JSON using regex
+            console.log('Direct JSON parsing failed, trying regex extraction');
+            
+            // Find JSON in the response
+            const jsonMatch = evaluationText.match(/(\{[\s\S]*\})/g);
+            
+            if (!jsonMatch || jsonMatch.length === 0) {
+              console.error('No JSON object found in the response');
+              console.error('Raw evaluation text:', evaluationText);
+              throw new Error('No JSON object found in the response');
+            }
+            
+            // Find the longest JSON match (most likely to be complete)
+            let jsonString = jsonMatch[0];
+            if (jsonMatch.length > 1) {
+              jsonString = jsonMatch.reduce((longest: string, current: string) => 
+                current.length > longest.length ? current : longest, jsonMatch[0]);
+              console.log(`Found ${jsonMatch.length} JSON objects, using the longest one`);
+            }
+            
+            // Add debugging output
+            console.log('Raw evaluation text:', evaluationText);
+            console.log('Extracted JSON string:', jsonString);
+            
+            const evaluationData = JSON.parse(jsonString);
+            console.log('Evaluation data parsed successfully');
+            
+            return evaluationData;
+          }
         } catch (parseError) {
           console.error('Error parsing evaluation JSON:', parseError);
+          // Add debugging output for the error case
+          console.error('Raw evaluation text that caused the error:');
+          console.error(evaluationText);
           
-          // Provide a fallback evaluation
+          // Return a fallback evaluation object
           return {
-            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
             scores: {
               semanticDistance: 5,
               relevanceQuality: 5,
@@ -780,39 +902,12 @@ export async function evaluateResponse(
             }
           };
         }
+      } else {
+        throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
     }
   } catch (error) {
     console.error('Error evaluating response:', error);
-    
-    // Provide a fallback evaluation
-    if (isFinalRound && originalTopic) {
-      return {
-        evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
-        finalEvaluation: "I couldn't evaluate the connection to the original topic due to a technical issue.",
-        scores: {
-          currentConnection: {
-            semanticDistance: 5,
-            similarity: 5,
-            subtotal: 10
-          },
-          originalConnection: {
-            semanticDistance: 5,
-            similarity: 5,
-            subtotal: 10
-          },
-          total: 10
-        }
-      };
-    } else {
-      return {
-        evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
-        scores: {
-          semanticDistance: 5,
-          relevanceQuality: 5,
-          total: 10
-        }
-      };
-    }
+    throw error;
   }
 } 
