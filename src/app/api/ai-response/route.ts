@@ -42,10 +42,7 @@ export async function POST(request: Request) {
       console.error('Error generating AI response:', error);
       
       // Generate a fallback response using the imported function
-      const fallbackResponse = generateFallbackResponse(topic);
-      console.log('Using fallback response:', fallbackResponse);
-      
-      return NextResponse.json({ response: fallbackResponse });
+      return NextResponse.json({ response: "Could not generate a response. Please try again." });
     }
   } catch (error) {
     console.error('Error in ai-response route:', error);

@@ -41,12 +41,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ response });
     } catch (error) {
       console.error('Error generating AI final response:', error);
-      
-      // Generate a fallback response
-      const fallbackResponse = generateFallbackResponse(topic);
-      console.log('Using fallback response:', fallbackResponse);
-      
-      return NextResponse.json({ response: fallbackResponse });
+            
+      return NextResponse.json({ response: "Could not generate a final response. Please try again." });
     }
   } catch (error) {
     console.error('Error in ai-final-response route:', error);
