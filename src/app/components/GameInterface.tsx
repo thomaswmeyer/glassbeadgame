@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, KeyboardEvent, useEffect } from 'react';
+import { useState, KeyboardEvent, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
@@ -93,6 +93,20 @@ export default function GameInterface() {
 
   // Add a state variable to track graph key for forcing re-renders
   const [graphKey, setGraphKey] = useState<number>(0);
+
+  const [tooltipData, setTooltipData] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    score: Score | null;
+    isCircleMode: boolean;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    score: null,
+    isCircleMode: false
+  });
 
   const generateFirstTopic = async () => {
     console.log('=== GENERATING FIRST TOPIC ===');
@@ -735,6 +749,22 @@ export default function GameInterface() {
     return maxRounds - currentRound + 1;
   };
 
+  // Function to handle showing the tooltip
+  const handleScoreMouseEnter = (e: React.MouseEvent, score: Score, isCircleRound: boolean) => {
+    setTooltipData({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      score,
+      isCircleMode: isCircleRound
+    });
+  };
+  
+  // Function to handle hiding the tooltip
+  const handleScoreMouseLeave = () => {
+    setTooltipData(prev => ({ ...prev, visible: false }));
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <h1 className="text-3xl font-bold text-center mb-8">The Glass Bead Game</h1>
@@ -1149,6 +1179,7 @@ export default function GameInterface() {
                         .map((round, index) => {
                           // Calculate the actual round number for display
                           const actualRoundNumber = gameHistory.length - index;
+                          const isCircleRound = circleEnabled && actualRoundNumber === maxRounds;
                           
                           return (
                             <tr key={index} className="border-t">
@@ -1160,7 +1191,15 @@ export default function GameInterface() {
                                 </span>
                               </td>
                               <td className="py-2 px-4">{round.response}</td>
-                              <td className="py-2 px-4">{round.scores.total}/20</td>
+                              <td className="py-2 px-4">
+                                <span 
+                                  className="cursor-help underline decoration-dotted"
+                                  onMouseEnter={(e) => handleScoreMouseEnter(e, round.scores, isCircleRound)}
+                                  onMouseLeave={handleScoreMouseLeave}
+                                >
+                                  {round.scores.total}/20
+                                </span>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1182,6 +1221,48 @@ export default function GameInterface() {
               height={500}
             />
           </div>
+        </div>
+      )}
+      
+      {/* Score tooltip/popup */}
+      {tooltipData.visible && tooltipData.score && (
+        <div 
+          className="fixed bg-white shadow-lg rounded-md p-3 z-50 border border-gray-200 text-sm"
+          style={{
+            left: `${tooltipData.x + 10}px`,
+            top: `${tooltipData.y + 10}px`,
+            maxWidth: '300px'
+          }}
+        >
+          <h4 className="font-medium text-blue-800 mb-2">Score Breakdown:</h4>
+          
+          {!tooltipData.isCircleMode ? (
+            <ul className="list-disc pl-5">
+              <li>Semantic Distance: {tooltipData.score.semanticDistance}/10</li>
+              <li>Similarity: {tooltipData.score.relevanceQuality}/10</li>
+              <li className="font-medium mt-1">Total Score: {tooltipData.score.total}/20</li>
+            </ul>
+          ) : (
+            <div>
+              <div className="mb-2">
+                <p><strong>Current Topic Connection:</strong></p>
+                <ul className="list-disc pl-5">
+                  <li>Semantic Distance: {tooltipData.score.currentConnection?.semanticDistance || 0}/10</li>
+                  <li>Similarity: {tooltipData.score.currentConnection?.similarity || 0}/10</li>
+                  <li>Subtotal: {tooltipData.score.currentConnection?.subtotal || 0}/20</li>
+                </ul>
+              </div>
+              <div>
+                <p><strong>Original Topic Connection:</strong></p>
+                <ul className="list-disc pl-5">
+                  <li>Semantic Distance: {tooltipData.score.originalConnection?.semanticDistance || 0}/10</li>
+                  <li>Similarity: {tooltipData.score.originalConnection?.similarity || 0}/10</li>
+                  <li>Subtotal: {tooltipData.score.originalConnection?.subtotal || 0}/20</li>
+                </ul>
+              </div>
+              <p className="mt-2 font-medium">Final Score: {tooltipData.score.total}/20</p>
+            </div>
+          )}
         </div>
       )}
     </div>
