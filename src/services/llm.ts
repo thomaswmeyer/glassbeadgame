@@ -291,8 +291,8 @@ export async function getAiResponse(
         1. The current topic: "${topic}"
         2. The original starting topic: "${originalTopic}"
         
-        Your response should be brief but profound - a single concept or short phrase that 
-        creates a meaningful bridge between the current topic and the original topic.
+        Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
+        This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
         
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
@@ -317,7 +317,7 @@ export async function getAiResponse(
         - Natural world
         - Abstract concepts
         
-        DO NOT explain your reasoning. ONLY provide the brief response itself.`;
+        DO NOT explain your reasoning. ONLY provide the brief response itself - a single word or short phrase.`;
       
       // User message for final round with circle enabled
       const userMessage = `${historyContext}
@@ -325,7 +325,7 @@ export async function getAiResponse(
         Current topic: "${topic}"
         Original starting topic: "${originalTopic}"
         
-        This is the FINAL ROUND. Please provide your brief response that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
+        This is the FINAL ROUND. Please provide your brief response (1-5 words maximum) that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
       if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
@@ -380,6 +380,9 @@ export async function getAiResponse(
         Your task is to respond to the current topic with a brief, thoughtful response that creates 
         an interesting conceptual connection. Your response will become the next topic in the game.
         
+        Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
+        This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
+        
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
         - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
@@ -403,14 +406,14 @@ export async function getAiResponse(
         - Natural world
         - Abstract concepts
         
-        DO NOT explain your reasoning. ONLY provide the brief response itself.`;
+        DO NOT explain your reasoning. ONLY provide the brief response itself - a single word or short phrase.`;
       
       // User message for regular round
       const userMessage = `${historyContext}
         
         Current topic: "${topic}"
         
-        Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
+        Please provide your brief response (1-5 words maximum) to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
       if (currentModelConfig.provider === 'anthropic') {
         // Use Anthropic API
@@ -486,6 +489,10 @@ export async function evaluateResponse(
         2. The original starting topic
         
         ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
+        
+        IMPORTANT: The player's response is intentionally brief - often just a single word or short phrase. 
+        This is by design and should NOT be penalized. Brief responses are perfectly acceptable and should be 
+        evaluated solely on the quality of the conceptual connection they create, not on their length or elaboration.
         
         Provide your evaluation in the following format:
         
@@ -713,6 +720,10 @@ export async function evaluateResponse(
         
         ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
         
+        IMPORTANT: The player's response is intentionally brief - often just a single word or short phrase. 
+        This is by design and should NOT be penalized. Brief responses are perfectly acceptable and should be 
+        evaluated solely on the quality of the conceptual connection they create, not on their length or elaboration.
+        
         Evaluate the player's response to the given topic. Consider:
         
         1. Semantic Distance (1-10): How semantically remote yet meaningfully connected is the response to the topic? 
@@ -724,7 +735,8 @@ export async function evaluateResponse(
            - Lower scores for connections that are superficial or rely only on word association
         
         Provide a thoughtful evaluation explaining the connection between the topic and response, 
-        and why it deserves the scores you've assigned.
+        and why it deserves the scores you've assigned. Focus on the quality of the conceptual connection,
+        not on the brevity of the response.
         
         IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
