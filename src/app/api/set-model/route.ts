@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { LLM_CONFIG, updateModel } from '@/config/llm';
+import { currentModelConfig, LLM_CONFIG, updateModel } from '@/config/llm';
 import { generateTopic } from '@/services/llm';
 
 export async function POST(request: Request) {
@@ -27,13 +27,13 @@ export async function POST(request: Request) {
     // Update the model
     updateModel(model);
     
-    console.log(`Model updated to: ${LLM_CONFIG.model} (${LLM_CONFIG.provider})`);
+    console.log(`Model updated to: ${model}`);
     
     // For DeepSeek models, perform a test request to verify the API is working
     let testResult = null;
     let testError = null;
     
-    if (LLM_CONFIG.provider === 'deepseek') {
+    if (currentModelConfig.provider === 'deepseek') {
       try {
         console.log('Performing test request to DeepSeek API...');
         // Use a simple test request to verify the API is working
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
       success: true,
       message: `Model changed to ${LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName}`,
       config: {
-        model: LLM_CONFIG.model,
-        provider: LLM_CONFIG.provider,
+        model: currentModelConfig.model,
+        provider: currentModelConfig.provider,
         displayName: LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName
       },
       testResult,
