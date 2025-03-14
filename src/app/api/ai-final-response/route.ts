@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAiResponse, generateFallbackResponse } from '@/services/llm';
+import { getAiResponse } from '@/services/llm';
 
 export async function POST(request: Request) {
   console.log('=== AI FINAL RESPONSE ROUTE CALLED ===');
