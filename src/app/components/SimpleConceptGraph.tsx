@@ -1,13 +1,21 @@
-import React, { useEffect, useRef, useState, memo } from 'react';
+import React, { useEffect, useRef, useState, memo, useCallback } from 'react';
 
 interface Node {
   id: string;
   x: number;
   y: number;
+  vx?: number;
+  vy?: number;
+  targetX?: number;
+  targetY?: number;
   color: string;
   size: number;
   isOriginal?: boolean;
   isCurrent?: boolean;
+  isNew?: boolean;
+  connections?: string[]; // IDs of connected nodes
+  degree?: number; // Number of connections
+  idealAngles?: Map<string, number>; // Map of connected node IDs to their ideal angles
 }
 
 interface Link {
@@ -54,15 +62,69 @@ interface SimpleConceptGraphProps {
   height?: number;
 }
 
-// Simple force simulation
-const forceSimulation = (nodes: Node[], links: Link[], iterations = 300) => {
+// Calculate angle for distributing connections evenly
+const calculateIdealAngle = (index: number, total: number) => {
+  return (Math.PI * 2 * index) / total;
+};
+
+// Initial force simulation to position nodes
+const forceSimulation = (nodes: Node[], links: Link[], iterations = 300, existingNodePositions = new Map<string, {x: number, y: number}>()) => {
   const nodeMap = new Map<string, Node>();
   nodes.forEach(node => nodeMap.set(node.id, node));
 
-  // Initialize positions if not set
+  // Initialize positions if not set, preserving existing positions
   nodes.forEach(node => {
-    if (node.x === undefined) node.x = Math.random() * 400;
-    if (node.y === undefined) node.y = Math.random() * 400;
+    const existingPosition = existingNodePositions.get(node.id);
+    if (existingPosition) {
+      // Use existing position for nodes that already exist
+      node.x = existingPosition.x;
+      node.y = existingPosition.y;
+      node.isNew = false;
+    } else {
+      // Initialize new nodes with random positions
+      node.x = Math.random() * 400;
+      node.y = Math.random() * 400;
+      node.isNew = true;
+    }
+    // Initialize velocity
+    node.vx = 0;
+    node.vy = 0;
+    // Initialize connections array and ideal angles map
+    node.connections = [];
+    node.degree = 0;
+    node.idealAngles = new Map();
+  });
+
+  // Build connection information
+  links.forEach(link => {
+    const sourceNode = nodeMap.get(link.source);
+    const targetNode = nodeMap.get(link.target);
+    
+    if (sourceNode && targetNode) {
+      if (!sourceNode.connections) sourceNode.connections = [];
+      if (!targetNode.connections) targetNode.connections = [];
+      
+      sourceNode.connections.push(targetNode.id);
+      targetNode.connections.push(sourceNode.id);
+      
+      sourceNode.degree = (sourceNode.degree || 0) + 1;
+      targetNode.degree = (targetNode.degree || 0) + 1;
+    }
+  });
+
+  // Calculate ideal angles for each node's connections
+  nodes.forEach(node => {
+    if (!node.connections || node.connections.length <= 1) return;
+    
+    // Get connected nodes
+    const connectedNodeIds = node.connections;
+    
+    // Calculate and store ideal angles for each connection
+    connectedNodeIds.forEach((connectedId, index) => {
+      const idealAngle = calculateIdealAngle(index, connectedNodeIds.length);
+      if (!node.idealAngles) node.idealAngles = new Map();
+      node.idealAngles.set(connectedId, idealAngle);
+    });
   });
 
   // Run simulation iterations
@@ -79,10 +141,15 @@ const forceSimulation = (nodes: Node[], links: Link[], iterations = 300) => {
         const fx = (dx / distance) * force;
         const fy = (dy / distance) * force;
 
-        nodeA.x -= fx;
-        nodeA.y -= fy;
-        nodeB.x += fx;
-        nodeB.y += fy;
+        // Only move nodes that are new or connected to new nodes
+        if (nodeA.isNew) {
+          nodeA.x -= fx;
+          nodeA.y -= fy;
+        }
+        if (nodeB.isNew) {
+          nodeB.x += fx;
+          nodeB.y += fy;
+        }
       }
     }
 
@@ -103,15 +170,79 @@ const forceSimulation = (nodes: Node[], links: Link[], iterations = 300) => {
         const fx = (dx / distance) * force;
         const fy = (dy / distance) * force;
 
-        sourceNode.x += fx;
-        sourceNode.y += fy;
-        targetNode.x -= fx;
-        targetNode.y -= fy;
+        // Only move nodes that are new or connected to new nodes
+        if (sourceNode.isNew || targetNode.isNew) {
+          if (sourceNode.isNew) {
+            sourceNode.x += fx;
+            sourceNode.y += fy;
+          }
+          if (targetNode.isNew) {
+            targetNode.x -= fx;
+            targetNode.y -= fy;
+          }
+        }
       }
     });
+
+    // Apply angular forces to distribute connections evenly
+    if (i > iterations / 2) { // Apply in later iterations after basic layout is formed
+      nodes.forEach(node => {
+        if (!node.connections || node.connections.length <= 1 || !node.idealAngles) return;
+        
+        // Get connected nodes
+        node.connections.forEach(connectedId => {
+          const connectedNode = nodeMap.get(connectedId);
+          if (!connectedNode) return;
+          
+          // Get the ideal angle for this connection
+          const idealAngle = node.idealAngles?.get(connectedId);
+          if (idealAngle === undefined) return;
+          
+          // Calculate current angle
+          const dx = connectedNode.x - node.x;
+          const dy = connectedNode.y - node.y;
+          const currentAngle = Math.atan2(dy, dx);
+          
+          // Calculate angular difference
+          let angleDiff = idealAngle - currentAngle;
+          // Normalize to [-π, π]
+          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+          
+          // Calculate force strength (stronger for larger differences)
+          const forceStrength = 0.1 * Math.min(1, Math.abs(angleDiff) / Math.PI);
+          
+          // Calculate distance between nodes
+          const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+          
+          // Calculate new position based on ideal angle
+          const idealX = node.x + distance * Math.cos(idealAngle);
+          const idealY = node.y + distance * Math.sin(idealAngle);
+          
+          // Apply force towards ideal position
+          if (connectedNode.isNew) {
+            connectedNode.x += (idealX - connectedNode.x) * forceStrength;
+            connectedNode.y += (idealY - connectedNode.y) * forceStrength;
+          }
+        });
+      });
+    }
   }
 
-  // Center the graph
+  // Store the calculated positions as target positions
+  nodes.forEach(node => {
+    node.targetX = node.x;
+    node.targetY = node.y;
+  });
+
+  return { nodes, links };
+};
+
+// Function to fit the graph to the viewport
+const fitGraphToView = (nodes: Node[], width: number, height: number, padding = 50) => {
+  if (nodes.length === 0) return nodes;
+
+  // Find the bounds of the graph
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   nodes.forEach(node => {
     minX = Math.min(minX, node.x);
@@ -120,16 +251,71 @@ const forceSimulation = (nodes: Node[], links: Link[], iterations = 300) => {
     maxY = Math.max(maxY, node.y);
   });
 
+  // Calculate the scale to fit the graph within the viewport
+  const graphWidth = maxX - minX;
+  const graphHeight = maxY - minY;
+  const scaleX = (width - padding * 2) / (graphWidth || 1);
+  const scaleY = (height - padding * 2) / (graphHeight || 1);
+  const scale = Math.min(scaleX, scaleY);
+
+  // Calculate the center of the graph
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
-  const scale = Math.min(400 / (maxX - minX || 1), 400 / (maxY - minY || 1)) * 0.8;
 
+  // Update the target positions of the nodes
   nodes.forEach(node => {
-    node.x = (node.x - centerX) * scale + 200;
-    node.y = (node.y - centerY) * scale + 200;
+    node.targetX = (node.x - centerX) * scale + width / 2;
+    node.targetY = (node.y - centerY) * scale + height / 2;
   });
 
-  return { nodes, links };
+  return nodes;
+};
+
+// Function to apply angular forces during animation
+const applyAngularForces = (nodes: Node[], nodeMap: Map<string, Node>) => {
+  nodes.forEach(node => {
+    if (!node.connections || node.connections.length <= 1 || !node.idealAngles) return;
+    
+    // Apply angular forces to each connected node
+    node.connections.forEach(connectedId => {
+      const connectedNode = nodeMap.get(connectedId);
+      if (!connectedNode) return;
+      
+      // Get the ideal angle for this connection
+      const idealAngle = node.idealAngles?.get(connectedId);
+      if (idealAngle === undefined) return;
+      
+      // Calculate current angle
+      const dx = connectedNode.x - node.x;
+      const dy = connectedNode.y - node.y;
+      const currentAngle = Math.atan2(dy, dx);
+      
+      // Calculate angular difference
+      let angleDiff = idealAngle - currentAngle;
+      // Normalize to [-π, π]
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+      
+      // Calculate force strength (stronger for larger differences)
+      const forceStrength = 0.03 * Math.min(1, Math.abs(angleDiff) / Math.PI);
+      
+      // Calculate distance between nodes
+      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+      
+      // Calculate new position based on ideal angle
+      const idealX = node.x + distance * Math.cos(idealAngle);
+      const idealY = node.y + distance * Math.sin(idealAngle);
+      
+      // Apply force towards ideal position by updating velocity
+      if (!connectedNode.vx) connectedNode.vx = 0;
+      if (!connectedNode.vy) connectedNode.vy = 0;
+      
+      connectedNode.vx += (idealX - connectedNode.x) * forceStrength;
+      connectedNode.vy += (idealY - connectedNode.y) * forceStrength;
+    });
+  });
+  
+  return nodes;
 };
 
 const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, width = 400, height = 400 }: SimpleConceptGraphProps) => {
@@ -137,10 +323,26 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const isAnimating = useRef<boolean>(false);
+  const nodePositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
+  const prevGameHistoryLengthRef = useRef<number>(0);
+  const nodeMapRef = useRef<Map<string, Node>>(new Map());
 
   // Function to build graph data from game history
   useEffect(() => {
     if (!gameHistory.length && !originalTopic) return;
+
+    // Store current node positions before updating
+    const existingNodePositions = new Map<string, {x: number, y: number}>();
+    graphData.nodes.forEach(node => {
+      existingNodePositions.set(node.id, { x: node.x, y: node.y });
+    });
+    nodePositionsRef.current = existingNodePositions;
+
+    // Check if we're just adding a new node or completely rebuilding
+    const isAddingNode = gameHistory.length === prevGameHistoryLengthRef.current + 1;
+    prevGameHistoryLengthRef.current = gameHistory.length;
 
     const nodes: Node[] = [];
     const links: Link[] = [];
@@ -151,6 +353,8 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
       id: originalTopic,
       x: width / 2,
       y: height / 4,
+      vx: 0,
+      vy: 0,
       color: '#4299e1', // Blue color for original topic
       size: 20, // Larger size for the original topic
       isOriginal: true
@@ -163,6 +367,8 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
         id: currentTopic,
         x: width / 2,
         y: height / 2,
+        vx: 0,
+        vy: 0,
         color: '#f6ad55', // Orange color for current topic
         size: 18, // Slightly smaller than original but larger than responses
         isCurrent: true
@@ -180,6 +386,8 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
           id: item.response,
           x: Math.random() * width,
           y: Math.random() * height,
+          vx: 0,
+          vy: 0,
           color: item.player === 'human' ? '#63b3ed' : '#fc8181', // Blue for human, red for AI
           size: 15, // Standard size for responses
         });
@@ -226,10 +434,111 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
       previousTopic = item.response;
     });
 
-    // Run force simulation to position nodes
-    const simulatedData = forceSimulation(nodes, links);
+    // Run force simulation to position nodes, preserving existing positions
+    const simulatedData = forceSimulation(nodes, links, 300, nodePositionsRef.current);
+    
+    // Fit the graph to the viewport
+    fitGraphToView(simulatedData.nodes, width, height);
+    
+    // Start animation only if we're adding a new node
+    isAnimating.current = true;
+    
+    // Update node map for animation
+    const nodeMap = new Map<string, Node>();
+    simulatedData.nodes.forEach(node => nodeMap.set(node.id, node));
+    nodeMapRef.current = nodeMap;
+    
+    // Update graph data
     setGraphData(simulatedData);
-  }, [gameHistory, originalTopic, currentTopic, width, height]);
+  }, [gameHistory, originalTopic, currentTopic, width, height, graphData.nodes]);
+
+  // Animation loop using requestAnimationFrame
+  const animate = useCallback(() => {
+    setGraphData(prevData => {
+      const updatedNodes = [...prevData.nodes];
+      let stillAnimating = false;
+      
+      // Create node map for quick lookups
+      const nodeMap = new Map<string, Node>();
+      updatedNodes.forEach(node => nodeMap.set(node.id, node));
+      
+      // Apply angular forces to maintain even distribution
+      applyAngularForces(updatedNodes, nodeMap);
+      
+      // Update node positions with spring physics
+      updatedNodes.forEach(node => {
+        if (node.targetX !== undefined && node.targetY !== undefined) {
+          // Spring force
+          const springFactor = 0.08;
+          const dampingFactor = 0.8;
+          
+          // Calculate spring force
+          const dx = node.targetX - node.x;
+          const dy = node.targetY - node.y;
+          
+          // Update velocity with spring force and damping
+          if (!node.vx) node.vx = 0;
+          if (!node.vy) node.vy = 0;
+          
+          node.vx = node.vx * dampingFactor + dx * springFactor;
+          node.vy = node.vy * dampingFactor + dy * springFactor;
+          
+          // Update position
+          node.x += node.vx;
+          node.y += node.vy;
+          
+          // Check if still animating
+          const isMoving = Math.abs(node.vx) > 0.01 || Math.abs(node.vy) > 0.01;
+          stillAnimating = stillAnimating || isMoving;
+        }
+      });
+      
+      // Continue or stop animation
+      isAnimating.current = stillAnimating;
+      
+      return { nodes: updatedNodes, links: prevData.links };
+    });
+    
+    // Continue animation if needed
+    if (isAnimating.current) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+  }, []);
+
+  // Start/stop animation
+  useEffect(() => {
+    if (isAnimating.current && !animationRef.current) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [animate, graphData]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.clientWidth;
+        const containerHeight = Math.min(500, Math.max(300, containerWidth * 0.8));
+        
+        // Recalculate node positions to fit the new viewport
+        setGraphData(prevData => {
+          const updatedNodes = [...prevData.nodes];
+          fitGraphToView(updatedNodes, containerWidth, containerHeight);
+          isAnimating.current = true;
+          return { nodes: updatedNodes, links: prevData.links };
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Handle node click
   const handleNodeClick = (nodeId: string) => {
@@ -343,9 +652,9 @@ const SimpleConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, wid
               />
               <text
                 x={node.x}
-                y={node.y}
+                y={node.y + nodeSize + 5}
                 textAnchor="middle"
-                dominantBaseline="middle"
+                dominantBaseline="hanging"
                 fontSize={isHighlighted || node.isOriginal || node.isCurrent ? 12 : 10}
                 fontWeight={isHighlighted || node.isOriginal || node.isCurrent ? 'bold' : 'normal'}
                 fill="#333"

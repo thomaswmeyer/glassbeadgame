@@ -91,6 +91,9 @@ export default function GameInterface() {
   // Use maxRounds instead of hardcoded value
   const FINAL_ROUND = maxRounds;
 
+  // Add a state variable to track graph key for forcing re-renders
+  const [graphKey, setGraphKey] = useState<number>(0);
+
   const generateFirstTopic = async () => {
     console.log('=== GENERATING FIRST TOPIC ===');
     console.log('aiGoesFirst setting:', aiGoesFirst);
@@ -122,6 +125,9 @@ export default function GameInterface() {
       setResponse('');
       setEvaluation('');
       setScores(null);
+      
+      // Reset graph key only when starting a new game
+      setGraphKey(prevKey => prevKey + 1);
       
       // Ensure the player is set correctly again after the API call
       console.log('Confirming player after API call:', initialPlayer);
@@ -279,6 +285,9 @@ export default function GameInterface() {
           }
         ]);
         
+        // No need to update graph key here - the SimpleConceptGraph component will handle the animation
+        // based on changes to gameHistory
+        
         setResponse('');
         
         // Success, exit the retry loop
@@ -385,6 +394,9 @@ export default function GameInterface() {
             player: 'ai'
           }
         ]);
+        
+        // No need to update graph key here - the SimpleConceptGraph component will handle the animation
+        // based on changes to gameHistory
         
         // Set game completed if it's the final round
         if (currentRound === maxRounds) {
@@ -512,6 +524,9 @@ export default function GameInterface() {
     setResponse('');
     setShowDefinition(false);
     setShowOriginalDefinition(false);
+    
+    // We don't need to update the graph key here since the gameHistory hasn't changed yet
+    // The graph will update when the next response is evaluated
     
     // Switch players
     const nextPlayer = currentPlayer === 'human' ? 'ai' : 'human';
@@ -1159,7 +1174,7 @@ export default function GameInterface() {
           {/* Concept graph visualization - right side */}
           <div className="w-full lg:w-[450px] sticky top-6 self-start">
             <SimpleConceptGraph 
-              key={`graph-${gameHistory.length}-${currentRound}`}
+              key={graphKey}
               gameHistory={gameHistory}
               originalTopic={originalTopic}
               currentTopic={topic}

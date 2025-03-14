@@ -71,23 +71,23 @@ export default function ModelSelector() {
       </div>
       
       <div className="mb-2">
-        <h4 className="text-sm font-medium mb-2 text-left">DeepSeek Models:</h4>
+        <h4 className="text-sm font-medium mb-2 text-left">DeepSeek Models (Currently Unavailable):</h4>
         <div className="flex flex-wrap gap-2 justify-center">
           {deepseekModels.map(model => (
             <button
               key={model}
               onClick={() => handleModelChange(model)}
-              disabled={isChanging}
-              className={`px-3 py-1 rounded-full text-sm ${
-                selectedModel === model 
-                  ? 'bg-purple-600 text-white' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              disabled={true}
+              className="px-3 py-1 rounded-full text-sm bg-gray-300 text-gray-500 cursor-not-allowed"
+              title="DeepSeek models are currently unavailable"
             >
               {LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models].displayName}
             </button>
           ))}
         </div>
+        <p className="text-xs text-red-500 mt-1">
+          Note: DeepSeek models are currently returning 404 errors and are disabled.
+        </p>
       </div>
       
       {isChanging && (
@@ -112,7 +112,7 @@ export default function ModelSelector() {
             </span>
           );
         })}
-        <strong>DeepSeek Models:</strong><br />
+        <strong>DeepSeek Models (Unavailable):</strong><br />
         {deepseekModels.map(model => {
           const config = LLM_CONFIG.models[model as keyof typeof LLM_CONFIG.models];
           return (
