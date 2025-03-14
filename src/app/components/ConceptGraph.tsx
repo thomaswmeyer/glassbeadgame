@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamically import Graph with no SSR to avoid server-side rendering issues
 const Graph = dynamic(() => import('react-d3-graph').then(mod => mod.Graph), {
-  ssr: false
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-gray-500">Loading graph visualization...</div>
+    </div>
+  )
 });
 
 interface Node {
@@ -66,7 +71,8 @@ interface ConceptGraphProps {
   height?: number;
 }
 
-const ConceptGraph = ({ gameHistory, originalTopic, currentTopic, width = 400, height = 400 }: ConceptGraphProps) => {
+// Memoize the component to prevent unnecessary re-renders
+const ConceptGraph = memo(({ gameHistory, originalTopic, currentTopic, width = 400, height = 400 }: ConceptGraphProps) => {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [dimensions, setDimensions] = useState({ width, height });
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -304,6 +310,6 @@ const ConceptGraph = ({ gameHistory, originalTopic, currentTopic, width = 400, h
       )}
     </div>
   );
-};
+});
 
 export default ConceptGraph; 

@@ -3,7 +3,7 @@
 import { useState, KeyboardEvent, useEffect } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
-import ConceptGraph from './ConceptGraph';
+import SimpleConceptGraph from './SimpleConceptGraph';
 
 interface Score {
   semanticDistance: number;
@@ -1158,7 +1158,7 @@ export default function GameInterface() {
           
           {/* Concept graph visualization - right side */}
           <div className="w-full lg:w-[450px] sticky top-6 self-start">
-            <ConceptGraph 
+            <SimpleConceptGraph 
               key={`graph-${gameHistory.length}-${currentRound}`}
               gameHistory={gameHistory}
               originalTopic={originalTopic}
