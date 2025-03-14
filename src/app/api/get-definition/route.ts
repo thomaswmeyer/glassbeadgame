@@ -1,59 +1,39 @@
 import { NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
-
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
+import { getDefinition } from '@/services/llm';
 
 export async function POST(request: Request) {
+  console.log('=== GET DEFINITION ROUTE CALLED ===');
+  
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not defined');
-    }
-
     const { topic } = await request.json();
-
+    
     if (!topic) {
       return NextResponse.json(
         { error: 'Topic is required' },
         { status: 400 }
       );
     }
-
-    const response = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
-      max_tokens: 250,
-      temperature: 0.7,
-      system: `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
+    
+    console.log('Requested definition for topic:', topic);
+    
+    try {
+      // Get definition using our LLM service
+      const definition = await getDefinition(topic);
+      console.log('Definition generated successfully');
       
-      When given a topic, provide a brief, clear definition that explains what it is in 2-3 sentences. 
+      return NextResponse.json({ definition });
+    } catch (error) {
+      console.error('Error getting definition:', error);
       
-      Your definition should be:
-      1. Accurate and informative
-      2. Concise (no more than 2-3 sentences)
-      3. Accessible to a general audience
-      4. Free of unnecessary jargon
-      
-      Provide ONLY the definition without any introductory phrases like "Here's a definition" or "This term refers to".`,
-      messages: [
-        {
-          role: "user",
-          content: `Please provide a concise definition for: "${topic}"`
-        }
-      ],
-    });
-
-    // Extract the text content from the response
-    const definition = response.content[0].type === 'text' 
-      ? response.content[0].text.trim() 
-      : 'Definition not available.';
-
-    return NextResponse.json({ definition });
+      // Provide a simple fallback definition
+      return NextResponse.json({ 
+        definition: `${topic} is a concept that could not be defined at this time due to a technical issue.` 
+      });
+    }
   } catch (error) {
-    console.error('Error fetching definition:', error);
+    console.error('Error in get-definition route:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch definition', definition: 'Definition not available at this time.' },
+      { error: 'Failed to get definition' },
       { status: 500 }
     );
   }

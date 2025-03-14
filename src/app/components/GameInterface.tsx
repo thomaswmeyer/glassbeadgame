@@ -2,6 +2,7 @@
 
 import { useState, KeyboardEvent, useEffect } from 'react';
 import axios from 'axios';
+import ModelSelector from './ModelSelector';
 
 interface Score {
   semanticDistance: number;
@@ -93,7 +94,10 @@ export default function GameInterface() {
     console.log('=== GENERATING FIRST TOPIC ===');
     console.log('aiGoesFirst setting:', aiGoesFirst);
     
+    // First, make sure the game is not started to prevent AI from responding to loading message
+    setGameStarted(false);
     setIsGeneratingTopic(true);
+    
     // Set a temporary loading message as the topic
     setTopic('Generating new topic...');
     setShowingResults(false);
@@ -114,16 +118,19 @@ export default function GameInterface() {
       const newTopic = result.data.topic;
       setTopic(newTopic);
       setOriginalTopic(newTopic); // Store the original topic
-      setGameStarted(true);
       setResponse('');
       setEvaluation('');
       setScores(null);
+      
       // Ensure the player is set correctly again after the API call
       console.log('Confirming player after API call:', initialPlayer);
       setCurrentPlayer(initialPlayer);
       setCurrentRound(1);
       setGameHistory([]);
       setTotalScores({ human: 0, ai: 0 });
+      
+      // Only now that we have a real topic, start the game
+      setGameStarted(true);
     } catch (error) {
       console.error('Error generating topic:', error);
       alert('Failed to generate topic. Please try again.');
@@ -514,7 +521,13 @@ export default function GameInterface() {
   // AI's turn to respond
   useEffect(() => {
     const aiTakeTurn = async () => {
-      if (gameStarted && currentPlayer === 'ai' && !showingResults) {
+      if (gameStarted && currentPlayer === 'ai' && !showingResults && !isGeneratingTopic) {
+        // Skip AI turn if the topic is still loading
+        if (topic === 'Generating new topic...') {
+          console.log('Skipping AI turn because topic is still loading');
+          return;
+        }
+        
         console.log('=== AI TURN STARTED ===');
         console.log('Current round:', currentRound);
         console.log('Current topic:', topic);
@@ -631,11 +644,14 @@ export default function GameInterface() {
     };
     
     aiTakeTurn();
-  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, difficulty, circleEnabled]);
+  }, [currentPlayer, gameStarted, showingResults, currentRound, topic, originalTopic, gameHistory, maxRounds, difficulty, circleEnabled, isGeneratingTopic]);
 
   const handleRestart = () => {
     console.log('=== RESTARTING GAME ===');
     console.log('aiGoesFirst setting:', aiGoesFirst);
+    
+    // First, make sure the game is not started to prevent AI from responding during restart
+    setGameStarted(false);
     
     // Immediately clear the topic and response to prevent showing previous game data
     setTopic('');
@@ -657,6 +673,7 @@ export default function GameInterface() {
     setShowingResults(false);
     // Don't set currentPlayer here, let generateFirstTopic handle it
     
+    // Generate the first topic which will set gameStarted to true when ready
     generateFirstTopic();
     
     // Log the current player after generateFirstTopic is called
@@ -800,6 +817,9 @@ export default function GameInterface() {
               </p>
             </div>
           </div>
+          
+          {/* Add the ModelSelector component */}
+          <ModelSelector />
           
           <div className="mb-6 text-center">
             <button
