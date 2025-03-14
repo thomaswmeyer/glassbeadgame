@@ -18,15 +18,16 @@ export async function POST(request: Request) {
     console.log('Requested model change to:', model);
     
     // Check if the model is valid
-    if (model !== 'sonnet' && model !== 'haiku' && model !== 'opus') {
+    const validModels = ['sonnet', 'haiku', 'opus', 'deepseek_coder', 'deepseek_lite', 'deepseek_v2'];
+    if (!validModels.includes(model)) {
       return NextResponse.json(
-        { error: 'Invalid model name. Must be one of: sonnet, haiku, opus' },
+        { error: `Invalid model name. Must be one of: ${validModels.join(', ')}` },
         { status: 400 }
       );
     }
     
     // Update the model
-    const newModelId = updateModel(model);
+    const newModelId = updateModel(model as any); // Using 'any' as a temporary workaround
     setModel(newModelId);
     
     // Get the current configuration

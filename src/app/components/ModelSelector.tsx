@@ -30,40 +30,82 @@ export default function ModelSelector() {
     <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
       <h3 className="font-bold mb-3 text-left">LLM Model:</h3>
       
-      <div className="flex flex-wrap gap-2 justify-center mb-2">
-        <button
-          onClick={() => handleModelChange('sonnet')}
-          disabled={isChanging}
-          className={`px-3 py-1 rounded-full text-sm ${
-            selectedModel === 'sonnet' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Claude 3 Sonnet
-        </button>
-        <button
-          onClick={() => handleModelChange('haiku')}
-          disabled={isChanging}
-          className={`px-3 py-1 rounded-full text-sm ${
-            selectedModel === 'haiku' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Claude 3 Haiku
-        </button>
-        <button
-          onClick={() => handleModelChange('opus')}
-          disabled={isChanging}
-          className={`px-3 py-1 rounded-full text-sm ${
-            selectedModel === 'opus' 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Claude 3 Opus
-        </button>
+      <div className="mb-3">
+        <h4 className="text-sm font-medium mb-2 text-left">Anthropic Models:</h4>
+        <div className="flex flex-wrap gap-2 justify-center mb-2">
+          <button
+            onClick={() => handleModelChange('sonnet')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'sonnet' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Claude 3 Sonnet
+          </button>
+          <button
+            onClick={() => handleModelChange('haiku')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'haiku' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Claude 3 Haiku
+          </button>
+          <button
+            onClick={() => handleModelChange('opus')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'opus' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Claude 3 Opus
+          </button>
+        </div>
+      </div>
+      
+      <div className="mb-2">
+        <h4 className="text-sm font-medium mb-2 text-left">DeepSeek Models:</h4>
+        <div className="flex flex-wrap gap-2 justify-center">
+          <button
+            onClick={() => handleModelChange('deepseek_coder')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'deepseek_coder' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            DeepSeek Coder
+          </button>
+          <button
+            onClick={() => handleModelChange('deepseek_lite')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'deepseek_lite' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            DeepSeek Lite
+          </button>
+          <button
+            onClick={() => handleModelChange('deepseek_v2')}
+            disabled={isChanging}
+            className={`px-3 py-1 rounded-full text-sm ${
+              selectedModel === 'deepseek_v2' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            DeepSeek V2
+          </button>
+        </div>
       </div>
       
       {isChanging && (
@@ -79,9 +121,14 @@ export default function ModelSelector() {
       )}
       
       <p className="text-xs text-gray-500 mt-2">
+        <strong>Claude Models:</strong><br />
         <strong>Sonnet:</strong> Good balance of quality and speed<br />
         <strong>Haiku:</strong> Fastest, but less sophisticated<br />
-        <strong>Opus:</strong> Highest quality, but slower and more expensive
+        <strong>Opus:</strong> Highest quality, but slower and more expensive<br />
+        <strong>DeepSeek Models:</strong><br />
+        <strong>Coder:</strong> Specialized for code generation<br />
+        <strong>Lite:</strong> Fast and efficient general-purpose model<br />
+        <strong>V2:</strong> Latest DeepSeek model with improved capabilities
       </p>
     </div>
   );

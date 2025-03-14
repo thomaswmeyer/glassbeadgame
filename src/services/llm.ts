@@ -1,9 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { OpenAI } from 'openai';
 import { LLM_CONFIG } from '@/config/llm';
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
+});
+
+// Initialize OpenAI client for DeepSeek API
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY || '',
+  baseURL: 'https://api.deepseek.com/v1',
 });
 
 // Difficulty level descriptions for the system prompt
@@ -49,6 +56,37 @@ async function callWithRetry<T>(
   throw lastError;
 }
 
+// Function to set the model
+export function setModel(model: string) {
+  console.log(`Setting model to: ${model}`);
+  return model;
+}
+
+// Function to get the current model configuration
+export function getModelConfig() {
+  return {
+    model: LLM_CONFIG.model,
+    provider: LLM_CONFIG.provider,
+    temperature: LLM_CONFIG.temperature
+  };
+}
+
+// Helper function to convert Anthropic-style messages to OpenAI format
+function convertToOpenAIMessages(systemPrompt: string, userMessages: { role: string, content: string }[]) {
+  const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [
+    { role: 'system', content: systemPrompt }
+  ];
+  
+  userMessages.forEach(msg => {
+    messages.push({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    });
+  });
+  
+  return messages;
+}
+
 // Generate a topic for the game
 export async function generateTopic(
   category: string,
@@ -58,6 +96,7 @@ export async function generateTopic(
 ): Promise<string> {
   console.log('Preparing to make API request with model:', LLM_CONFIG.model);
   console.log('Temperature setting:', LLM_CONFIG.temperature.creative);
+  console.log('Provider:', LLM_CONFIG.provider);
   
   // Create a timestamp to ensure different results each time
   const timestamp = new Date().toISOString();
@@ -67,48 +106,78 @@ export async function generateTopic(
     ? `Avoid these recently used topics: ${recentTopics.join(', ')}.` 
     : '';
   
+  // System prompt for topic generation
+  const systemPrompt = `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
+    
+    The topic should be a single concept, idea, term, or work related to the category: ${category}, specifically in the area of ${subcategory}.
+    
+    ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+    
+    Be creative and varied in your suggestions. Avoid common or overused topics.
+    ${topicsToAvoid}
+    
+    Current timestamp for seed variation: ${timestamp}
+    
+    Examples of good topics at different levels:
+    - Secondary level: Clear, accessible concepts that high school students would understand
+    - University level: More specialized concepts taught in undergraduate courses
+    - Unlimited level: Advanced, specialized concepts that might be discussed in graduate seminars
+    
+    For ${subcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
+    
+    Provide ONLY the topic name without any explanation or additional text.`;
+  
+  // User message for topic generation
+  const userMessage = `Generate a unique and interesting ${difficulty}-level topic related to ${subcategory} (a type of ${category}) for the Glass Bead Game. The topic should be specific and not generic.`;
+  
   try {
-    const response = await callWithRetry(() => 
-      anthropic.messages.create({
-        model: LLM_CONFIG.model,
-        max_tokens: 100,
-        temperature: LLM_CONFIG.temperature.creative,
-        system: `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
-        
-        The topic should be a single concept, idea, term, or work related to the category: ${category}, specifically in the area of ${subcategory}.
-        
-        ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
-        
-        Be creative and varied in your suggestions. Avoid common or overused topics.
-        ${topicsToAvoid}
-        
-        Current timestamp for seed variation: ${timestamp}
-        
-        Examples of good topics at different levels:
-        - Secondary level: Clear, accessible concepts that high school students would understand
-        - University level: More specialized concepts taught in undergraduate courses
-        - Unlimited level: Advanced, specialized concepts that might be discussed in graduate seminars
-        
-        For ${subcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
-        
-        Provide ONLY the topic name without any explanation or additional text.`,
-        messages: [
-          {
-            role: "user",
-            content: `Generate a unique and interesting ${difficulty}-level topic related to ${subcategory} (a type of ${category}) for the Glass Bead Game. The topic should be specific and not generic.`
-          }
-        ],
-      })
-    );
-    
-    console.log('API request successful');
-    
-    // Extract the text content from the response
-    const topic = response.content[0].type === 'text' 
-      ? response.content[0].text.trim() 
-      : 'Failed to generate a topic';
-    
-    return topic;
+    if (LLM_CONFIG.provider === 'anthropic') {
+      // Use Anthropic API
+      const response = await callWithRetry(() => 
+        anthropic.messages.create({
+          model: LLM_CONFIG.model,
+          max_tokens: 100,
+          temperature: LLM_CONFIG.temperature.creative,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: userMessage
+            }
+          ],
+        })
+      );
+      
+      console.log('API request successful');
+      
+      // Extract the text content from the response
+      const topic = response.content[0].type === 'text' 
+        ? response.content[0].text.trim() 
+        : 'Failed to generate a topic';
+      
+      return topic;
+    } else {
+      // Use DeepSeek API via OpenAI client
+      const messages = convertToOpenAIMessages(systemPrompt, [
+        { role: 'user', content: userMessage }
+      ]);
+      
+      const response = await callWithRetry(() => 
+        openai.chat.completions.create({
+          model: LLM_CONFIG.model,
+          messages: messages as any,
+          max_tokens: 100,
+          temperature: LLM_CONFIG.temperature.creative,
+        })
+      );
+      
+      console.log('API request successful');
+      
+      // Extract the text content from the response
+      const topic = response.choices?.[0]?.message?.content?.trim() || 'Failed to generate a topic';
+      
+      return topic;
+    }
   } catch (error) {
     console.error('Error generating topic:', error);
     throw error;
@@ -117,38 +186,66 @@ export async function generateTopic(
 
 // Get a definition for a topic
 export async function getDefinition(topic: string): Promise<string> {
+  // System prompt for definition
+  const systemPrompt = `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
+    
+    When given a topic, provide a brief, clear definition that explains what it is in 2-3 sentences. 
+    
+    Your definition should be:
+    1. Accurate and informative
+    2. Concise (no more than 2-3 sentences)
+    3. Accessible to a general audience
+    4. Free of unnecessary jargon
+    
+    Provide ONLY the definition without any introductory phrases like "Here's a definition" or "This term refers to".`;
+  
+  // User message for definition
+  const userMessage = `Please provide a concise definition for: "${topic}"`;
+  
   try {
-    const response = await callWithRetry(() => 
-      anthropic.messages.create({
-        model: LLM_CONFIG.model,
-        max_tokens: 250,
-        temperature: LLM_CONFIG.temperature.factual,
-        system: `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
-        
-        When given a topic, provide a brief, clear definition that explains what it is in 2-3 sentences. 
-        
-        Your definition should be:
-        1. Accurate and informative
-        2. Concise (no more than 2-3 sentences)
-        3. Accessible to a general audience
-        4. Free of unnecessary jargon
-        
-        Provide ONLY the definition without any introductory phrases like "Here's a definition" or "This term refers to".`,
-        messages: [
-          {
-            role: "user",
-            content: `Please provide a concise definition for: "${topic}"`
-          }
-        ],
-      })
-    );
-    
-    // Extract the text content from the response
-    const definition = response.content[0].type === 'text' 
-      ? response.content[0].text.trim() 
-      : 'Definition not available.';
-    
-    return definition;
+    if (LLM_CONFIG.provider === 'anthropic') {
+      // Use Anthropic API
+      const response = await callWithRetry(() => 
+        anthropic.messages.create({
+          model: LLM_CONFIG.model,
+          max_tokens: 250,
+          temperature: LLM_CONFIG.temperature.factual,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: userMessage
+            }
+          ],
+        })
+      );
+      
+      // Extract the text content from the response
+      const definition = response.content[0].type === 'text' 
+        ? response.content[0].text.trim() 
+        : 'Definition not available.';
+      
+      return definition;
+    } else {
+      // Use DeepSeek API via OpenAI client
+      const messages = convertToOpenAIMessages(systemPrompt, [
+        { role: 'user', content: userMessage }
+      ]);
+      
+      const response = await callWithRetry(() => 
+        openai.chat.completions.create({
+          model: LLM_CONFIG.model,
+          messages: messages as any,
+          max_tokens: 250,
+          temperature: LLM_CONFIG.temperature.factual,
+        })
+      );
+      
+      // Extract the text content from the response
+      const definition = response.choices?.[0]?.message?.content?.trim() || 'Definition not available.';
+      
+      return definition;
+    }
   } catch (error) {
     console.error('Error fetching definition:', error);
     throw error;
@@ -166,6 +263,7 @@ export async function getAiResponse(
 ): Promise<string> {
   console.log('Preparing to make API request with model:', LLM_CONFIG.model);
   console.log('Temperature setting:', LLM_CONFIG.temperature.creative);
+  console.log('Provider:', LLM_CONFIG.provider);
   
   // Format game history for context
   let historyContext = '';
@@ -194,130 +292,201 @@ export async function getAiResponse(
   try {
     // For the final round with circle enabled, we need to inform the AI that it needs to connect back to the original topic
     if (isFinalRound && circleEnabled) {
-      const response = await callWithRetry(() => 
-        anthropic.messages.create({
-          model: LLM_CONFIG.model,
-          max_tokens: 100,
-          temperature: LLM_CONFIG.temperature.creative,
-          system: `You are playing the Glass Bead Game, a game of conceptual connections. 
-          
-          This is the FINAL ROUND of the game. Your task is to respond to the current topic with a brief, thoughtful response 
-          that connects to BOTH:
-          1. The current topic: "${topic}"
-          2. The original starting topic: "${originalTopic}"
-          
-          Your response should be brief but profound - a single concept or short phrase that 
-          creates a meaningful bridge between the current topic and the original topic.
-          
-          IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
-          - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
-          - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
-          - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
-          - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
-          - The best connections reveal surprising parallels between seemingly unrelated concepts
-          
-          ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
-          
-          Be creative and varied in your responses. Avoid obvious associations and clichés. 
-          Try to surprise the player with unexpected but meaningful connections.
-          
-          ${responsesToAvoid}
-          
-          Current timestamp for seed variation: ${timestamp}
-          
-          Consider multiple domains of knowledge when forming your response:
-          - Arts and humanities
-          - Science and technology
-          - Social sciences
-          - Natural world
-          - Abstract concepts
-          
-          DO NOT explain your reasoning. ONLY provide the brief response itself.`,
-          messages: [
-            {
-              role: "user",
-              content: `${historyContext}
-              
-              Current topic: "${topic}"
-              Original starting topic: "${originalTopic}"
-              
-              This is the FINAL ROUND. Please provide your brief response that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
-            }
-          ],
-        })
-      );
+      // System prompt for final round with circle enabled
+      const systemPrompt = `You are playing the Glass Bead Game, a game of conceptual connections. 
+        
+        This is the FINAL ROUND of the game. Your task is to respond to the current topic with a brief, thoughtful response 
+        that connects to BOTH:
+        1. The current topic: "${topic}"
+        2. The original starting topic: "${originalTopic}"
+        
+        Your response should be brief but profound - a single concept or short phrase that 
+        creates a meaningful bridge between the current topic and the original topic.
+        
+        IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
+        - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
+        - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
+        - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
+        - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
+        - The best connections reveal surprising parallels between seemingly unrelated concepts
+        
+        ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+        
+        Be creative and varied in your responses. Avoid obvious associations and clichés. 
+        Try to surprise the player with unexpected but meaningful connections.
+        
+        ${responsesToAvoid}
+        
+        Current timestamp for seed variation: ${timestamp}
+        
+        Consider multiple domains of knowledge when forming your response:
+        - Arts and humanities
+        - Science and technology
+        - Social sciences
+        - Natural world
+        - Abstract concepts
+        
+        DO NOT explain your reasoning. ONLY provide the brief response itself.`;
       
-      // Extract the text content from the response
-      const aiResponse = response.content[0].type === 'text' 
-        ? response.content[0].text.trim() 
-        : 'Failed to generate a response';
+      // User message for final round with circle enabled
+      const userMessage = `${historyContext}
+        
+        Current topic: "${topic}"
+        Original starting topic: "${originalTopic}"
+        
+        This is the FINAL ROUND. Please provide your brief response that connects to BOTH the current topic AND the original starting topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
-      return aiResponse;
+      if (LLM_CONFIG.provider === 'anthropic') {
+        // Use Anthropic API
+        const response = await callWithRetry(() => 
+          anthropic.messages.create({
+            model: LLM_CONFIG.model,
+            max_tokens: 100,
+            temperature: LLM_CONFIG.temperature.creative,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: userMessage
+              }
+            ],
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = response.content[0].type === 'text' 
+          ? response.content[0].text.trim() 
+          : generateFallbackResponse(topic);
+        
+        return aiResponse;
+      } else {
+        // Use DeepSeek API via OpenAI client
+        const messages = convertToOpenAIMessages(systemPrompt, [
+          { role: 'user', content: userMessage }
+        ]);
+        
+        const response = await callWithRetry(() => 
+          openai.chat.completions.create({
+            model: LLM_CONFIG.model,
+            messages: messages as any,
+            max_tokens: 100,
+            temperature: LLM_CONFIG.temperature.creative,
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = response.choices?.[0]?.message?.content?.trim() || generateFallbackResponse(topic);
+        
+        return aiResponse;
+      }
     } else {
-      // Regular round response
-      const response = await callWithRetry(() => 
-        anthropic.messages.create({
-          model: LLM_CONFIG.model,
-          max_tokens: 50,
-          temperature: LLM_CONFIG.temperature.creative,
-          system: `You are playing the Glass Bead Game, a game of conceptual connections. 
-          
-          Your task is to respond to a given topic with a brief, thoughtful response 
-          (ideally just a few words) that:
-          1. Has a semantic distance from the topic
-          2. Fits well onto the topic, through similar concepts or associations
-          
-          Your response should be brief but profound - a single word or short phrase that 
-          captures a concept related to the topic in an interesting way.
-          
-          IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
-          - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
-          - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
-          - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
-          - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
-          - The best connections reveal surprising parallels between seemingly unrelated concepts
-          
-          ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
-          
-          Be creative and varied in your responses. Avoid obvious associations and clichés. 
-          Try to surprise the player with unexpected but meaningful connections.
-          
-          ${responsesToAvoid}
-          
-          Current timestamp for seed variation: ${timestamp}
-          
-          Consider multiple domains of knowledge when forming your response:
-          - Arts and humanities
-          - Science and technology
-          - Social sciences
-          - Natural world
-          - Abstract concepts
-          
-          DO NOT explain your reasoning. ONLY provide the brief response itself.`,
-          messages: [
-            {
-              role: "user",
-              content: `${historyContext}
-              
-              Current topic: "${topic}"
-              
-              Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`
-            }
-          ],
-        })
-      );
+      // Regular round
+      // System prompt for regular round
+      const systemPrompt = `You are playing the Glass Bead Game, a game of conceptual connections. 
+        
+        Your task is to respond to the current topic with a brief, thoughtful response that creates 
+        an interesting conceptual connection. Your response will become the next topic in the game.
+        
+        IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
+        - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
+        - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
+        - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
+        - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
+        - The best connections reveal surprising parallels between seemingly unrelated concepts
+        
+        ${difficultyPrompts[difficulty as keyof typeof difficultyPrompts]}
+        
+        Be creative and varied in your responses. Avoid obvious associations and clichés. 
+        Try to surprise the player with unexpected but meaningful connections.
+        
+        ${responsesToAvoid}
+        
+        Current timestamp for seed variation: ${timestamp}
+        
+        Consider multiple domains of knowledge when forming your response:
+        - Arts and humanities
+        - Science and technology
+        - Social sciences
+        - Natural world
+        - Abstract concepts
+        
+        DO NOT explain your reasoning. ONLY provide the brief response itself.`;
       
-      // Extract the text content from the response
-      const aiResponse = response.content[0].type === 'text' 
-        ? response.content[0].text.trim() 
-        : 'Failed to generate a response';
+      // User message for regular round
+      const userMessage = `${historyContext}
+        
+        Current topic: "${topic}"
+        
+        Please provide your brief response to this topic at a ${difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`;
       
-      return aiResponse;
+      if (LLM_CONFIG.provider === 'anthropic') {
+        // Use Anthropic API
+        const response = await callWithRetry(() => 
+          anthropic.messages.create({
+            model: LLM_CONFIG.model,
+            max_tokens: 100,
+            temperature: LLM_CONFIG.temperature.creative,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: userMessage
+              }
+            ],
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = response.content[0].type === 'text' 
+          ? response.content[0].text.trim() 
+          : generateFallbackResponse(topic);
+        
+        return aiResponse;
+      } else {
+        // Use DeepSeek API via OpenAI client
+        const messages = convertToOpenAIMessages(systemPrompt, [
+          { role: 'user', content: userMessage }
+        ]);
+        
+        const response = await callWithRetry(() => 
+          openai.chat.completions.create({
+            model: LLM_CONFIG.model,
+            messages: messages as any,
+            max_tokens: 100,
+            temperature: LLM_CONFIG.temperature.creative,
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = response.choices?.[0]?.message?.content?.trim() || generateFallbackResponse(topic);
+        
+        return aiResponse;
+      }
     }
   } catch (error) {
-    console.error('Error generating AI response:', error);
-    throw error;
+    console.error('Error getting AI response:', error);
+    return generateFallbackResponse(topic);
   }
+}
+
+// Generate a fallback response if the API call fails
+export function generateFallbackResponse(topic: string): string {
+  const fallbackResponses = [
+    `Conceptual framework of ${topic}`,
+    `${topic} in modern context`,
+    `Philosophical implications of ${topic}`,
+    `${topic} as metaphor`,
+    `Structural analysis of ${topic}`,
+    `${topic} and its counterparts`,
+    `Emergent properties of ${topic}`,
+    `${topic} reconsidered`,
+    `Transformative aspects of ${topic}`,
+    `${topic} in relation to human experience`
+  ];
+  
+  // Select a random fallback response
+  const randomIndex = Math.floor(Math.random() * fallbackResponses.length);
+  return fallbackResponses[randomIndex];
 }
 
 // Evaluate a response
@@ -326,299 +495,324 @@ export async function evaluateResponse(
   response: string,
   difficulty: string,
   originalTopic?: string,
-  isFinalRound: boolean = false
+  isFinalRound?: boolean
 ): Promise<any> {
-  console.log('Preparing to make API request with model:', LLM_CONFIG.model);
+  console.log('Preparing to make evaluation request with model:', LLM_CONFIG.model);
+  console.log('Temperature setting:', LLM_CONFIG.temperature.evaluation);
+  console.log('Provider:', LLM_CONFIG.provider);
   
   try {
     if (isFinalRound && originalTopic) {
-      // Final round evaluation with circle mode
-      const aiResponse = await callWithRetry(() => 
-        anthropic.messages.create({
-          model: LLM_CONFIG.model,
-          max_tokens: 1000,
-          temperature: LLM_CONFIG.temperature.evaluation,
-          system: `You are an expert evaluator for the Glass Bead Game, a game of conceptual connections.
-
-          In this game, players take turns responding to concepts with related concepts, creating a chain of meaningful connections.
-          
-          This is the FINAL ROUND of the game, where the player must connect to BOTH:
-          1. The current topic
-          2. The original starting topic from the beginning of the game
-          
-          ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
-          
-          Your task is to evaluate the player's response based on:
-          
-          1. How well it connects to the CURRENT topic
-          2. How well it connects back to the ORIGINAL topic
-          
-          Use the SAME criteria for both connections:
-          
-          - Semantic Distance (1-10): How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.
-          - Similarity (1-10): How well do the ideas map onto each other? For example, stock market crash and flocking behavior.
-          
-          IMPORTANT SCORING GUIDELINES:
-          - Scientific names, taxonomic classifications, or technical terms for the same object should NOT be considered a significant semantic leap. For example, "artichoke" → "Cynara scolymus" should receive a LOW semantic distance score (1-3).
-          - Simple translations, synonyms, or alternative names for the same concept should receive a LOW semantic distance score (1-3).
-          - Specific subtypes, variants, or specialized versions of the same concept should receive a VERY LOW semantic distance score (1-2). For example, "synesthesia" → "chromesthesia" (a specific type of synesthesia) should score very low on semantic distance.
-          - Connections that rely solely on specialized knowledge within a SINGLE domain (e.g., "pica" → "kaolin" both within medical terminology) should receive a MODERATE semantic distance score (4-6).
-          - High semantic distance scores (7-10) should be reserved for truly creative connections ACROSS DIFFERENT domains or conceptual frameworks (e.g., connecting a medical concept to architecture, or a historical event to a natural phenomenon).
-          - Similarity scores should reflect how well the ideas actually map onto each other in terms of structure, function, or conceptual parallels.
-          
-          For the final evaluation, provide:
-          
-          1. A thoughtful evaluation of the connection to the current topic (150-200 words)
-          2. A separate evaluation of how well the response connects back to the original topic (100-150 words)
-          3. Numerical scores for BOTH connections:
-             - Current Topic Connection:
-               * Semantic Distance (1-10)
-               * Similarity (1-10)
-             - Original Topic Connection:
-               * Semantic Distance (1-10)
-               * Similarity (1-10)
-          
-          The final score should be calculated as follows:
-          - Current Topic Score = Current Topic Semantic Distance + Current Topic Similarity (max 20 points)
-          - Original Topic Score = Original Topic Semantic Distance + Original Topic Similarity (max 20 points)
-          - Final Score = (Current Topic Score + Original Topic Score) / 2 (max 20 points)
-          
-          Format your response as a JSON object with the following structure:
-          {
-            "evaluation": "Your evaluation of the connection to the current topic...",
-            "finalEvaluation": "Your evaluation of the connection to the original topic...",
-            "scores": {
-              "currentConnection": {
-                "semanticDistance": X,
-                "similarity": Y,
-                "subtotal": X+Y
-              },
-              "originalConnection": {
-                "semanticDistance": A,
-                "similarity": B,
-                "subtotal": A+B
-              },
-              "total": (X+Y+A+B)/2
-            }
-          }
-          
-          IMPORTANT: Your response must be valid JSON that can be parsed by JavaScript's JSON.parse().`,
-          messages: [
-            {
-              role: "user",
-              content: `Current topic: "${topic}"
-              Original starting topic: "${originalTopic}"
-              Player's response: "${response}"
-              
-              Please evaluate this final round response at a ${difficulty} difficulty level, considering both the connection to the current topic AND the connection back to the original topic using the same criteria for both.`
-            }
-          ],
-        })
-      );
-      
-      // Extract the text content from the response
-      const evaluationText = aiResponse.content[0].type === 'text' 
-        ? aiResponse.content[0].text.trim() 
-        : '{"evaluation": "Failed to evaluate response.", "finalEvaluation": "Failed to evaluate connection to original topic.", "scores": {"currentConnection": {"semanticDistance": 5, "similarity": 5, "subtotal": 10}, "originalConnection": {"semanticDistance": 5, "similarity": 5, "subtotal": 10}, "total": 10}}';
-      
-      try {
-        return JSON.parse(evaluationText);
-      } catch (error) {
-        console.error('Error parsing evaluation JSON:', error);
-        console.error('Raw evaluation text:', evaluationText);
+      // Final round evaluation with circle back to original topic
+      // System prompt for final round evaluation
+      const systemPrompt = `You are evaluating responses in the Glass Bead Game, a game of conceptual connections.
         
-        // Fallback response with default values
-        return {
-          evaluation: "The response shows an interesting connection to the current topic.",
-          finalEvaluation: "The response makes a thoughtful connection back to the original topic.",
-          scores: {
-            currentConnection: {
-              semanticDistance: 5,
-              similarity: 5,
-              subtotal: 10
+        This is the FINAL ROUND evaluation. You need to evaluate how well the player's response connects to BOTH:
+        1. The current topic
+        2. The original starting topic
+        
+        ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
+        
+        Provide your evaluation in the following format:
+        
+        First, evaluate the connection between the response and the CURRENT topic. Consider:
+        - How semantically remote yet meaningfully connected is the response to the current topic? (1-10)
+        - How well do the ideas map onto each other in terms of similarity of structure or function? (1-10)
+        
+        Then, evaluate the connection between the response and the ORIGINAL topic. Consider:
+        - How semantically remote yet meaningfully connected is the response to the original topic? (1-10)
+        - How well do the ideas map onto each other in terms of similarity of structure or function? (1-10)
+        
+        The final score will be the average of these two connections.
+        
+        Your response should be in JSON format with the following structure:
+        {
+          "evaluation": "Your evaluation of the connection to the current topic",
+          "finalEvaluation": "Your evaluation of the connection to the original topic",
+          "scores": {
+            "currentConnection": {
+              "semanticDistance": X, // 1-10 score for semantic distance to current topic
+              "similarity": Y, // 1-10 score for similarity to current topic
+              "subtotal": X+Y // Sum of the two scores (max 20)
             },
-            originalConnection: {
-              semanticDistance: 5,
-              similarity: 5,
-              subtotal: 10
+            "originalConnection": {
+              "semanticDistance": X, // 1-10 score for semantic distance to original topic
+              "similarity": Y, // 1-10 score for similarity to original topic
+              "subtotal": X+Y // Sum of the two scores (max 20)
             },
-            total: 10
+            "total": Z // Average of the two subtotals (max 20)
           }
-        };
+        }`;
+      
+      // User message for final round evaluation
+      const userMessage = `Current topic: "${topic}"
+        Original starting topic: "${originalTopic}"
+        Player's response: "${response}"
+        
+        Please evaluate how well this response connects to BOTH the current topic AND the original starting topic.`;
+      
+      if (LLM_CONFIG.provider === 'anthropic') {
+        // Use Anthropic API
+        const result = await callWithRetry(() => 
+          anthropic.messages.create({
+            model: LLM_CONFIG.model,
+            max_tokens: 1000,
+            temperature: LLM_CONFIG.temperature.evaluation,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: userMessage
+              }
+            ],
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.content[0].type === 'text' 
+          ? result.content[0].text.trim() 
+          : '{}';
+        
+        // Parse the JSON response
+        try {
+          // Find JSON in the response
+          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
+          
+          const evaluationData = JSON.parse(jsonString);
+          console.log('Evaluation data parsed successfully');
+          
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          
+          // Provide a fallback evaluation
+          return {
+            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            finalEvaluation: "I couldn't evaluate the connection to the original topic properly.",
+            scores: {
+              currentConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              originalConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              total: 10
+            }
+          };
+        }
+      } else {
+        // Use DeepSeek API via OpenAI client
+        const messages = convertToOpenAIMessages(systemPrompt, [
+          { role: 'user', content: userMessage }
+        ]);
+        
+        const result = await callWithRetry(() => 
+          openai.chat.completions.create({
+            model: LLM_CONFIG.model,
+            messages: messages as any,
+            max_tokens: 1000,
+            temperature: LLM_CONFIG.temperature.evaluation,
+            response_format: { type: "json_object" }
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.choices?.[0]?.message?.content?.trim() || '{}';
+        
+        // Parse the JSON response
+        try {
+          // Find JSON in the response
+          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
+          
+          const evaluationData = JSON.parse(jsonString);
+          console.log('Evaluation data parsed successfully');
+          
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          
+          // Provide a fallback evaluation
+          return {
+            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            finalEvaluation: "I couldn't evaluate the connection to the original topic properly.",
+            scores: {
+              currentConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              originalConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              total: 10
+            }
+          };
+        }
       }
     } else {
-      // Regular evaluation
-      const aiResponse = await callWithRetry(() => 
-        anthropic.messages.create({
-          model: LLM_CONFIG.model,
-          max_tokens: 1000,
-          temperature: LLM_CONFIG.temperature.evaluation,
-          system: `You are an expert evaluator for the Glass Bead Game, a game of conceptual connections.
-
-          In this game, players take turns responding to concepts with related concepts, creating a chain of meaningful connections.
-          
-          ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
-          
-          Your task is to evaluate the player's response based on two criteria:
-          
-          1. Semantic Distance (1-10): How semantically remote is the overall topic from the prompt? Higher scores for connections that are not obvious.
-          2. Similarity (1-10): How well do the ideas map onto each other? For example, stock market crash and flocking behavior.
-          
-          IMPORTANT SCORING GUIDELINES:
-          - Scientific names, taxonomic classifications, or technical terms for the same object should NOT be considered a significant semantic leap. For example, "artichoke" → "Cynara scolymus" should receive a LOW semantic distance score (1-3).
-          - Simple translations, synonyms, or alternative names for the same concept should receive a LOW semantic distance score (1-3).
-          - Specific subtypes, variants, or specialized versions of the same concept should receive a VERY LOW semantic distance score (1-2). For example, "synesthesia" → "chromesthesia" (a specific type of synesthesia) should score very low on semantic distance.
-          - Connections that rely solely on specialized knowledge within a SINGLE domain (e.g., "pica" → "kaolin" both within medical terminology) should receive a MODERATE semantic distance score (4-6).
-          - High semantic distance scores (7-10) should be reserved for truly creative connections ACROSS DIFFERENT domains or conceptual frameworks (e.g., connecting a medical concept to architecture, or a historical event to a natural phenomenon).
-          - Similarity scores should reflect how well the ideas actually map onto each other in terms of structure, function, or conceptual parallels.
-          
-          For the evaluation, provide:
-          
-          1. A thoughtful evaluation of the connection (150-200 words)
-          2. Numerical scores for each criterion (1-10)
-          
-          Format your response as a JSON object with the following structure:
-          {
-            "evaluation": "Your evaluation text here...",
-            "scores": {
-              "semanticDistance": X,
-              "relevanceQuality": Y,
-              "total": Z
-            }
-          }
-          
-          The total score should be the sum of semanticDistance and relevanceQuality.
-          
-          IMPORTANT: Your response must be valid JSON that can be parsed by JavaScript's JSON.parse().`,
-          messages: [
-            {
-              role: "user",
-              content: `Topic: "${topic}"
-              Player's response: "${response}"
-              
-              Please evaluate this response at a ${difficulty} difficulty level.`
-            }
-          ],
-        })
-      );
-      
-      // Extract the text content from the response
-      const evaluationText = aiResponse.content[0].type === 'text' 
-        ? aiResponse.content[0].text.trim() 
-        : '{"evaluation": "Failed to evaluate response.", "scores": {"semanticDistance": 5, "relevanceQuality": 5, "total": 10}}';
-      
-      try {
-        return JSON.parse(evaluationText);
-      } catch (error) {
-        console.error('Error parsing evaluation data:', error);
-        console.error('Raw evaluation text:', evaluationText);
+      // Regular round evaluation
+      // System prompt for regular evaluation
+      const systemPrompt = `You are evaluating responses in the Glass Bead Game, a game of conceptual connections.
         
-        // Attempt to extract scores using regex as a fallback
-        const fallbackData = extractScoresFromText(evaluationText);
-        if (fallbackData) {
-          console.log('Used fallback parsing method');
-          return fallbackData;
+        ${evaluationDifficultyPrompts[difficulty as keyof typeof evaluationDifficultyPrompts]}
+        
+        Evaluate the player's response to the given topic. Consider:
+        
+        1. Semantic Distance (1-10): How semantically remote yet meaningfully connected is the response to the topic? 
+           - Higher scores for connections that span different domains of knowledge
+           - Lower scores for obvious associations or closely related concepts
+        
+        2. Similarity (1-10): How well do the ideas map onto each other in terms of similarity of structure or function?
+           - Higher scores for responses that reveal structural parallels between seemingly unrelated concepts
+           - Lower scores for connections that are superficial or rely only on word association
+        
+        Provide a thoughtful evaluation explaining the connection between the topic and response, 
+        and why it deserves the scores you've assigned.
+        
+        Your response should be in JSON format with the following structure:
+        {
+          "evaluation": "Your evaluation text here, explaining the connection and justifying the scores",
+          "scores": {
+            "semanticDistance": X, // 1-10 score
+            "relevanceQuality": Y, // 1-10 score
+            "total": Z // Sum of the two scores (max 20)
+          }
+        }`;
+      
+      // User message for regular evaluation
+      const userMessage = `Topic: "${topic}"
+        Player's response: "${response}"
+        
+        Please evaluate how well this response connects to the topic.`;
+      
+      if (LLM_CONFIG.provider === 'anthropic') {
+        // Use Anthropic API
+        const result = await callWithRetry(() => 
+          anthropic.messages.create({
+            model: LLM_CONFIG.model,
+            max_tokens: 1000,
+            temperature: LLM_CONFIG.temperature.evaluation,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: userMessage
+              }
+            ],
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.content[0].type === 'text' 
+          ? result.content[0].text.trim() 
+          : '{}';
+        
+        // Parse the JSON response
+        try {
+          // Find JSON in the response
+          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
+          
+          const evaluationData = JSON.parse(jsonString);
+          console.log('Evaluation data parsed successfully');
+          
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          
+          // Provide a fallback evaluation
+          return {
+            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
+              total: 10
+            }
+          };
         }
+      } else {
+        // Use DeepSeek API via OpenAI client
+        const messages = convertToOpenAIMessages(systemPrompt, [
+          { role: 'user', content: userMessage }
+        ]);
         
-        // Default fallback
-        return {
-          evaluation: "The response shows an interesting connection to the topic.",
-          scores: {
-            semanticDistance: 5,
-            relevanceQuality: 5,
-            total: 10
-          }
-        };
+        const result = await callWithRetry(() => 
+          openai.chat.completions.create({
+            model: LLM_CONFIG.model,
+            messages: messages as any,
+            max_tokens: 1000,
+            temperature: LLM_CONFIG.temperature.evaluation,
+            response_format: { type: "json_object" }
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.choices?.[0]?.message?.content?.trim() || '{}';
+        
+        // Parse the JSON response
+        try {
+          // Find JSON in the response
+          const jsonMatch = evaluationText.match(/\{[\s\S]*\}/);
+          const jsonString = jsonMatch ? jsonMatch[0] : '{}';
+          
+          const evaluationData = JSON.parse(jsonString);
+          console.log('Evaluation data parsed successfully');
+          
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          
+          // Provide a fallback evaluation
+          return {
+            evaluation: "I couldn't parse the evaluation properly. Here's a default score.",
+            scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
+              total: 10
+            }
+          };
+        }
       }
     }
   } catch (error) {
     console.error('Error evaluating response:', error);
-    throw error;
-  }
-}
-
-// Helper function to extract scores from text if JSON parsing fails
-function extractScoresFromText(text: string) {
-  try {
-    // Look for semantic distance score
-    const semanticDistanceMatch = text.match(/semantic\s*distance\s*:?\s*(\d+)/i);
-    // Look for similarity/relevance score
-    const similarityMatch = text.match(/similarity|relevance\s*quality\s*:?\s*(\d+)/i);
     
-    if (semanticDistanceMatch && similarityMatch) {
-      const semanticDistance = parseInt(semanticDistanceMatch[1], 10);
-      const relevanceQuality = parseInt(similarityMatch[1], 10);
-      
+    // Provide a fallback evaluation
+    if (isFinalRound && originalTopic) {
       return {
-        evaluation: text,
+        evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
+        finalEvaluation: "I couldn't evaluate the connection to the original topic due to a technical issue.",
         scores: {
-          semanticDistance,
-          relevanceQuality,
-          total: semanticDistance + relevanceQuality
+          currentConnection: {
+            semanticDistance: 5,
+            similarity: 5,
+            subtotal: 10
+          },
+          originalConnection: {
+            semanticDistance: 5,
+            similarity: 5,
+            subtotal: 10
+          },
+          total: 10
+        }
+      };
+    } else {
+      return {
+        evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
+        scores: {
+          semanticDistance: 5,
+          relevanceQuality: 5,
+          total: 10
         }
       };
     }
-  } catch (e) {
-    console.error('Error in fallback extraction:', e);
   }
-  
-  return null;
-}
-
-// Generate fallback responses for when the API fails
-export function generateFallbackResponse(topic: string): string {
-  const fallbackResponses = [
-    'Emergent patterns',
-    'Structural resonance',
-    'Recursive systems',
-    'Adaptive complexity',
-    'Harmonic oscillation',
-    'Symmetry breaking',
-    'Threshold effects',
-    'Feedback loops',
-    'Paradigm shifts',
-    'Conceptual frameworks'
-  ];
-  
-  // Generate a pseudo-random index based on the topic and current time
-  const seed = topic.length + Date.now() % 100;
-  const randomIndex = seed % fallbackResponses.length;
-  
-  return fallbackResponses[randomIndex];
-}
-
-// Generate fallback topics for when the API fails
-export function getFallbackTopic(difficulty: string, category: string, subcategory: string): string {
-  const fallbackTopics = {
-    secondary: [
-      'Photosynthesis', 'Democracy', 'Gravity', 'Renaissance', 'Ecosystem',
-      'Metaphor', 'Momentum', 'Adaptation', 'Harmony', 'Revolution'
-    ],
-    university: [
-      'Game Theory', 'Cognitive Dissonance', 'Paradigm Shift', 'Emergence',
-      'Dialectic', 'Entropy', 'Phenomenology', 'Symbiosis', 'Hermeneutics'
-    ],
-    unlimited: [
-      'Apophenia', 'Liminality', 'Hyperobject', 'Rhizome', 'Autopoiesis',
-      'Simulacra', 'Epistemic Injustice', 'Heterotopia', 'Panpsychism'
-    ]
-  };
-  
-  const difficultyLevel = difficulty as keyof typeof fallbackTopics;
-  const topicList = fallbackTopics[difficultyLevel] || fallbackTopics.university;
-  
-  // Generate a pseudo-random index based on current time
-  const randomIndex = Math.floor(Date.now() % topicList.length);
-  return topicList[randomIndex];
-}
-
-// Function to change the LLM model
-export function setModel(model: string) {
-  LLM_CONFIG.model = model;
-  console.log(`LLM model changed to: ${model}`);
-}
-
-// Export the current model configuration for reference
-export function getModelConfig() {
-  return { ...LLM_CONFIG };
 } 
