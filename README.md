@@ -45,6 +45,55 @@ The Glass Bead Game is inspired by Hermann Hesse's novel of the same name. In th
    ANTHROPIC_API_KEY=your_anthropic_api_key_here
    ```
 
+### Node.js Version
+
+This project uses Node.js v20.19.0. We use nvm (Node Version Manager) to manage the Node.js version.
+
+### Setup with nvm
+
+1. If you don't have nvm installed, install it:
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+   ```
+
+2. In the project directory, run:
+   ```bash
+   nvm use
+   ```
+   This will automatically use the correct Node.js version specified in the `.nvmrc` file.
+
+3. If you haven't installed this Node.js version yet, run:
+   ```bash
+   nvm install
+   ```
+
+### Automatic nvm Use (Optional)
+
+You can add this to your `~/.zshrc` or `~/.bashrc` to automatically switch Node.js versions when changing directories:
+
+```bash
+# Automatically use Node version specified in .nvmrc if available
+autoload -U add-zsh-hook
+load-nvmrc() {
+  local node_version="$(nvm version)"
+  local nvmrc_path="$(nvm_find_nvmrc)"
+
+  if [ -n "$nvmrc_path" ]; then
+    local nvmrc_node_version=$(nvm version "$(cat "${nvmrc_path}")")
+
+    if [ "$nvmrc_node_version" = "N/A" ]; then
+      nvm install
+    elif [ "$nvmrc_node_version" != "$node_version" ]; then
+      nvm use
+    fi
+  elif [ "$node_version" != "$(nvm version default)" ]; then
+    nvm use default
+  fi
+}
+add-zsh-hook chpwd load-nvmrc
+load-nvmrc
+```
+
 ### Running the Development Server
 
 ```bash

@@ -6,7 +6,8 @@ import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import { LLM_CONFIG } from '@/config/llm';
 
-interface Score {
+// Define the Score interface
+export interface Score {
   semanticDistance: number;
   relevanceQuality: number;
   total: number;
@@ -23,7 +24,8 @@ interface Score {
   };
 }
 
-interface GameHistory {
+// Define the GameHistory type to match what SimpleConceptGraph expects
+export interface GameHistory {
   round: number;
   topic: string;
   response: string;
@@ -108,6 +110,11 @@ export default function GameInterface() {
     score: null,
     isCircleMode: false
   });
+
+  // New state variables for graph-based gameplay
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<GameHistory | null>(null);
+  const [isCustomTopicSelected, setIsCustomTopicSelected] = useState<boolean>(false);
+  const [connections, setConnections] = useState<{from: number, to: number}[]>([]);
 
   const generateFirstTopic = async () => {
     console.log('=== GENERATING FIRST TOPIC ===');
@@ -287,21 +294,37 @@ export default function GameInterface() {
         }));
         setShowingResults(true);
         
-        // Add to game history
-        setGameHistory(prev => [
-          ...prev,
-          {
-            round: currentRound,
-            topic,
-            response,
-            evaluation: data.evaluation,
-            scores: data.scores,
-            player: 'human'
-          }
-        ]);
+        // Add to game history with connection information
+        const newHistoryItem: GameHistory = {
+          round: currentRound,
+          topic,
+          response,
+          evaluation: data.evaluation,
+          scores: data.scores,
+          player: 'human'
+        };
         
-        // No need to update graph key here - the SimpleConceptGraph component will handle the animation
-        // based on changes to gameHistory
+        setGameHistory(prev => [...prev, newHistoryItem]);
+        
+        // If this was a response to a custom selected topic, add the connection
+        if (isCustomTopicSelected && selectedHistoryItem) {
+          const fromIndex = gameHistory.findIndex(item => 
+            item.round === selectedHistoryItem.round && 
+            item.topic === selectedHistoryItem.topic && 
+            item.response === selectedHistoryItem.response
+          );
+          
+          if (fromIndex !== -1) {
+            setConnections(prev => [...prev, {
+              from: fromIndex,
+              to: gameHistory.length // The index of the new item we just added
+            }]);
+          }
+        }
+        
+        // Reset custom topic selection
+        setIsCustomTopicSelected(false);
+        setSelectedHistoryItem(null);
         
         setResponse('');
         
@@ -397,21 +420,37 @@ export default function GameInterface() {
         }));
         setShowingResults(true);
         
-        // Add to game history
-        setGameHistory(prev => [
-          ...prev,
-          {
-            round: currentRound,
-            topic,
-            response: aiResponse,
-            evaluation: data.evaluation,
-            scores: data.scores,
-            player: 'ai'
-          }
-        ]);
+        // Add to game history with connection information
+        const newHistoryItem: GameHistory = {
+          round: currentRound,
+          topic,
+          response: aiResponse,
+          evaluation: data.evaluation,
+          scores: data.scores,
+          player: 'ai'
+        };
         
-        // No need to update graph key here - the SimpleConceptGraph component will handle the animation
-        // based on changes to gameHistory
+        setGameHistory(prev => [...prev, newHistoryItem]);
+        
+        // If this was a response to a custom selected topic, add the connection
+        if (isCustomTopicSelected && selectedHistoryItem) {
+          const fromIndex = gameHistory.findIndex(item => 
+            item.round === selectedHistoryItem.round && 
+            item.topic === selectedHistoryItem.topic && 
+            item.response === selectedHistoryItem.response
+          );
+          
+          if (fromIndex !== -1) {
+            setConnections(prev => [...prev, {
+              from: fromIndex,
+              to: gameHistory.length // The index of the new item we just added
+            }]);
+          }
+        }
+        
+        // Reset custom topic selection
+        setIsCustomTopicSelected(false);
+        setSelectedHistoryItem(null);
         
         // Set game completed if it's the final round
         if (currentRound === maxRounds) {
@@ -449,17 +488,36 @@ export default function GameInterface() {
           setShowingResults(true);
           
           // Add to game history with fallback evaluation
-          setGameHistory(prev => [
-            ...prev,
-            {
-              round: currentRound,
-              topic,
-              response: aiResponse,
-              evaluation: "Evaluation failed. Default score applied.",
-              scores: fallbackScores,
-              player: 'ai'
+          const newHistoryItem: GameHistory = {
+            round: currentRound,
+            topic,
+            response: aiResponse,
+            evaluation: "Evaluation failed. Default score applied.",
+            scores: fallbackScores,
+            player: 'ai'
+          };
+          
+          setGameHistory(prev => [...prev, newHistoryItem]);
+          
+          // If this was a response to a custom selected topic, add the connection
+          if (isCustomTopicSelected && selectedHistoryItem) {
+            const fromIndex = gameHistory.findIndex(item => 
+              item.round === selectedHistoryItem.round && 
+              item.topic === selectedHistoryItem.topic && 
+              item.response === selectedHistoryItem.response
+            );
+            
+            if (fromIndex !== -1) {
+              setConnections(prev => [...prev, {
+                from: fromIndex,
+                to: gameHistory.length // The index of the new item we just added
+              }]);
             }
-          ]);
+          }
+          
+          // Reset custom topic selection
+          setIsCustomTopicSelected(false);
+          setSelectedHistoryItem(null);
           
           // Set game completed if it's the final round
           if (currentRound === maxRounds) {
@@ -475,6 +533,24 @@ export default function GameInterface() {
     }
     
     setIsEvaluating(false);
+  };
+
+  // New function to handle selecting a previous topic from history
+  const handleSelectHistoryItem = (historyItem: GameHistory) => {
+    if (showingResults || isEvaluating || isAiThinking || gameCompleted) {
+      // Don't allow selection during evaluation or when showing results
+      return;
+    }
+    
+    setSelectedHistoryItem(historyItem);
+    setIsCustomTopicSelected(true);
+    setTopic(historyItem.response); // Use the response as the new topic
+    
+    // Clear any existing definition since we're changing topics
+    setShowDefinition(false);
+    setTopicDefinition('');
+    
+    console.log(`Selected previous topic: "${historyItem.response}" from round ${historyItem.round}`);
   };
 
   const handleNextTurn = () => {
@@ -540,8 +616,9 @@ export default function GameInterface() {
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     
-    // We don't need to update the graph key here since the gameHistory hasn't changed yet
-    // The graph will update when the next response is evaluated
+    // Reset custom topic selection
+    setIsCustomTopicSelected(false);
+    setSelectedHistoryItem(null);
     
     // Switch players
     const nextPlayer = currentPlayer === 'human' ? 'ai' : 'human';
@@ -847,25 +924,6 @@ export default function GameInterface() {
               </div>
             </div>
             
-            {/* Circle mode checkbox */}
-            <div className="mb-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="circleEnabled"
-                  checked={circleEnabled}
-                  onChange={(e) => setCircleEnabled(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="circleEnabled" className="ml-2 block text-sm text-gray-900">
-                  Enable Circle Mode
-                </label>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 ml-6">
-                In Circle Mode, the final round must connect back to the original starting topic.
-              </p>
-            </div>
-            
             {/* Single difficulty selector */}
             <div className="mb-0">
               <label className="block text-left mb-2 font-medium">Game Difficulty:</label>
@@ -948,6 +1006,9 @@ export default function GameInterface() {
                 )}
                 {currentRound === maxRounds && !circleEnabled && (
                   <span className="text-xs bg-orange-100 px-2 py-1 rounded-full">Final Round</span>
+                )}
+                {isCustomTopicSelected && (
+                  <span className="text-xs bg-purple-100 px-2 py-1 rounded-full ml-2">Custom Selected Topic</span>
                 )}
               </div>
               <div className="flex items-center gap-4">
@@ -1066,7 +1127,14 @@ export default function GameInterface() {
                       disabled={isEvaluating}
                       autoFocus
                     />
-                    <p className="text-sm text-gray-500 mt-1">Keep your response concise (1-5 words) for best results. The quality of the conceptual connection is what matters.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Keep your response concise (1-5 words) for best results. The quality of the conceptual connection is what matters.
+                      {isCustomTopicSelected && (
+                        <span className="text-purple-600 ml-1">
+                          You're responding to a custom selected topic.
+                        </span>
+                      )}
+                    </p>
                     <div className="flex justify-end mt-2">
                       <button
                         onClick={evaluateResponse}
@@ -1193,6 +1261,9 @@ export default function GameInterface() {
             {gameHistory.length > 0 && (
               <div className="mt-8">
                 <h2 className="text-xl font-semibold mb-4">Game History</h2>
+                <p className="text-sm text-gray-600 mb-2">
+                  Click on any previous response to use it as the topic for your next response.
+                </p>
                 <div className="overflow-auto max-h-60">
                   <table className="min-w-full bg-white">
                     <thead className="bg-gray-100">
@@ -1202,6 +1273,7 @@ export default function GameInterface() {
                         <th className="py-2 px-4 text-left">Player</th>
                         <th className="py-2 px-4 text-left">Response</th>
                         <th className="py-2 px-4 text-left">Score</th>
+                        <th className="py-2 px-4 text-left">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1212,9 +1284,12 @@ export default function GameInterface() {
                           // Calculate the actual round number for display
                           const actualRoundNumber = gameHistory.length - index;
                           const isCircleRound = circleEnabled && actualRoundNumber === maxRounds;
+                          const isSelected = selectedHistoryItem && 
+                            selectedHistoryItem.round === round.round && 
+                            selectedHistoryItem.response === round.response;
                           
                           return (
-                            <tr key={index} className="border-t">
+                            <tr key={index} className={`border-t ${isSelected ? 'bg-purple-50' : ''}`}>
                               <td className="py-2 px-4">{actualRoundNumber}</td>
                               <td className="py-2 px-4">{round.topic}</td>
                               <td className="py-2 px-4">
@@ -1231,6 +1306,20 @@ export default function GameInterface() {
                                 >
                                   {round.scores.total}/20
                                 </span>
+                              </td>
+                              <td className="py-2 px-4">
+                                {!showingResults && !isEvaluating && !isAiThinking && !gameCompleted && (
+                                  <button
+                                    onClick={() => handleSelectHistoryItem(round)}
+                                    className={`text-xs px-2 py-1 rounded-full ${
+                                      isSelected 
+                                        ? 'bg-purple-600 text-white' 
+                                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                    }`}
+                                  >
+                                    {isSelected ? 'Selected' : 'Use as Topic'}
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -1251,6 +1340,9 @@ export default function GameInterface() {
               currentTopic={topic}
               width={450}
               height={500}
+              connections={connections}
+              onNodeClick={(historyItem: GameHistory) => !showingResults && !isEvaluating && !gameCompleted && handleSelectHistoryItem(historyItem)}
+              selectedNode={selectedHistoryItem}
             />
           </div>
         </div>
