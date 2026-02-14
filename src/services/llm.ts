@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { OpenAI } from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLM_CONFIG, currentModelConfig } from '@/config/llm';
 
 // Initialize Anthropic client
@@ -12,6 +13,9 @@ const deepseekClient = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
   baseURL: LLM_CONFIG.endpoints.deepseek,
 });
+
+// Initialize Gemini client
+const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Difficulty level descriptions for the system prompt
 export const difficultyPrompts = {
@@ -204,6 +208,30 @@ export async function generateTopic(
     const topic = response.choices?.[0]?.message?.content?.trim() || 'Failed to generate a topic';
     
     return topic;
+  } else if (currentModelConfig.provider === 'gemini') {
+    // Use Gemini API
+    console.log('Using Gemini API with model:', currentModelConfig.model);
+    const model = gemini.getGenerativeModel({ 
+      model: currentModelConfig.model,
+      systemInstruction: systemPrompt,
+    });
+    
+    const result = await callWithRetry(() => 
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+        generationConfig: {
+          temperature: LLM_CONFIG.temperature.creative,
+          maxOutputTokens: 100,
+        },
+      })
+    );
+    
+    console.log('API request successful');
+    
+    // Extract the text content from the response
+    const topic = result.response.text()?.trim() || 'Failed to generate a topic';
+    
+    return topic;
   } else {
     throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
   }
@@ -278,6 +306,28 @@ export async function getDefinition(topic: string): Promise<string> {
       
       // Extract the text content from the response
       const definition = response.choices?.[0]?.message?.content?.trim() || 'Definition not available.';
+      
+      return definition;
+    } else if (currentModelConfig.provider === 'gemini') {
+      // Use Gemini API
+      console.log('Using Gemini API with model:', currentModelConfig.model);
+      const model = gemini.getGenerativeModel({ 
+        model: currentModelConfig.model,
+        systemInstruction: systemPrompt,
+      });
+      
+      const result = await callWithRetry(() => 
+        model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+          generationConfig: {
+            temperature: LLM_CONFIG.temperature.factual,
+            maxOutputTokens: 250,
+          },
+        })
+      );
+      
+      // Extract the text content from the response
+      const definition = result.response.text()?.trim() || 'Definition not available.';
       
       return definition;
     } else {
@@ -415,6 +465,27 @@ export async function getAiResponse(
         const aiResponse = response.choices?.[0]?.message?.content?.trim() || 'Connection not found';
         
         return aiResponse;
+      } else if (currentModelConfig.provider === 'gemini') {
+        // Use Gemini API
+        const model = gemini.getGenerativeModel({ 
+          model: currentModelConfig.model,
+          systemInstruction: systemPrompt,
+        });
+        
+        const result = await callWithRetry(() => 
+          model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+            generationConfig: {
+              temperature: LLM_CONFIG.temperature.creative,
+              maxOutputTokens: 100,
+            },
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = result.response.text()?.trim() || 'Connection not found';
+        
+        return aiResponse;
       } else {
         throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
@@ -501,6 +572,27 @@ export async function getAiResponse(
         
         // Extract the text content from the response
         const aiResponse = response.choices?.[0]?.message?.content?.trim() || 'Connection not found';
+        
+        return aiResponse;
+      } else if (currentModelConfig.provider === 'gemini') {
+        // Use Gemini API
+        const model = gemini.getGenerativeModel({ 
+          model: currentModelConfig.model,
+          systemInstruction: systemPrompt,
+        });
+        
+        const result = await callWithRetry(() => 
+          model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+            generationConfig: {
+              temperature: LLM_CONFIG.temperature.creative,
+              maxOutputTokens: 100,
+            },
+          })
+        );
+        
+        // Extract the text content from the response
+        const aiResponse = result.response.text()?.trim() || 'Connection not found';
         
         return aiResponse;
       } else {
@@ -760,6 +852,59 @@ export async function evaluateResponse(
             }
           };
         }
+      } else if (currentModelConfig.provider === 'gemini') {
+        // Use Gemini API
+        console.log('Using Gemini API with model:', currentModelConfig.model);
+        const model = gemini.getGenerativeModel({ 
+          model: currentModelConfig.model,
+          systemInstruction: systemPrompt,
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        });
+        
+        const result = await callWithRetry(() => 
+          model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+            generationConfig: {
+              temperature: LLM_CONFIG.temperature.evaluation,
+              maxOutputTokens: LLM_CONFIG.maxTokens.evaluation,
+              responseMimeType: "application/json",
+            },
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.response.text()?.trim() || '{}';
+        
+        // Parse the JSON response
+        try {
+          const evaluationData = JSON.parse(evaluationText);
+          console.log('Evaluation data parsed successfully');
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          console.error('Raw evaluation text:', evaluationText);
+          
+          // Return a fallback evaluation object
+          return {
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
+            finalEvaluation: "Error parsing the evaluation.",
+            scores: {
+              currentConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              originalConnection: {
+                semanticDistance: 5,
+                similarity: 5,
+                subtotal: 10
+              },
+              total: 10
+            }
+          };
+        }
       } else {
         throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
       }
@@ -956,6 +1101,50 @@ export async function evaluateResponse(
           // Add debugging output for the error case
           console.error('Raw evaluation text that caused the error:');
           console.error(evaluationText);
+          
+          // Return a fallback evaluation object
+          return {
+            evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
+            scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
+              total: 10
+            }
+          };
+        }
+      } else if (currentModelConfig.provider === 'gemini') {
+        // Use Gemini API
+        console.log('Using Gemini API with model:', currentModelConfig.model);
+        const model = gemini.getGenerativeModel({ 
+          model: currentModelConfig.model,
+          systemInstruction: systemPrompt,
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        });
+        
+        const result = await callWithRetry(() => 
+          model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+            generationConfig: {
+              temperature: LLM_CONFIG.temperature.evaluation,
+              maxOutputTokens: LLM_CONFIG.maxTokens.evaluation,
+              responseMimeType: "application/json",
+            },
+          })
+        );
+        
+        // Extract the text content from the response
+        const evaluationText = result.response.text()?.trim() || '{}';
+        
+        // Parse the JSON response
+        try {
+          const evaluationData = JSON.parse(evaluationText);
+          console.log('Evaluation data parsed successfully');
+          return evaluationData;
+        } catch (parseError) {
+          console.error('Error parsing evaluation JSON:', parseError);
+          console.error('Raw evaluation text:', evaluationText);
           
           // Return a fallback evaluation object
           return {

@@ -1,5 +1,7 @@
-import ClientApp from './ClientApp';
+'use client';
+
+import GameInterface from './components/GameInterface';
 
 export default function Home() {
-  return <ClientApp />;
+  return <GameInterface />;
 }

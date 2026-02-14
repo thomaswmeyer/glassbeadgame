@@ -2,26 +2,35 @@
 export const LLM_CONFIG = {
   // Models configuration with name, provider, and descriptions
   models: {
-    // Anthropic models
-    sonnet: {
-      name: "claude-3-7-sonnet-latest",
-      provider: "anthropic",
-      displayName: "Claude 3.7 Sonnet",
-      description: "Latest and most capable model",
-      category: "anthropic"
+    // Google Gemini models - MOST COST-EFFECTIVE
+    gemini_flash: {
+      name: "gemini-3-flash-preview",
+      provider: "gemini",
+      displayName: "Gemini 3 Flash",
+      description: "Most cost-effective - Latest model with frontier intelligence",
+      category: "gemini"
     },
-    haiku: {
-      name: "claude-3-5-haiku-latest",
+    
+    // Anthropic models - Updated to latest versions
+    sonnet: {
+      name: "claude-sonnet-4-5",
       provider: "anthropic",
-      displayName: "Claude 3.5 Haiku",
-      description: "Fast and efficient model",
+      displayName: "Claude Sonnet 4.5",
+      description: "Best for coding and agents - $3/$15 per 1M tokens",
       category: "anthropic"
     },
     opus: {
-      name: "claude-3-opus-latest",
+      name: "claude-opus-4-6",
       provider: "anthropic",
-      displayName: "Claude 3 Opus",
-      description: "Highest quality, but slower and more expensive",
+      displayName: "Claude Opus 4.6",
+      description: "Most advanced Claude model - Highest quality",
+      category: "anthropic"
+    },
+    haiku: {
+      name: "claude-haiku-4-5",
+      provider: "anthropic",
+      displayName: "Claude Haiku 4.5",
+      description: "Fastest Claude model - $1/$5 per 1M tokens",
       category: "anthropic"
     },
     
@@ -30,14 +39,14 @@ export const LLM_CONFIG = {
       name: "deepseek-chat",
       provider: "deepseek",
       displayName: "DeepSeek Chat",
-      description: "General-purpose chat model with strong reasoning capabilities",
+      description: "General-purpose chat - $0.14/$0.28 per 1M tokens",
       category: "deepseek"
     },
     deepseek_reasoner: {
       name: "deepseek-reasoner",
       provider: "deepseek",
       displayName: "DeepSeek Reasoner",
-      description: "Specialized for complex reasoning and problem-solving",
+      description: "Complex reasoning - $0.55/$2.19 per 1M tokens",
       category: "deepseek"
     }
   },
@@ -52,7 +61,8 @@ export const LLM_CONFIG = {
   // API endpoints
   endpoints: {
     anthropic: "",  // Uses the Anthropic SDK directly
-    deepseek: "https://api.deepseek.com/v1/chat/completions"  // DeepSeek API endpoint
+    deepseek: "https://api.deepseek.com/v1/chat/completions",  // DeepSeek API endpoint
+    gemini: ""  // Uses the Gemini SDK directly
   },
   
   // Response format settings for different providers
@@ -75,8 +85,8 @@ export const LLM_CONFIG = {
   production: {
     // Check if we're in production mode (NEXT_PUBLIC_ prefix makes it available on client-side)
     isProduction: process.env.NEXT_PUBLIC_PRODUCTION_MODE === 'true',
-    // Default model to use in production mode
-    defaultModel: 'deepseek_chat'
+    // Default model to use in production mode - Gemini Flash is most cost-effective
+    defaultModel: 'gemini_flash'
   }
 };
 
@@ -84,7 +94,7 @@ export const LLM_CONFIG = {
 // In production mode, always use the production default model
 const defaultModel = LLM_CONFIG.production.isProduction 
   ? LLM_CONFIG.production.defaultModel 
-  : 'sonnet'; // Development default
+  : 'gemini_flash'; // Development default - most cost-effective
 
 export let currentModelConfig = {
   model: '',

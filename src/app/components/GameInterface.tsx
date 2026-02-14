@@ -1334,7 +1334,6 @@ export default function GameInterface() {
           {/* Concept graph visualization - right side */}
           <div className="w-full lg:w-[450px] sticky top-6 self-start">
             <SimpleConceptGraph 
-              key={graphKey}
               gameHistory={gameHistory}
               originalTopic={originalTopic}
               currentTopic={topic}
