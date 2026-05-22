@@ -1,6 +1,24 @@
 import { NextResponse } from 'next/server';
 import { getDefinition } from '@/services/llm';
 
+const MAX_DEFINITION_CACHE_ENTRIES = 100;
+const definitionCache = new Map<string, string>();
+
+function normalizeTopic(topic: string) {
+  return topic.trim().toLowerCase();
+}
+
+function cacheDefinition(topic: string, definition: string) {
+  if (definitionCache.size >= MAX_DEFINITION_CACHE_ENTRIES) {
+    const oldestKey = definitionCache.keys().next().value;
+    if (oldestKey) {
+      definitionCache.delete(oldestKey);
+    }
+  }
+
+  definitionCache.set(normalizeTopic(topic), definition);
+}
+
 export async function POST(request: Request) {
   console.log('=== GET DEFINITION ROUTE CALLED ===');
   
@@ -15,13 +33,20 @@ export async function POST(request: Request) {
     }
     
     console.log('Requested definition for topic:', topic);
+
+    const cachedDefinition = definitionCache.get(normalizeTopic(topic));
+    if (cachedDefinition) {
+      console.log('Definition served from cache');
+      return NextResponse.json({ definition: cachedDefinition, cached: true });
+    }
     
     try {
       // Get definition using our LLM service
       const definition = await getDefinition(topic);
+      cacheDefinition(topic, definition);
       console.log('Definition generated successfully');
       
-      return NextResponse.json({ definition });
+      return NextResponse.json({ definition, cached: false });
     } catch (error) {
       console.error('Error getting definition:', error);
       
@@ -37,4 +62,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

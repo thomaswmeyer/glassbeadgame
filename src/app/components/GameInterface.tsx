@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, KeyboardEvent, useEffect } from 'react';
+import { useState, KeyboardEvent, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
@@ -49,6 +49,7 @@ type CurrentEvaluation = {
 };
 
 export default function GameInterface() {
+  const definitionCacheRef = useRef<Map<string, string>>(new Map());
   const [topic, setTopic] = useState<string>('');
   const [originalTopic, setOriginalTopic] = useState<string>('');
   const [topicDefinition, setTopicDefinition] = useState<string>('');
@@ -170,16 +171,29 @@ export default function GameInterface() {
     }
   };
 
+  const getCachedDefinition = async (definitionTopic: string) => {
+    const cacheKey = definitionTopic.trim().toLowerCase();
+    const cachedDefinition = definitionCacheRef.current.get(cacheKey);
+
+    if (cachedDefinition) {
+      return cachedDefinition;
+    }
+
+    const result = await axios.post('/api/get-definition', {
+      topic: definitionTopic,
+    });
+    const definition = result.data.definition;
+    definitionCacheRef.current.set(cacheKey, definition);
+    return definition;
+  };
+
   const fetchTopicDefinition = async () => {
     if (!topic || isLoadingDefinition) return;
     
     setIsLoadingDefinition(true);
     try {
-      const result = await axios.post('/api/get-definition', {
-        topic,
-      });
-      
-      setTopicDefinition(result.data.definition);
+      const definition = await getCachedDefinition(topic);
+      setTopicDefinition(definition);
       setShowDefinition(true);
     } catch (error) {
       console.error('Error fetching definition:', error);
@@ -195,11 +209,8 @@ export default function GameInterface() {
     
     setIsLoadingOriginalDefinition(true);
     try {
-      const result = await axios.post('/api/get-definition', {
-        topic: originalTopic,
-      });
-      
-      setOriginalTopicDefinition(result.data.definition);
+      const definition = await getCachedDefinition(originalTopic);
+      setOriginalTopicDefinition(definition);
       setShowOriginalDefinition(true);
     } catch (error) {
       console.error('Error fetching original topic definition:', error);
@@ -721,13 +732,8 @@ export default function GameInterface() {
           console.log('Final AI response:', aiResponse);
           setResponse(aiResponse);
           
-          // Wait a moment to simulate thinking
-          console.log('Waiting before evaluation...');
-          setTimeout(() => {
-            console.log('Timeout completed, evaluating AI response');
-            // Call evaluate directly with the response instead of using the state
-            evaluateAiResponse(aiResponse);
-          }, 1500);
+          setIsAiThinking(false);
+          await evaluateAiResponse(aiResponse);
           
         } catch (error: any) {
           console.error('=== AI RESPONSE ERROR ===');
@@ -752,13 +758,8 @@ export default function GameInterface() {
           
           setResponse(aiResponse);
           
-          // Wait a moment to simulate thinking
-          setTimeout(() => {
-            // Call evaluate directly with the response instead of using the state
-            evaluateAiResponse(aiResponse);
-          }, 1500);
-          
           setIsAiThinking(false);
+          await evaluateAiResponse(aiResponse);
         }
       }
     };

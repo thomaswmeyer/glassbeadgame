@@ -17,6 +17,24 @@ const deepseekClient = new OpenAI({
 // Initialize Gemini client
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+function trimIncompleteTrailingSentence(text: string): string {
+  const definition = text.trim();
+  if (!definition) return definition;
+  if (/[.!?]["')\]]?$/.test(definition)) return definition;
+
+  const lastSentenceEnd = Math.max(
+    definition.lastIndexOf('.'),
+    definition.lastIndexOf('!'),
+    definition.lastIndexOf('?')
+  );
+
+  if (lastSentenceEnd > 40) {
+    return definition.slice(0, lastSentenceEnd + 1).trim();
+  }
+
+  return `${definition}.`;
+}
+
 // Difficulty level descriptions for the system prompt
 export const difficultyPrompts = {
   secondary: "Your response should use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology.",
@@ -246,11 +264,11 @@ export async function getDefinition(topic: string): Promise<string> {
   // System prompt for definition
   const systemPrompt = `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
     
-    When given a topic, provide a brief, clear definition that explains what it is in 2-4 complete sentences.
+    When given a topic, provide a brief, clear definition that explains what it is in 1-2 complete sentences.
     
     Your definition should be:
     1. Accurate and informative
-    2. Concise (no more than 120 words)
+    2. Concise (no more than 80 words)
     3. Accessible to a general audience
     4. Free of unnecessary jargon
     5. Written as complete sentences, never ending mid-thought
@@ -268,7 +286,7 @@ export async function getDefinition(topic: string): Promise<string> {
       const response = await callWithRetry(() => 
         anthropic.messages.create({
           model: currentModelConfig.model,
-          max_tokens: 500,
+          max_tokens: LLM_CONFIG.maxTokens.definition,
           temperature: LLM_CONFIG.temperature.factual,
           system: systemPrompt,
           messages: [
@@ -285,7 +303,7 @@ export async function getDefinition(topic: string): Promise<string> {
         ? response.content[0].text.trim() 
         : 'Definition not available.';
       
-      return definition;
+      return trimIncompleteTrailingSentence(definition);
     } else if (currentModelConfig.provider === 'deepseek') {
       // Use DeepSeek API
       console.log('Using DeepSeek API with model:', currentModelConfig.model);
@@ -300,7 +318,7 @@ export async function getDefinition(topic: string): Promise<string> {
         callDeepSeekAPI({
           model: currentModelConfig.model,
           messages: messages as any,
-          max_tokens: 500,
+          max_tokens: LLM_CONFIG.maxTokens.definition,
           temperature: LLM_CONFIG.temperature.factual,
         })
       );
@@ -308,7 +326,7 @@ export async function getDefinition(topic: string): Promise<string> {
       // Extract the text content from the response
       const definition = response.choices?.[0]?.message?.content?.trim() || 'Definition not available.';
       
-      return definition;
+      return trimIncompleteTrailingSentence(definition);
     } else if (currentModelConfig.provider === 'gemini') {
       // Use Gemini API
       console.log('Using Gemini API with model:', currentModelConfig.model);
@@ -322,7 +340,7 @@ export async function getDefinition(topic: string): Promise<string> {
           contents: [{ role: 'user', parts: [{ text: userMessage }] }],
           generationConfig: {
             temperature: LLM_CONFIG.temperature.factual,
-            maxOutputTokens: 500,
+            maxOutputTokens: LLM_CONFIG.maxTokens.definition,
           },
         })
       );
@@ -330,7 +348,7 @@ export async function getDefinition(topic: string): Promise<string> {
       // Extract the text content from the response
       const definition = result.response.text()?.trim() || 'Definition not available.';
       
-      return definition;
+      return trimIncompleteTrailingSentence(definition);
     } else {
       throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
     }

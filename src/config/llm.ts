@@ -4,10 +4,10 @@ export const LLM_CONFIG = {
   models: {
     // Google Gemini models - MOST COST-EFFECTIVE
     gemini_flash: {
-      name: "gemini-3-flash-preview",
+      name: "gemini-3.1-flash-lite",
       provider: "gemini",
-      displayName: "Gemini 3 Flash",
-      description: "Most cost-effective - Latest model with frontier intelligence",
+      displayName: "Gemini 3.1 Flash-Lite",
+      description: "Fastest and most cost-effective Gemini 3.1 model",
       category: "gemini"
     },
     
@@ -76,7 +76,7 @@ export const LLM_CONFIG = {
   // Max tokens settings for different request types
   maxTokens: {
     topic: 100,
-    definition: 250,
+    definition: 800,
     response: 100,
     evaluation: 1000
   },
@@ -126,4 +126,4 @@ export function updateModel(modelKey: string): void {
   };
   
   console.log(`Model updated to: ${currentModelConfig.model} (${currentModelConfig.provider})`);
-} 
+}
