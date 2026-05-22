@@ -553,6 +553,29 @@ export default function GameInterface() {
     console.log(`Selected previous topic: "${historyItem.response}" from round ${historyItem.round}`);
   };
 
+  const selectedGraphNodeId = (() => {
+    if (!selectedHistoryItem) return null;
+
+    const selectedIndex = gameHistory.findIndex(item =>
+      item.round === selectedHistoryItem.round &&
+      item.topic === selectedHistoryItem.topic &&
+      item.response === selectedHistoryItem.response
+    );
+
+    return selectedIndex === -1 ? null : `response-${selectedIndex}-${selectedHistoryItem.response}`;
+  })();
+
+  const handleGraphNodeClick = (nodeId: string) => {
+    const match = /^response-(\d+)-/.exec(nodeId);
+    if (!match) return;
+
+    const historyIndex = Number(match[1]);
+    const historyItem = gameHistory[historyIndex];
+    if (historyItem) {
+      handleSelectHistoryItem(historyItem);
+    }
+  };
+
   const handleNextTurn = () => {
     // If game is completed, don't proceed
     if (gameCompleted) return;
@@ -564,21 +587,10 @@ export default function GameInterface() {
     console.log('Current evaluation state:', currentEvaluation);
     console.log('Game history:', gameHistory);
     
-    // Get the response that will become the next topic
-    let nextTopic = '';
-    
-    if (currentPlayer === 'human') {
-      // If it's currently human's turn, use their response as the next topic
-      nextTopic = response;
-      console.log('Using human response as next topic:', nextTopic);
-    } else if (currentEvaluation) {
-      // If it's AI's turn, use the AI's response from the evaluation
-      nextTopic = currentEvaluation.response;
-      console.log('Using AI response as next topic:', nextTopic);
-    } else {
-      console.error('Current evaluation is null:', currentEvaluation);
-      console.error('Current player is AI but no evaluation is available');
-    }
+    // Use the evaluated response as the next topic. The input state is cleared
+    // after evaluation, so currentEvaluation is the durable source here.
+    let nextTopic = currentEvaluation?.response || '';
+    console.log('Using evaluated response as next topic:', nextTopic);
     
     if (!nextTopic || !nextTopic.trim()) {
       console.error('No valid next topic found!');
@@ -1340,8 +1352,8 @@ export default function GameInterface() {
               width={450}
               height={500}
               connections={connections}
-              onNodeClick={(historyItem: GameHistory) => !showingResults && !isEvaluating && !gameCompleted && handleSelectHistoryItem(historyItem)}
-              selectedNode={selectedHistoryItem}
+              onNodeClick={handleGraphNodeClick}
+              selectedNode={selectedGraphNodeId}
             />
           </div>
         </div>
@@ -1419,4 +1431,4 @@ export default function GameInterface() {
       )}
     </div>
   );
-} 
+}

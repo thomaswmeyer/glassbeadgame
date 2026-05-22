@@ -37,6 +37,8 @@ interface SimpleConceptGraphProps {
   gameHistory: GameHistory[];
   originalTopic: string;
   currentTopic: string;
+  width?: number;
+  height?: number;
   selectedNode: string | null;
   connections: {from: number, to: number}[];
   onNodeClick: (nodeId: string) => void;
@@ -80,12 +82,14 @@ export default function SimpleConceptGraph({
   gameHistory,
   originalTopic,
   currentTopic,
+  width = 800,
+  height = 600,
   selectedNode,
   connections,
   onNodeClick
 }: SimpleConceptGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width, height });
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [tooltipContent, setTooltipContent] = useState<{title: string, content: string} | null>(null);
@@ -103,8 +107,8 @@ export default function SimpleConceptGraph({
         const container = svgRef.current.parentElement;
         if (container) {
           setDimensions({
-            width: container.clientWidth,
-            height: container.clientHeight
+            width: container.clientWidth || width,
+            height: container.clientHeight || height
           });
         }
       }
@@ -113,7 +117,7 @@ export default function SimpleConceptGraph({
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [width, height]);
 
   // Function to fit the graph in the viewport
   const fitGraph = useCallback((svg: d3.Selection<SVGSVGElement, unknown, null, undefined>, nodes: d3.Selection<SVGCircleElement, Node, SVGGElement, unknown>, width: number, height: number) => {
@@ -647,4 +651,4 @@ function buildGraphData(
   }
   
   return { nodes, links };
-} 
+}

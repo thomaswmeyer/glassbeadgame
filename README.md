@@ -1,97 +1,161 @@
-# Glass Bead Game - LLM Edition
+# Glass Bead Game
 
-An LLM-based version of the Glass Bead Game where players respond to AI-generated topics and receive scores based on semantic distance and relevance.
+A casual, LLM-powered concept association game inspired by Hermann Hesse's
+_The Glass Bead Game_. The player and an AI opponent take turns making short
+conceptual moves. Each move is scored for how interestingly it connects to the
+current topic, and then that response becomes the next topic.
 
-## Game Concept
+This repo is a Next.js prototype. It is playable locally, but it does not yet
+have a formal automated test suite.
 
-The Glass Bead Game is inspired by Hermann Hesse's novel of the same name. In this digital adaptation:
+## How the Game Works
 
-1. An AI proposes an initial thought-provoking topic
-2. Players respond with their own insights, connections, or reflections
-3. Responses are scored based on two criteria:
-   - **Semantic Distance (1-10)**: How far the response has moved from the original topic while still maintaining a meaningful connection
-   - **Relevance and Quality (1-10)**: How insightful and well-articulated the response is in relation to the topic
-4. The total score is the sum of these two values (maximum 20 points)
+1. The app asks an LLM to generate a starting topic.
+2. The human player and the AI take alternating turns.
+3. On each turn, the active player responds to the current topic with a short
+   word or phrase, ideally 1-5 words.
+4. The response is evaluated by an LLM and given a score out of 20.
+5. That response becomes the topic for the next turn.
+6. After the configured number of rounds, the player with the highest total
+   score wins.
 
-## Features
+Scores are based on:
 
-- AI-generated thought-provoking topics
-- Interactive response submission
-- Detailed evaluation of responses with scoring
-- Beautiful spring-based force-directed graph visualization (D3.js)
-- Multiple AI model support (Gemini, Claude, DeepSeek)
-- Cost-optimized for production deployment
+- **Semantic distance**: how non-obvious the connection is while still being
+  meaningful.
+- **Relevance / similarity / quality**: how well the new concept maps back to
+  the current topic.
 
-## Technology Stack
+The UI also shows a D3 concept graph so the chain of ideas can be inspected as
+the game develops.
 
-- [Next.js 16](https://nextjs.org/) - React framework
-- [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
-- [Google Gemini API](https://ai.google.dev/) - Default AI model (most cost-effective)
-- [Anthropic Claude API](https://anthropic.com/) - Optional premium AI model
-- [DeepSeek API](https://deepseek.com/) - Optional budget AI model
-- [D3.js](https://d3js.org/) - Dynamic force-directed graph visualization
-- [Axios](https://axios-http.com/) - API requests
-- [HeadlessUI](https://headlessui.com/) - Accessible UI components
+## Current Features
 
-## Getting Started
+- AI-generated starting topics across philosophy, science, math, art, history,
+  psychology, sociology, technology, religion, and economics.
+- Human vs AI turn-based play.
+- Configurable round count.
+- Human-first or AI-first game start.
+- Difficulty levels: secondary, university, and unlimited.
+- LLM scoring and written evaluations after each turn.
+- Definition lookup for the current and original topics.
+- Concept graph visualization using D3.
+- Development model selector for Anthropic Claude and DeepSeek models.
+- Production mode that locks the app to the configured Gemini model.
 
-### Prerequisites
+## Tech Stack
 
-- Node.js 20.19.0 or later
-- A Google Gemini API key (free tier available)
+- Next.js 16
+- React 18
+- TypeScript
+- Tailwind CSS
+- D3
+- Google Gemini API
+- Anthropic API
+- DeepSeek API via the OpenAI SDK
 
-### Installation
+## Project Structure
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/glassbeadgame.git
-   cd glassbeadgame
-   ```
+```text
+src/app/page.tsx                         Main app entry
+src/app/components/GameInterface.tsx     Core game state and UI
+src/app/components/SimpleConceptGraph.tsx D3 concept graph
+src/app/components/ModelSelector.tsx     Development model selector
+src/app/api/*/route.ts                   Server-side API endpoints
+src/services/llm.ts                      LLM provider calls and prompts
+src/config/llm.ts                        Model configuration
+```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Requirements
 
-3. Create a `.env.local` file in the root directory and add your API key(s):
-   ```
-   # Required - Get a free key at https://aistudio.google.com/
-   GEMINI_API_KEY=your_gemini_api_key_here
-   
-   # Optional - for Claude models
-   ANTHROPIC_API_KEY=your_anthropic_api_key_here
-   
-   # Optional - for DeepSeek models
-   DEEPSEEK_API_KEY=your_deepseek_api_key_here
-   
-   # Production mode - locks to Gemini only (hides model selector)
-   NEXT_PUBLIC_PRODUCTION_MODE=true
-   ```
+- Node.js 20.19.0, matching `.nvmrc`
+- npm
+- At least one LLM API key
 
-### Running the Development Server
+Gemini is the default provider in `src/config/llm.ts`, so `GEMINI_API_KEY` is
+the simplest key to start with.
+
+## Setup
+
+```bash
+nvm use
+npm install
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` and add the keys you want to use:
+
+```bash
+GEMINI_API_KEY=your_gemini_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+NEXT_PUBLIC_PRODUCTION_MODE=false
+```
+
+Only the key for the active provider is required. If you leave production mode
+off, the development model selector is shown on the start screen.
+
+## Run Locally
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open:
 
-## Cost Estimates
+```text
+http://localhost:4321
+```
 
-Using Gemini 3 Flash (default):
-- **~$0.0036 per game** (5 rounds)
-- 1,000 games/day = ~$3.60/day or $108/month
-- Excellent quality-to-cost ratio for creative tasks
+To run a production build locally:
 
-## Production Deployment
+```bash
+npm run build
+npm run start
+```
 
-When deploying to production:
+## Manual Test Pass
 
-1. Set `NEXT_PUBLIC_PRODUCTION_MODE=true` in your environment variables
-2. This locks the app to Gemini Flash only and hides the model selector
-3. Most cost-effective option for public demos
+There is currently no `npm test` script and no dedicated test runner configured.
+For now, use this smoke test after starting the dev server:
+
+1. Open `http://localhost:4321`.
+2. Choose a round count, first player, difficulty, and model.
+3. Start a game and confirm a starting topic is generated.
+4. Submit a short response and confirm an evaluation and score appear.
+5. Click through to the next turn and confirm the AI responds.
+6. Check that the score totals update.
+7. Use the definition button and confirm a definition appears.
+8. Confirm the concept graph updates as rounds are added.
+9. Finish the configured number of rounds and confirm a winner is shown.
+
+Useful development checks:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+## Current Maintenance Notes
+
+- There is still no `npm test` script or dedicated test runner.
+- `npm run lint` is ESLint 9-compatible and exits successfully, but it still
+  reports warnings for legacy `any` usage, unused state/helpers, and hook
+  dependency issues.
+- `npm run build` no longer depends on fetching Google-hosted fonts. In
+  sandboxed environments, Turbopack may still need permission to spawn worker
+  processes and bind its internal worker port.
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | For Gemini | Topic generation, AI responses, definitions, and scoring with Gemini |
+| `ANTHROPIC_API_KEY` | For Claude | Optional Claude model support |
+| `DEEPSEEK_API_KEY` | For DeepSeek | Optional DeepSeek model support |
+| `NEXT_PUBLIC_PRODUCTION_MODE` | No | Set to `true` to hide model selection and force the production default model |
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT. See `LICENSE`.

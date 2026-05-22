@@ -246,13 +246,14 @@ export async function getDefinition(topic: string): Promise<string> {
   // System prompt for definition
   const systemPrompt = `You are a knowledgeable assistant providing concise definitions for concepts, terms, or topics. 
     
-    When given a topic, provide a brief, clear definition that explains what it is in 2-3 sentences. 
+    When given a topic, provide a brief, clear definition that explains what it is in 2-4 complete sentences.
     
     Your definition should be:
     1. Accurate and informative
-    2. Concise (no more than 2-3 sentences)
+    2. Concise (no more than 120 words)
     3. Accessible to a general audience
     4. Free of unnecessary jargon
+    5. Written as complete sentences, never ending mid-thought
     
     Provide ONLY the definition without any introductory phrases like "Here's a definition" or "This term refers to".`;
   
@@ -267,7 +268,7 @@ export async function getDefinition(topic: string): Promise<string> {
       const response = await callWithRetry(() => 
         anthropic.messages.create({
           model: currentModelConfig.model,
-          max_tokens: 250,
+          max_tokens: 500,
           temperature: LLM_CONFIG.temperature.factual,
           system: systemPrompt,
           messages: [
@@ -299,7 +300,7 @@ export async function getDefinition(topic: string): Promise<string> {
         callDeepSeekAPI({
           model: currentModelConfig.model,
           messages: messages as any,
-          max_tokens: 250,
+          max_tokens: 500,
           temperature: LLM_CONFIG.temperature.factual,
         })
       );
@@ -321,7 +322,7 @@ export async function getDefinition(topic: string): Promise<string> {
           contents: [{ role: 'user', parts: [{ text: userMessage }] }],
           generationConfig: {
             temperature: LLM_CONFIG.temperature.factual,
-            maxOutputTokens: 250,
+            maxOutputTokens: 500,
           },
         })
       );
@@ -1164,4 +1165,4 @@ export async function evaluateResponse(
     console.error('Error evaluating response:', error);
     throw error;
   }
-} 
+}
