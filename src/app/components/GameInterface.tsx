@@ -48,8 +48,19 @@ type CurrentEvaluation = {
   finalEvaluation?: string;
 };
 
+const ROOT_GRAPH_NODE_ID = 'root';
+
+function responseGraphNodeId(index: number) {
+  return `response-${index}`;
+}
+
+function normalizeDefinitionTopic(topic: string) {
+  return topic.trim().toLowerCase();
+}
+
 export default function GameInterface() {
   const definitionCacheRef = useRef<Map<string, string>>(new Map());
+  const [, setDefinitionCacheVersion] = useState<number>(0);
   const [topic, setTopic] = useState<string>('');
   const [originalTopic, setOriginalTopic] = useState<string>('');
   const [topicDefinition, setTopicDefinition] = useState<string>('');
@@ -58,6 +69,7 @@ export default function GameInterface() {
   const [originalTopicDefinition, setOriginalTopicDefinition] = useState<string>('');
   const [showOriginalDefinition, setShowOriginalDefinition] = useState<boolean>(false);
   const [isLoadingOriginalDefinition, setIsLoadingOriginalDefinition] = useState<boolean>(false);
+  const [isLoadingSelectedNodeDefinition, setIsLoadingSelectedNodeDefinition] = useState<boolean>(false);
   const [response, setResponse] = useState<string>('');
   const [evaluation, setEvaluation] = useState<string>('');
   const [scores, setScores] = useState<Score | null>(null);
@@ -114,6 +126,7 @@ export default function GameInterface() {
 
   // New state variables for graph-based gameplay
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<GameHistory | null>(null);
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [isCustomTopicSelected, setIsCustomTopicSelected] = useState<boolean>(false);
   const [connections, setConnections] = useState<{from: number, to: number}[]>([]);
 
@@ -158,6 +171,10 @@ export default function GameInterface() {
       setCurrentRound(1);
       setGameHistory([]);
       setTotalScores({ human: 0, ai: 0 });
+      setSelectedHistoryItem(null);
+      setSelectedGraphNodeId(ROOT_GRAPH_NODE_ID);
+      setIsCustomTopicSelected(false);
+      setConnections([]);
       
       // Only now that we have a real topic, start the game
       setGameStarted(true);
@@ -172,7 +189,7 @@ export default function GameInterface() {
   };
 
   const getCachedDefinition = async (definitionTopic: string) => {
-    const cacheKey = definitionTopic.trim().toLowerCase();
+    const cacheKey = normalizeDefinitionTopic(definitionTopic);
     const cachedDefinition = definitionCacheRef.current.get(cacheKey);
 
     if (cachedDefinition) {
@@ -184,6 +201,7 @@ export default function GameInterface() {
     });
     const definition = result.data.definition;
     definitionCacheRef.current.set(cacheKey, definition);
+    setDefinitionCacheVersion(version => version + 1);
     return definition;
   };
 
@@ -552,8 +570,15 @@ export default function GameInterface() {
       // Don't allow selection during evaluation or when showing results
       return;
     }
+
+    const selectedIndex = gameHistory.findIndex(item =>
+      item.round === historyItem.round &&
+      item.topic === historyItem.topic &&
+      item.response === historyItem.response
+    );
     
     setSelectedHistoryItem(historyItem);
+    setSelectedGraphNodeId(selectedIndex === -1 ? null : responseGraphNodeId(selectedIndex));
     setIsCustomTopicSelected(true);
     setTopic(historyItem.response); // Use the response as the new topic
     
@@ -564,26 +589,67 @@ export default function GameInterface() {
     console.log(`Selected previous topic: "${historyItem.response}" from round ${historyItem.round}`);
   };
 
-  const selectedGraphNodeId = (() => {
-    if (!selectedHistoryItem) return null;
-
-    const selectedIndex = gameHistory.findIndex(item =>
-      item.round === selectedHistoryItem.round &&
-      item.topic === selectedHistoryItem.topic &&
-      item.response === selectedHistoryItem.response
-    );
-
-    return selectedIndex === -1 ? null : `response-${selectedIndex}-${selectedHistoryItem.response}`;
-  })();
-
   const handleGraphNodeClick = (nodeId: string) => {
+    setSelectedGraphNodeId(nodeId);
+
+    if (nodeId === ROOT_GRAPH_NODE_ID) {
+      setSelectedHistoryItem(null);
+      return;
+    }
+
     const match = /^response-(\d+)-/.exec(nodeId);
     if (!match) return;
 
     const historyIndex = Number(match[1]);
     const historyItem = gameHistory[historyIndex];
     if (historyItem) {
-      handleSelectHistoryItem(historyItem);
+      setSelectedHistoryItem(historyItem);
+    }
+  };
+
+  const selectedGraphNode = (() => {
+    if (!selectedGraphNodeId) return null;
+
+    if (selectedGraphNodeId === ROOT_GRAPH_NODE_ID) {
+      return {
+        id: ROOT_GRAPH_NODE_ID,
+        title: originalTopic,
+        subtitle: 'Original topic',
+        topicForDefinition: originalTopic,
+        historyItem: null as GameHistory | null,
+      };
+    }
+
+    const match = /^response-(\d+)$/.exec(selectedGraphNodeId);
+    if (!match) return null;
+
+    const historyIndex = Number(match[1]);
+    const historyItem = gameHistory[historyIndex];
+    if (!historyItem) return null;
+
+    return {
+      id: selectedGraphNodeId,
+      title: historyItem.response,
+      subtitle: `${historyItem.player === 'human' ? 'Your' : 'AI'} response in round ${historyItem.round}`,
+      topicForDefinition: historyItem.response,
+      historyItem,
+    };
+  })();
+
+  const selectedGraphNodeDefinition = selectedGraphNode
+    ? definitionCacheRef.current.get(normalizeDefinitionTopic(selectedGraphNode.topicForDefinition))
+    : null;
+
+  const fetchSelectedGraphNodeDefinition = async () => {
+    if (!selectedGraphNode || isLoadingSelectedNodeDefinition) return;
+
+    setIsLoadingSelectedNodeDefinition(true);
+    try {
+      await getCachedDefinition(selectedGraphNode.topicForDefinition);
+    } catch (error) {
+      console.error('Error fetching selected node definition:', error);
+    } finally {
+      setIsLoadingSelectedNodeDefinition(false);
     }
   };
 
@@ -782,6 +848,10 @@ export default function GameInterface() {
     setGameHistory([]);
     setCurrentRound(1);
     setTotalScores({ human: 0, ai: 0 });
+    setSelectedHistoryItem(null);
+    setSelectedGraphNodeId(null);
+    setIsCustomTopicSelected(false);
+    setConnections([]);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
@@ -812,6 +882,10 @@ export default function GameInterface() {
     setGameHistory([]);
     setCurrentRound(1);
     setTotalScores({ human: 0, ai: 0 });
+    setSelectedHistoryItem(null);
+    setSelectedGraphNodeId(null);
+    setIsCustomTopicSelected(false);
+    setConnections([]);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
@@ -1077,6 +1151,54 @@ export default function GameInterface() {
               <div className="p-3 bg-blue-50 rounded-lg mb-4 text-sm">
                 <p className="font-medium mb-1">Definition:</p>
                 <p>{topicDefinition}</p>
+              </div>
+            )}
+
+            {selectedGraphNode && (
+              <div className="p-3 bg-purple-50 rounded-lg mb-4 text-sm border border-purple-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-purple-900">{selectedGraphNode.title}</p>
+                    <p className="text-xs text-purple-700">{selectedGraphNode.subtitle}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedGraphNodeId(null)}
+                    className="text-xs px-2 py-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-800"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {selectedGraphNode.historyItem && (
+                  <div className="mt-2 text-gray-700">
+                    <p>Topic: {selectedGraphNode.historyItem.topic}</p>
+                    <p>Score: {selectedGraphNode.historyItem.scores.total}/20</p>
+                  </div>
+                )}
+
+                {selectedGraphNodeDefinition ? (
+                  <div className="mt-3 pt-3 border-t border-purple-100">
+                    <p className="font-medium mb-1">Definition:</p>
+                    <p>{selectedGraphNodeDefinition}</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={fetchSelectedGraphNodeDefinition}
+                    disabled={isLoadingSelectedNodeDefinition}
+                    className="mt-3 text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-full"
+                  >
+                    {isLoadingSelectedNodeDefinition ? 'Loading definition...' : 'Get Definition'}
+                  </button>
+                )}
+
+                {selectedGraphNode.historyItem && !showingResults && !isEvaluating && !isAiThinking && !gameCompleted && (
+                  <button
+                    onClick={() => handleSelectHistoryItem(selectedGraphNode.historyItem!)}
+                    className="mt-3 ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full"
+                  >
+                    Use as Topic
+                  </button>
+                )}
               </div>
             )}
 
