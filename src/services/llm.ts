@@ -37,15 +37,19 @@ function trimIncompleteTrailingSentence(text: string): string {
 
 // Difficulty level descriptions for the system prompt
 export const difficultyPrompts = {
-  secondary: "Your response should use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology.",
-  university: "Your response can use undergraduate university level concepts and some specialized terminology that would be taught in college courses.",
-  unlimited: "Your response can use advanced, specialized, and abstract concepts. Feel free to use graduate-level concepts, obscure references, and specialized terminology from any field."
+  secondary: "Use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology and obscure references.",
+  undergrad: "Use concepts appropriate for a broadly educated undergraduate student. Favor recognizable survey-course ideas, canonical works, and standard concepts. Avoid niche graduate-level mathematics, highly specialized technical terms, and obscure research terminology.",
+  university: "Use concepts appropriate for a broadly educated undergraduate student. Favor recognizable survey-course ideas, canonical works, and standard concepts. Avoid niche graduate-level mathematics, highly specialized technical terms, and obscure research terminology.",
+  grad: "Use graduate-level concepts that may be specialized, but should still be recognizable within a field and not gratuitously obscure.",
+  unlimited: "Use advanced, specialized, and abstract concepts freely. Obscure references, research-level terminology, and highly technical concepts are acceptable."
 };
 
 export const evaluationDifficultyPrompts = {
   secondary: "Evaluate at a high school level. Use simple language and focus on basic connections between concepts.",
-  university: "Evaluate at an undergraduate university level. You can use some specialized terminology and consider more nuanced connections.",
-  unlimited: "Evaluate at an advanced level. Consider complex, abstract, and specialized connections between concepts."
+  undergrad: "Evaluate at an undergraduate level. Use accessible academic language and consider nuanced connections without requiring graduate-level specialization.",
+  university: "Evaluate at an undergraduate level. Use accessible academic language and consider nuanced connections without requiring graduate-level specialization.",
+  grad: "Evaluate at a graduate level. Specialized terminology and field-specific nuance are acceptable when relevant.",
+  unlimited: "Evaluate at an advanced level. Consider complex, abstract, obscure, and specialized connections between concepts."
 };
 
 // Helper function to implement retry logic with exponential backoff
@@ -163,8 +167,9 @@ export async function generateTopic(
     
     Examples of good topics at different levels:
     - Secondary level: Clear, accessible concepts that high school students would understand
-    - University level: More specialized concepts taught in undergraduate courses
-    - Unlimited level: Advanced, specialized concepts that might be discussed in graduate seminars
+    - Undergrad level: Recognizable college-level concepts from survey and upper-division courses
+    - Grad level: Specialized concepts that may appear in graduate seminars
+    - Unlimited level: Research-level, obscure, or highly technical concepts
     
     For ${subcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
     

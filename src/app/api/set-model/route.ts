@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         // Use a simple test request to verify the API is working
         const testCategory = 'test';
         const testSubcategory = 'verification';
-        const testDifficulty = 'university';
+        const testDifficulty = 'undergrad';
         
         // We don't actually need the result, just to verify the API call works
         await generateTopic(testCategory, testSubcategory, testDifficulty);
@@ -96,4 +96,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

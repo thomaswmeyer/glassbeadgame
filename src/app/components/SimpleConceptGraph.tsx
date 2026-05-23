@@ -2,171 +2,118 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { GameHistory } from './GameInterface';
+import { GraphRenderEdge, GraphRenderNode } from '@/domain/game';
 
-type GraphNodeKind = 'root' | 'response';
-
-interface GraphNode extends d3.SimulationNodeDatum {
-  id: string;
-  label: string;
+interface SimulationNode extends GraphRenderNode, d3.SimulationNodeDatum {
   color: string;
   radius: number;
-  kind: GraphNodeKind;
-  historyIndex?: number;
-  player?: 'human' | 'ai';
-  isCurrent: boolean;
-  isSelected: boolean;
 }
 
-interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+interface SimulationEdge extends d3.SimulationLinkDatum<SimulationNode> {
   id: string;
-  source: string | GraphNode;
-  target: string | GraphNode;
+  source: string | SimulationNode;
+  target: string | SimulationNode;
   color: string;
-  width: number;
-  isCustom?: boolean;
-  semanticDistance?: number;
+  semanticDistanceScore?: number;
 }
 
 interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
+  nodes: SimulationNode[];
+  edges: SimulationEdge[];
 }
 
 interface SimpleConceptGraphProps {
-  gameHistory: GameHistory[];
-  originalTopic: string;
-  currentTopic: string;
+  nodes: GraphRenderNode[];
+  edges: GraphRenderEdge[];
   width?: number;
   height?: number;
-  selectedNode: string | null;
-  connections: {from: number, to: number}[];
   onNodeClick: (nodeId: string) => void;
+  onAddSourceNode: (nodeId: string) => void;
+  onRemoveSourceNode: (nodeId: string) => void;
 }
 
-const ROOT_NODE_ID = 'root';
-
-function responseNodeId(index: number) {
-  return `response-${index}`;
+function getNodeColor(node: GraphRenderNode) {
+  if (node.isRoot) return '#D97706';
+  if (node.playerKind === 'ai') return '#DC2626';
+  return '#2563EB';
 }
 
 function buildGraphData(
-  gameHistory: GameHistory[],
-  originalTopic: string,
-  currentTopic: string,
-  connections: {from: number, to: number}[],
-  selectedNode: string | null,
+  renderNodes: GraphRenderNode[],
+  renderEdges: GraphRenderEdge[],
   previousPositions: Map<string, { x: number; y: number }>,
   width: number,
   height: number
 ): GraphData {
-  const nodes: GraphNode[] = [];
-  const links: GraphLink[] = [];
-
-  const rootPosition = previousPositions.get(ROOT_NODE_ID) || {
+  const rootNode = renderNodes.find(node => node.isRoot);
+  const rootPosition = previousPositions.get(rootNode?.id || '') || {
     x: width / 2,
     y: height / 2,
   };
 
-  nodes.push({
-    id: ROOT_NODE_ID,
-    label: originalTopic || 'Original topic',
-    color: '#D97706',
-    radius: 16,
-    kind: 'root',
-    isCurrent: currentTopic === originalTopic,
-    isSelected: selectedNode === ROOT_NODE_ID,
-    x: rootPosition.x,
-    y: rootPosition.y,
-  });
-
-  let previousNodeId = ROOT_NODE_ID;
-
-  gameHistory.forEach((item, index) => {
-    const id = responseNodeId(index);
-    const previousPosition = previousPositions.get(id);
-    const parentPosition = previousPositions.get(previousNodeId) || rootPosition;
+  const nodes = renderNodes.map((node, index) => {
+    const previousPosition = previousPositions.get(node.id);
+    const incomingEdge = renderEdges.find(edge => edge.destinationNodeId === node.id);
+    const parentPosition = incomingEdge
+      ? previousPositions.get(incomingEdge.sourceNodeId) || rootPosition
+      : rootPosition;
     const angle = index * 0.9;
     const seededPosition = previousPosition || {
       x: parentPosition.x + Math.cos(angle) * 72,
       y: parentPosition.y + Math.sin(angle) * 72,
     };
 
-    nodes.push({
-      id,
-      label: item.response,
-      color: item.player === 'human' ? '#2563EB' : '#DC2626',
-      radius: 12,
-      kind: 'response',
-      historyIndex: index,
-      player: item.player,
-      isCurrent: item.response === currentTopic,
-      isSelected: selectedNode === id,
+    return {
+      ...node,
+      color: getNodeColor(node),
+      radius: node.isRoot ? 16 : 12,
       x: seededPosition.x,
       y: seededPosition.y,
-    });
+    };
+  });
 
-    links.push({
-      id: `${previousNodeId}->${id}`,
-      source: previousNodeId,
-      target: id,
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const edges = renderEdges
+    .filter(edge => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.destinationNodeId))
+    .map(edge => ({
+      id: edge.id,
+      source: edge.sourceNodeId,
+      target: edge.destinationNodeId,
       color: '#94A3B8',
-      width: 2,
-      semanticDistance: item.scores.semanticDistance || 5,
-    });
+      semanticDistanceScore: edge.semanticDistanceScore,
+    }));
 
-    previousNodeId = id;
-  });
-
-  connections.forEach(connection => {
-    if (
-      connection.from >= 0 &&
-      connection.from < gameHistory.length &&
-      connection.to >= 0 &&
-      connection.to < gameHistory.length
-    ) {
-      const source = responseNodeId(connection.from);
-      const target = responseNodeId(connection.to);
-
-      links.push({
-        id: `${source}->${target}:custom`,
-        source,
-        target,
-        color: '#7C3AED',
-        width: 2,
-        semanticDistance: 5,
-        isCustom: true,
-      });
-    }
-  });
-
-  return { nodes, links };
+  return { nodes, edges };
 }
 
 export default function SimpleConceptGraph({
-  gameHistory,
-  originalTopic,
-  currentTopic,
+  nodes,
+  edges,
   width = 800,
   height = 600,
-  selectedNode,
-  connections,
   onNodeClick,
+  onAddSourceNode,
+  onRemoveSourceNode,
 }: SimpleConceptGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<SVGGElement>(null);
   const linkGroupRef = useRef<SVGGElement>(null);
   const nodeGroupRef = useRef<SVGGElement>(null);
+  const actionGroupRef = useRef<SVGGElement>(null);
   const labelGroupRef = useRef<SVGGElement>(null);
-  const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
+  const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
   const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const hoveredNodeIdRef = useRef<string | null>(null);
   const onNodeClickRef = useRef(onNodeClick);
+  const onAddSourceNodeRef = useRef(onAddSourceNode);
+  const onRemoveSourceNodeRef = useRef(onRemoveSourceNode);
   const [dimensions, setDimensions] = useState({ width, height });
 
   useEffect(() => {
     onNodeClickRef.current = onNodeClick;
-  }, [onNodeClick]);
+    onAddSourceNodeRef.current = onAddSourceNode;
+    onRemoveSourceNodeRef.current = onRemoveSourceNode;
+  }, [onAddSourceNode, onNodeClick, onRemoveSourceNode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -185,11 +132,8 @@ export default function SimpleConceptGraph({
   const graphData = useMemo(
     () =>
       buildGraphData(
-        gameHistory,
-        originalTopic,
-        currentTopic,
-        connections,
-        selectedNode,
+        nodes,
+        edges,
         // The D3 simulation stores positions outside React state so layout
         // updates do not re-render on every tick.
         // eslint-disable-next-line react-hooks/refs
@@ -197,8 +141,10 @@ export default function SimpleConceptGraph({
         dimensions.width,
         dimensions.height
       ),
-    [connections, currentTopic, dimensions.height, dimensions.width, gameHistory, originalTopic, selectedNode]
+    [dimensions.height, dimensions.width, edges, nodes]
   );
+
+  const activeSourceCount = nodes.filter(node => node.isActiveSource).length;
 
   const fitGraphToViewport = useCallback((duration = 450) => {
     const viewport = viewportRef.current;
@@ -239,44 +185,37 @@ export default function SimpleConceptGraph({
   }, [dimensions.height, dimensions.width, graphData.nodes]);
 
   useEffect(() => {
-    const svgElement = svgRef.current;
-    const viewportElement = viewportRef.current;
     const linkGroupElement = linkGroupRef.current;
     const nodeGroupElement = nodeGroupRef.current;
+    const actionGroupElement = actionGroupRef.current;
     const labelGroupElement = labelGroupRef.current;
 
-    if (!svgElement || !viewportElement || !linkGroupElement || !nodeGroupElement || !labelGroupElement) {
-      return;
-    }
+    if (!linkGroupElement || !nodeGroupElement || !actionGroupElement || !labelGroupElement) return;
 
     const linkGroup = d3.select(linkGroupElement);
     const nodeGroup = d3.select(nodeGroupElement);
+    const actionGroup = d3.select(actionGroupElement);
     const labelGroup = d3.select(labelGroupElement);
 
     const links = linkGroup
-      .selectAll<SVGLineElement, GraphLink>('line')
-      .data(graphData.links, link => link.id)
+      .selectAll<SVGLineElement, SimulationEdge>('line')
+      .data(graphData.edges, edge => edge.id)
       .join(
         enter =>
           enter
             .append('line')
             .attr('stroke-opacity', 0)
-            .attr('stroke', link => link.color)
-            .attr('stroke-width', link => link.width)
-            .attr('stroke-dasharray', link => (link.isCustom ? '5 4' : null))
+            .attr('stroke', edge => edge.color)
+            .attr('stroke-width', 2)
             .call(enterSelection =>
               enterSelection.transition().duration(180).attr('stroke-opacity', 0.65)
             ),
-        update =>
-          update
-            .attr('stroke', link => link.color)
-            .attr('stroke-width', link => link.width)
-            .attr('stroke-dasharray', link => (link.isCustom ? '5 4' : null)),
+        update => update.attr('stroke', edge => edge.color),
         exit => exit.transition().duration(120).attr('stroke-opacity', 0).remove()
       );
 
-    const nodes = nodeGroup
-      .selectAll<SVGCircleElement, GraphNode>('circle')
+    const renderedNodes = nodeGroup
+      .selectAll<SVGCircleElement, SimulationNode>('circle')
       .data(graphData.nodes, node => node.id)
       .join(
         enter =>
@@ -303,8 +242,45 @@ export default function SimpleConceptGraph({
         exit => exit.transition().duration(120).attr('r', 0).remove()
       );
 
+    const actions = actionGroup
+      .selectAll<SVGGElement, SimulationNode>('g')
+      .data(graphData.nodes, node => node.id)
+      .join(
+        enter => {
+          const group = enter
+            .append('g')
+            .style('cursor', 'pointer')
+            .on('click', (event, node) => {
+              event.stopPropagation();
+              if (node.isActiveSource && activeSourceCount > 1) {
+                onRemoveSourceNodeRef.current(node.id);
+              } else if (!node.isActiveSource) {
+                onAddSourceNodeRef.current(node.id);
+              }
+            });
+
+          group.append('circle').attr('r', 7).attr('fill', '#FFFFFF').attr('stroke', '#6B7280');
+          group
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', 4)
+            .attr('font-size', 11)
+            .attr('font-weight', 700)
+            .attr('fill', '#374151');
+
+          return group;
+        },
+        update => update,
+        exit => exit.remove()
+      );
+
+    actions
+      .style('display', node => (node.isActiveSource && activeSourceCount <= 1 ? 'none' : 'block'))
+      .select('text')
+      .text(node => (node.isActiveSource ? '-' : '+'));
+
     const labels = labelGroup
-      .selectAll<SVGTextElement, GraphNode>('text')
+      .selectAll<SVGTextElement, SimulationNode>('text')
       .data(graphData.nodes, node => node.id)
       .join(
         enter =>
@@ -324,22 +300,22 @@ export default function SimpleConceptGraph({
       );
 
     function updateNodeStyles() {
-      nodes
+      renderedNodes
         .attr('stroke', node => {
           if (node.isSelected) return '#7C3AED';
+          if (node.isActiveSource) return '#16A34A';
           if (node.id === hoveredNodeIdRef.current) return '#111827';
-          if (node.isCurrent) return '#16A34A';
-          if (node.kind === 'root') return '#92400E';
+          if (node.isRoot) return '#92400E';
           return 'white';
         })
         .attr('stroke-width', node => {
-          if (node.isSelected) return 4;
-          if (node.id === hoveredNodeIdRef.current || node.isCurrent || node.kind === 'root') return 3;
+          if (node.isSelected || node.isActiveSource) return 4;
+          if (node.id === hoveredNodeIdRef.current || node.isRoot) return 3;
           return 1.5;
         });
 
       labels.style('display', node =>
-        node.isSelected || node.id === hoveredNodeIdRef.current || node.isCurrent || node.kind === 'root'
+        node.isSelected || node.isActiveSource || node.id === hoveredNodeIdRef.current || node.isRoot
           ? 'block'
           : 'none'
       );
@@ -350,17 +326,17 @@ export default function SimpleConceptGraph({
     let simulation = simulationRef.current;
     if (!simulation) {
       simulation = d3
-        .forceSimulation<GraphNode>(graphData.nodes)
+        .forceSimulation<SimulationNode>(graphData.nodes)
         .force(
           'link',
           d3
-            .forceLink<GraphNode, GraphLink>(graphData.links)
+            .forceLink<SimulationNode, SimulationEdge>(graphData.edges)
             .id(node => node.id)
-            .distance(link => 64 + (link.semanticDistance || 5) * 9)
-            .strength(link => (link.isCustom ? 0.35 : 0.75))
+            .distance(edge => 64 + (edge.semanticDistanceScore || 5) * 9)
+            .strength(0.75)
         )
-        .force('charge', d3.forceManyBody<GraphNode>().strength(-260))
-        .force('collide', d3.forceCollide<GraphNode>().radius(node => node.radius + 20).strength(0.85))
+        .force('charge', d3.forceManyBody<SimulationNode>().strength(-260))
+        .force('collide', d3.forceCollide<SimulationNode>().radius(node => node.radius + 22).strength(0.85))
         .force('center', d3.forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.06))
         .alphaDecay(0.035)
         .velocityDecay(0.42);
@@ -371,22 +347,22 @@ export default function SimpleConceptGraph({
       simulation.force(
         'link',
         d3
-          .forceLink<GraphNode, GraphLink>(graphData.links)
+          .forceLink<SimulationNode, SimulationEdge>(graphData.edges)
           .id(node => node.id)
-          .distance(link => 64 + (link.semanticDistance || 5) * 9)
-          .strength(link => (link.isCustom ? 0.35 : 0.75))
+          .distance(edge => 64 + (edge.semanticDistanceScore || 5) * 9)
+          .strength(0.75)
       );
       simulation.force('center', d3.forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.06));
     }
 
     simulation.on('tick', () => {
       links
-        .attr('x1', link => (link.source as GraphNode).x || dimensions.width / 2)
-        .attr('y1', link => (link.source as GraphNode).y || dimensions.height / 2)
-        .attr('x2', link => (link.target as GraphNode).x || dimensions.width / 2)
-        .attr('y2', link => (link.target as GraphNode).y || dimensions.height / 2);
+        .attr('x1', edge => (edge.source as SimulationNode).x || dimensions.width / 2)
+        .attr('y1', edge => (edge.source as SimulationNode).y || dimensions.height / 2)
+        .attr('x2', edge => (edge.target as SimulationNode).x || dimensions.width / 2)
+        .attr('y2', edge => (edge.target as SimulationNode).y || dimensions.height / 2);
 
-      nodes
+      renderedNodes
         .attr('cx', node => node.x || dimensions.width / 2)
         .attr('cy', node => node.y || dimensions.height / 2)
         .each(node => {
@@ -395,6 +371,11 @@ export default function SimpleConceptGraph({
             y: node.y || dimensions.height / 2,
           });
         });
+
+      actions.attr(
+        'transform',
+        node => `translate(${(node.x || dimensions.width / 2) + node.radius + 8},${(node.y || dimensions.height / 2) - node.radius - 8})`
+      );
 
       labels.attr(
         'transform',
@@ -412,7 +393,7 @@ export default function SimpleConceptGraph({
       window.clearTimeout(coolTimer);
       window.clearTimeout(fitTimer);
     };
-  }, [dimensions.height, dimensions.width, fitGraphToViewport, graphData]);
+  }, [activeSourceCount, dimensions.height, dimensions.width, fitGraphToViewport, graphData]);
 
   useEffect(() => {
     return () => {
@@ -427,6 +408,7 @@ export default function SimpleConceptGraph({
         <g ref={viewportRef}>
           <g ref={linkGroupRef} />
           <g ref={nodeGroupRef} />
+          <g ref={actionGroupRef} />
           <g ref={labelGroupRef} />
         </g>
       </svg>
