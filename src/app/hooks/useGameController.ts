@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { gameApi } from '@/app/services/gameApi';
 import {
   DEFAULT_AI_PLAYER_ID,
@@ -28,6 +28,12 @@ import {
   selectCurrentSourceTopicText,
   selectRootTopic,
 } from '@/domain/gameFlow';
+import {
+  PlayerTurnController,
+  createTurnExecutionKey,
+  resolvePlayerController,
+  shouldAutoSubmitTurn,
+} from '@/domain/playerController';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
 
@@ -37,11 +43,14 @@ type UseGameControllerParams = {
   circleEnabled: boolean;
   difficulty: DifficultyLevel;
   services?: GameFlowServices;
+  playerControllers?: PlayerTurnController[];
 };
 
 function getPlayerIdForTurn(player: 'human' | 'ai') {
   return player === 'ai' ? DEFAULT_AI_PLAYER_ID : DEFAULT_HUMAN_PLAYER_ID;
 }
+
+const EMPTY_PLAYER_CONTROLLERS: PlayerTurnController[] = [];
 
 export function useGameController({
   maxRounds,
@@ -49,20 +58,49 @@ export function useGameController({
   circleEnabled,
   difficulty,
   services = gameApi,
+  playerControllers = EMPTY_PLAYER_CONTROLLERS,
 }: UseGameControllerParams) {
-  const startedAiTurnKeyRef = useRef<string | null>(null);
+  const startedAutomaticTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
   const [response, setResponse] = useState<string>('');
+
+  const defaultAiController = useMemo<PlayerTurnController>(() => ({
+    playerId: DEFAULT_AI_PLAYER_ID,
+    mode: 'automatic',
+    async submitTurn(context) {
+      const aiResponse = await services.generateAiResponse({
+        topic: context.topic,
+        originalTopic: context.originalTopic,
+        gameHistory: context.gameHistory,
+        difficulty: context.difficulty,
+        circleEnabled: context.circleEnabled,
+        isFinalCircleRound: context.isFinalCircleRound,
+      });
+
+      return {
+        responseText: aiResponse.trim() || `Response to ${context.topic}`,
+        fallbackOnEvaluationFailure: true,
+      };
+    },
+  }), [services]);
+
+  const effectivePlayerControllers = useMemo(
+    () => [...playerControllers, defaultAiController],
+    [defaultAiController, playerControllers]
+  );
 
   const graphRenderData = selectGraphRenderData(gameState);
   const currentEvaluation = selectCurrentEvaluation(gameState);
   const currentPlayerModel = selectCurrentPlayer(gameState);
+  const currentPlayerController = currentPlayerModel
+    ? resolvePlayerController(currentPlayerModel, effectivePlayerControllers)
+    : null;
   const selectedNodePanels = selectSelectedNodePanels(gameState);
   const turnHistoryRows = selectTurnHistoryRows(gameState);
   const playerScoreRows = selectPlayerScoreRows(gameState);
   const gameHistory = selectLegacyGameHistory(gameState);
   const currentRound = gameState.currentRound;
-  const isCurrentPlayerLocal = currentPlayerModel?.kind === 'local';
+  const isCurrentPlayerManual = currentPlayerController?.mode !== 'automatic' || !currentPlayerController.submitTurn;
   const activeSourceNodes = gameState.activeSourceNodeIds
     .map(nodeId => gameState.nodesById[nodeId])
     .filter(Boolean);
@@ -218,7 +256,7 @@ export function useGameController({
     await evaluateTurnResponse({
       playerId: currentPlayerModel.id,
       responseText: response,
-      clearResponseOnSuccess: currentPlayerModel.kind === 'local',
+      clearResponseOnSuccess: isCurrentPlayerManual,
     });
   };
 
@@ -258,66 +296,64 @@ export function useGameController({
   };
 
   useEffect(() => {
-    const aiTakeTurn = async () => {
-      if (gameState.gameStatus !== 'awaitingResponse' || !currentPlayerModel || currentPlayerModel.kind !== 'ai') {
+    const submitAutomaticTurn = async () => {
+      if (
+        !currentPlayerModel ||
+        !currentPlayerController ||
+        !shouldAutoSubmitTurn(gameState, currentPlayerModel, currentPlayerController)
+      ) {
         return;
       }
 
-      const aiTurnKey = `${gameState.currentRound}:${gameState.currentPlayerId}:${gameState.turnOrder.length}`;
-      if (startedAiTurnKeyRef.current === aiTurnKey) return;
+      const turnExecutionKey = createTurnExecutionKey(gameState);
+      if (startedAutomaticTurnKeyRef.current === turnExecutionKey) return;
 
-      startedAiTurnKeyRef.current = aiTurnKey;
+      startedAutomaticTurnKeyRef.current = turnExecutionKey;
       setGameState(prev => setGameStatus(prev, 'aiThinking'));
-      const aiPromptTopic = currentSourceTopicText;
+      const promptTopic = currentSourceTopicText;
 
       try {
-        const formattedHistory = gameHistory.map(item => ({
-          round: item.round,
-          topic: item.topic,
-          response: item.response,
-          evaluation: item.evaluation,
-          scores: item.scores,
-          player: item.player,
-        }));
-
-        let aiResponse = await services.generateAiResponse({
-          topic: aiPromptTopic,
+        const submission = await currentPlayerController.submitTurn!({
+          state: gameState,
+          player: currentPlayerModel,
+          topic: promptTopic,
           originalTopic,
-          gameHistory: formattedHistory,
+          gameHistory,
           difficulty,
           circleEnabled,
           isFinalCircleRound: currentRound === maxRounds && circleEnabled,
         });
-        if (!aiResponse || !aiResponse.trim()) {
-          aiResponse = `Response to ${aiPromptTopic}`;
-        }
+        const responseText = submission.responseText.trim() || `Response to ${promptTopic}`;
 
-        setResponse(aiResponse);
+        setResponse(responseText);
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
-          responseText: aiResponse,
-          fallbackOnFailure: true,
+          responseText,
+          fallbackOnFailure: submission.fallbackOnEvaluationFailure,
+          clearResponseOnSuccess: submission.clearResponseOnSuccess,
         });
       } catch (error) {
-        console.error('Error getting AI response:', error);
-        const aiResponse = `Response to ${aiPromptTopic}`;
-        setResponse(aiResponse);
+        console.error('Error getting automatic player response:', error);
+        const fallbackResponse = `Response to ${promptTopic}`;
+        setResponse(fallbackResponse);
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
-          responseText: aiResponse,
+          responseText: fallbackResponse,
           fallbackOnFailure: true,
         });
       }
     };
 
-    aiTakeTurn();
+    submitAutomaticTurn();
   }, [
+    gameState,
     gameState.gameStatus,
     gameState.currentRound,
     gameState.currentPlayerId,
     gameState.turnOrder.length,
+    currentPlayerController,
     currentPlayerModel,
-    currentPlayerModel?.kind,
+    isCurrentPlayerManual,
     currentRound,
     currentSourceTopicText,
     originalTopic,
@@ -326,7 +362,6 @@ export function useGameController({
     difficulty,
     circleEnabled,
     evaluateTurnResponse,
-    services,
   ]);
 
   return {
@@ -344,7 +379,7 @@ export function useGameController({
     gameHistory,
     selectedGraphNodeId: gameState.selectedNodeIds[0] || null,
     currentRound,
-    isCurrentPlayerLocal,
+    isCurrentPlayerManual,
     playerScoreRows,
     activeSourceNodes,
     currentSourceTopicText,

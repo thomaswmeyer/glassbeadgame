@@ -78,7 +78,7 @@ export default function GameInterface() {
     gameHistory,
     selectedGraphNodeId,
     currentRound,
-    isCurrentPlayerLocal,
+    isCurrentPlayerManual,
     playerScoreRows,
     activeSourceNodes,
     currentSourceTopicText,
@@ -707,10 +707,10 @@ export default function GameInterface() {
             {!showingResults ? (
               <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-2">
-                  {isCurrentPlayerLocal ? 'Your Response:' : `${currentPlayerModel?.name || 'Player'} is thinking...`}
+                  {isCurrentPlayerManual ? 'Your Response:' : `${currentPlayerModel?.name || 'Player'} is thinking...`}
                 </h2>
                 
-                {isCurrentPlayerLocal ? (
+                {isCurrentPlayerManual ? (
                   <>
                     <input
                       type="text"
