@@ -24,6 +24,8 @@ import {
   DifficultyLevel,
   GameFlowServices,
   TurnEvaluation,
+  selectCurrentSourceTopicText,
+  selectRootTopic,
 } from '@/domain/gameFlow';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
@@ -58,8 +60,6 @@ export function useGameController({
 }: UseGameControllerParams) {
   const startedAiTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
-  const [topic, setTopic] = useState<string>('');
-  const [originalTopic, setOriginalTopic] = useState<string>('');
   const [response, setResponse] = useState<string>('');
   const [currentEvaluation, setCurrentEvaluation] = useState<CurrentEvaluation | null>(null);
 
@@ -78,11 +78,11 @@ export function useGameController({
   const activeSourceNodes = gameState.activeSourceNodeIds
     .map(nodeId => gameState.nodesById[nodeId])
     .filter(Boolean);
-  const currentSourceTopicText = activeSourceNodes.length > 0
-    ? activeSourceNodes.map(sourceNode => sourceNode.topic).join(' + ')
-    : topic;
   const gameStarted = gameState.gameStatus !== 'setup';
   const isGeneratingTopic = gameState.gameStatus === 'generatingTopic';
+  const originalTopic = selectRootTopic(gameState);
+  const currentSourceTopicText = selectCurrentSourceTopicText(gameState);
+  const topic = isGeneratingTopic ? 'Generating new topic...' : currentSourceTopicText;
   const isEvaluating = gameState.gameStatus === 'evaluating';
   const isAiThinking = gameState.gameStatus === 'aiThinking';
   const showingResults = gameState.gameStatus === 'showingResults' || gameState.gameStatus === 'completed';
@@ -110,15 +110,12 @@ export function useGameController({
       createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
       'generatingTopic'
     ));
-    setTopic('Generating new topic...');
     setCurrentEvaluation(null);
 
     try {
       const newTopic = await services.generateTopic({
         difficulty,
       });
-      setTopic(newTopic);
-      setOriginalTopic(newTopic);
       setResponse('');
 
       setGameState(startGameState({
@@ -258,15 +255,12 @@ export function useGameController({
       }
     }
 
-    setTopic(nextTopic);
     setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev)));
     setCurrentEvaluation(null);
     setResponse('');
   };
 
   const resetCurrentGame = (currentPlayerId: string) => {
-    setTopic('');
-    setOriginalTopic('');
     setResponse('');
     setCurrentEvaluation(null);
     setSelectedGraphNodeId(null);
@@ -285,10 +279,6 @@ export function useGameController({
   useEffect(() => {
     const aiTakeTurn = async () => {
       if (gameState.gameStatus !== 'awaitingResponse' || currentPlayerModel?.kind !== 'ai') {
-        return;
-      }
-
-      if (topic === 'Generating new topic...') {
         return;
       }
 
@@ -347,7 +337,6 @@ export function useGameController({
     gameState.turnOrder.length,
     currentPlayerModel?.kind,
     currentRound,
-    topic,
     currentSourceTopicText,
     originalTopic,
     gameHistory,
@@ -362,9 +351,7 @@ export function useGameController({
     gameState,
     setGameState,
     topic,
-    setTopic,
     originalTopic,
-    setOriginalTopic,
     response,
     setResponse,
     currentEvaluation,

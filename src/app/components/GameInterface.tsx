@@ -77,7 +77,6 @@ export default function GameInterface() {
     gameState,
     setGameState,
     topic,
-    setTopic,
     originalTopic,
     response,
     setResponse,
@@ -113,9 +112,16 @@ export default function GameInterface() {
     difficulty,
   });
 
-  const hasBranchedSourceSelection = gameState.activeSourceNodeIds.length > 1 || (
-    gameState.activeSourceNodeIds.length === 1 &&
-    gameState.nodesById[gameState.activeSourceNodeIds[0]]?.topic !== topic
+  const latestTurnId = gameState.turnOrder[gameState.turnOrder.length - 1];
+  const defaultSourceNodeId = latestTurnId
+    ? gameState.turnsById[latestTurnId]?.destinationNodeId
+    : gameState.rootNodeId;
+  const hasBranchedSourceSelection = Boolean(
+    defaultSourceNodeId &&
+    (
+      gameState.activeSourceNodeIds.length !== 1 ||
+      gameState.activeSourceNodeIds[0] !== defaultSourceNodeId
+    )
   );
 
   const generateFirstTopic = async () => {
@@ -211,8 +217,6 @@ export default function GameInterface() {
         activeSourceNodeIds: [sourceNodeId],
       }));
     }
-    setTopic(historyItem.response); // Use the response as the new topic
-    
     // Clear any existing definition since we're changing topics
     setShowDefinition(false);
     setTopicDefinition('');
