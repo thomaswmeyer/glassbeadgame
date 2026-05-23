@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import { gameApi } from '@/app/services/gameApi';
 import {
   DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
@@ -20,8 +20,13 @@ import {
   setSelectedNodeIds,
   startGameState,
 } from '@/domain/game';
+import {
+  DifficultyLevel,
+  GameFlowServices,
+  TurnEvaluation,
+} from '@/domain/gameFlow';
 
-export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
+export type { DifficultyLevel } from '@/domain/gameFlow';
 
 export type CurrentEvaluation = {
   topic: string;
@@ -37,55 +42,11 @@ type UseGameControllerParams = {
   aiGoesFirst: boolean;
   circleEnabled: boolean;
   difficulty: DifficultyLevel;
-};
-
-type EvaluationResponse = {
-  evaluation: string;
-  finalEvaluation?: string;
-  scores: Score;
+  services?: GameFlowServices;
 };
 
 function getPlayerIdForTurn(player: 'human' | 'ai') {
   return player === 'ai' ? DEFAULT_AI_PLAYER_ID : DEFAULT_HUMAN_PLAYER_ID;
-}
-
-async function requestEvaluation(params: {
-  topic: string;
-  response: string;
-  originalTopic: string;
-  difficulty: DifficultyLevel;
-  isFinalCircleRound: boolean;
-}): Promise<EvaluationResponse> {
-  const endpoint = params.isFinalCircleRound
-    ? '/api/evaluate-final-response'
-    : '/api/evaluate-response';
-  const body = params.isFinalCircleRound
-    ? {
-        currentTopic: params.topic,
-        originalTopic: params.originalTopic,
-        response: params.response,
-        difficulty: params.difficulty,
-      }
-    : {
-        topic: params.topic,
-        response: params.response,
-        difficulty: params.difficulty,
-      };
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(`HTTP error ${res.status}: ${errorData.error || 'Unknown error'}`);
-  }
-
-  return res.json();
 }
 
 export function useGameController({
@@ -93,6 +54,7 @@ export function useGameController({
   aiGoesFirst,
   circleEnabled,
   difficulty,
+  services = gameApi,
 }: UseGameControllerParams) {
   const startedAiTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
@@ -152,10 +114,9 @@ export function useGameController({
     setCurrentEvaluation(null);
 
     try {
-      const result = await axios.post('/api/generate-topic', {
+      const newTopic = await services.generateTopic({
         difficulty,
       });
-      const newTopic = result.data.topic;
       setTopic(newTopic);
       setOriginalTopic(newTopic);
       setResponse('');
@@ -177,7 +138,7 @@ export function useGameController({
     player: 'human' | 'ai';
     responseText: string;
     evaluationTopic: string;
-    result: EvaluationResponse;
+    result: TurnEvaluation;
   }) => {
     setCurrentEvaluation({
       topic: params.evaluationTopic,
@@ -221,7 +182,7 @@ export function useGameController({
 
     while (retries < maxRetries) {
       try {
-        const result = await requestEvaluation({
+        const result = await services.evaluateTurn({
           topic: evaluationTopic,
           originalTopic,
           response: params.responseText,
@@ -272,7 +233,7 @@ export function useGameController({
         }
       }
     }
-  }, [circleEnabled, completeEvaluatedTurn, currentRound, currentSourceTopicText, difficulty, maxRounds, originalTopic]);
+  }, [circleEnabled, completeEvaluatedTurn, currentRound, currentSourceTopicText, difficulty, maxRounds, originalTopic, services]);
 
   const evaluateResponse = async () => {
     await evaluateTurnResponse({
@@ -339,7 +300,6 @@ export function useGameController({
       const aiPromptTopic = currentSourceTopicText;
 
       try {
-        const endpoint = (currentRound === maxRounds && circleEnabled) ? '/api/ai-final-response' : '/api/ai-response';
         const formattedHistory = gameHistory.map(item => ({
           round: item.round,
           topic: item.topic,
@@ -349,15 +309,14 @@ export function useGameController({
           player: item.player,
         }));
 
-        const result = await axios.post(endpoint, {
+        let aiResponse = await services.generateAiResponse({
           topic: aiPromptTopic,
           originalTopic,
           gameHistory: formattedHistory,
           difficulty,
           circleEnabled,
+          isFinalCircleRound: currentRound === maxRounds && circleEnabled,
         });
-
-        let aiResponse = result.data.response;
         if (!aiResponse || !aiResponse.trim()) {
           aiResponse = `Response to ${aiPromptTopic}`;
         }
@@ -396,6 +355,7 @@ export function useGameController({
     difficulty,
     circleEnabled,
     evaluateTurnResponse,
+    services,
   ]);
 
   return {

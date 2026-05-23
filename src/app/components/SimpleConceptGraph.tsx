@@ -249,15 +249,7 @@ export default function SimpleConceptGraph({
         enter => {
           const group = enter
             .append('g')
-            .style('cursor', 'pointer')
-            .on('click', (event, node) => {
-              event.stopPropagation();
-              if (node.isActiveSource && activeSourceCount > 1) {
-                onRemoveSourceNodeRef.current(node.id);
-              } else if (!node.isActiveSource) {
-                onAddSourceNodeRef.current(node.id);
-              }
-            });
+            .style('cursor', 'pointer');
 
           group.append('circle').attr('r', 7).attr('fill', '#FFFFFF').attr('stroke', '#6B7280');
           group
@@ -275,6 +267,14 @@ export default function SimpleConceptGraph({
       );
 
     actions
+      .on('click', (event, node) => {
+        event.stopPropagation();
+        if (node.isActiveSource && activeSourceCount > 1) {
+          onRemoveSourceNodeRef.current(node.id);
+        } else if (!node.isActiveSource) {
+          onAddSourceNodeRef.current(node.id);
+        }
+      })
       .style('display', node => (node.isActiveSource && activeSourceCount <= 1 ? 'none' : 'block'))
       .select('text')
       .text(node => (node.isActiveSource ? '-' : '+'));

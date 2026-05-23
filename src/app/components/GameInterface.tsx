@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, KeyboardEvent, useRef } from 'react';
-import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import { LLM_CONFIG } from '@/config/llm';
@@ -15,6 +14,7 @@ import {
   updateNodeDefinition,
 } from '@/domain/game';
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
+import { gameApi } from '@/app/services/gameApi';
 
 // Define the GameHistory type to match what SimpleConceptGraph expects
 interface GameHistory {
@@ -132,10 +132,7 @@ export default function GameInterface() {
       return cachedDefinition;
     }
 
-    const result = await axios.post('/api/get-definition', {
-      topic: definitionTopic,
-    });
-    const definition = result.data.definition;
+    const definition = await gameApi.getDefinition(definitionTopic);
     definitionCacheRef.current.set(cacheKey, definition);
     setDefinitionCacheVersion(version => version + 1);
     return definition;
