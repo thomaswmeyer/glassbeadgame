@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, KeyboardEvent } from 'react';
+import { useState } from 'react';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import ModelSelector from './ModelSelector';
 import ScoreTooltip from './ScoreTooltip';
 import SelectedNodePanel from './SelectedNodePanel';
 import SimpleConceptGraph from './SimpleConceptGraph';
+import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable, { getPlayerBadgeClass } from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
 import {
@@ -119,13 +120,6 @@ export default function GameInterface() {
 
   const generateFirstTopic = async () => {
     await startGame();
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && response.trim()) {
-      e.preventDefault();
-      evaluateResponse();
-    }
   };
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
@@ -588,56 +582,18 @@ export default function GameInterface() {
             )}
 
             {!showingResults ? (
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold mb-2">
-                  {isCurrentPlayerManual ? 'Your Response:' : `${currentPlayerModel?.name || 'Player'} is thinking...`}
-                </h2>
-                
-                {isCurrentPlayerManual ? (
-                  <>
-                    <input
-                      type="text"
-                      value={response}
-                      onChange={(e) => setResponse(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      className="w-full p-4 border border-gray-300 rounded-lg"
-                      placeholder={currentRound === maxRounds && circleEnabled
-                        ? `Type a brief response (1-5 words) that connects to both "${currentSourceTopicText}" and "${originalTopic}"...`
-                        : "Type a brief response (1-5 words) and press Enter..."}
-                      disabled={isEvaluating}
-                      autoFocus
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      Keep your response concise (1-5 words) for best results. The quality of the conceptual connection is what matters.
-                      {hasBranchedSourceSelection && (
-                        <span className="text-purple-600 ml-1">
-                          You're responding to selected graph sources.
-                        </span>
-                      )}
-                    </p>
-                    <div className="flex justify-end mt-2">
-                      <button
-                        onClick={evaluateResponse}
-                        disabled={isEvaluating || !response.trim()}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400"
-                      >
-                        {isEvaluating ? 'Evaluating...' : 'Submit'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center min-h-[60px]">
-                    <div className="flex items-center">
-                      <div className="animate-pulse flex space-x-4">
-                        <div className="h-3 w-3 bg-red-300 rounded-full"></div>
-                        <div className="h-3 w-3 bg-red-300 rounded-full"></div>
-                        <div className="h-3 w-3 bg-red-300 rounded-full"></div>
-                      </div>
-                      <span className="ml-3 text-gray-600">{currentPlayerModel?.name || 'Player'} is formulating a response...</span>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <TurnResponsePanel
+                isCurrentPlayerManual={isCurrentPlayerManual}
+                playerName={currentPlayerModel?.name}
+                response={response}
+                isEvaluating={isEvaluating}
+                isFinalCircleRound={currentRound === maxRounds && circleEnabled}
+                currentSourceTopicText={currentSourceTopicText}
+                originalTopic={originalTopic}
+                hasBranchedSourceSelection={hasBranchedSourceSelection}
+                onResponseChange={setResponse}
+                onSubmit={evaluateResponse}
+              />
             ) : currentEvaluation && (
               <EvaluationResultsPanel
                 currentEvaluation={currentEvaluation}
