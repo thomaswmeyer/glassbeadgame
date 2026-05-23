@@ -133,6 +133,7 @@ export function useGameController({
         finalEvaluation: params.result.finalEvaluation,
         totalScore: params.result.scores.total,
         legacyScores: params.result.scores,
+        scoringDescription: params.result.evaluation,
       });
 
       return setGameStatus(

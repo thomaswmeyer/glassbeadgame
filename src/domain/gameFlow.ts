@@ -109,6 +109,7 @@ export async function evaluateAndApplyTurn(params: {
     finalEvaluation: evaluation.finalEvaluation,
     totalScore: evaluation.scores.total,
     legacyScores: evaluation.scores,
+    scoringDescription: evaluation.evaluation,
   });
 
   const nextStatus = params.state.currentRound === params.state.maxRounds

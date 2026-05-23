@@ -15,6 +15,10 @@ interface SimulationEdge extends d3.SimulationLinkDatum<SimulationNode> {
   target: string | SimulationNode;
   color: string;
   semanticDistanceScore?: number;
+  strengthScore?: number;
+  scoringDescription?: string;
+  semanticDistanceDescription?: string;
+  strengthDescription?: string;
 }
 
 interface GraphData {
@@ -81,6 +85,10 @@ function buildGraphData(
       target: edge.destinationNodeId,
       color: '#94A3B8',
       semanticDistanceScore: edge.semanticDistanceScore,
+      strengthScore: edge.strengthScore,
+      scoringDescription: edge.scoringDescription,
+      semanticDistanceDescription: edge.semanticDistanceDescription,
+      strengthDescription: edge.strengthDescription,
     }));
 
   return { nodes, edges };

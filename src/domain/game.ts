@@ -42,6 +42,9 @@ export type TopicEdge = {
   turnId: string;
   strengthScore?: number;
   semanticDistanceScore?: number;
+  scoringDescription?: string;
+  semanticDistanceDescription?: string;
+  strengthDescription?: string;
 };
 
 export type Turn = {
@@ -101,6 +104,9 @@ export type GraphRenderEdge = {
   playerId: string;
   semanticDistanceScore?: number;
   strengthScore?: number;
+  scoringDescription?: string;
+  semanticDistanceDescription?: string;
+  strengthDescription?: string;
 };
 
 export type SelectedNodePanel = {
@@ -228,6 +234,9 @@ export function addTurnToGameState(
     finalEvaluation?: string;
     totalScore?: number;
     legacyScores?: Score;
+    scoringDescription?: string;
+    semanticDistanceDescription?: string;
+    strengthDescription?: string;
   }
 ): GameState {
   const turnIndex = state.turnOrder.length;
@@ -255,6 +264,9 @@ export function addTurnToGameState(
         turnId,
         semanticDistanceScore: params.legacyScores?.semanticDistance,
         strengthScore: params.legacyScores?.relevanceQuality,
+        scoringDescription: params.scoringDescription || params.evaluation,
+        semanticDistanceDescription: params.semanticDistanceDescription,
+        strengthDescription: params.strengthDescription,
       };
       return [edge.id, edge];
     })
@@ -397,6 +409,9 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
       playerId: edge.playerId,
       semanticDistanceScore: edge.semanticDistanceScore,
       strengthScore: edge.strengthScore,
+      scoringDescription: edge.scoringDescription,
+      semanticDistanceDescription: edge.semanticDistanceDescription,
+      strengthDescription: edge.strengthDescription,
     })),
   };
 }

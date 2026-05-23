@@ -99,6 +99,7 @@ test('applies a turn by evaluating the active source topic with mocked LLM servi
   assert.equal(edge.destinationNodeId, destination.id);
   assert.equal(edge.semanticDistanceScore, 7);
   assert.equal(edge.strengthScore, 8);
+  assert.equal(edge.scoringDescription, 'Strong architectural connection.');
 });
 
 test('branches from an older selected node instead of forcing a linear chain', async () => {
@@ -198,6 +199,10 @@ test('supports multi-source turns with one edge per active source', async () => 
   assert.deepEqual(
     turn.edgeIds.map(edgeId => result.state.edgesById[edgeId].sourceNodeId),
     [rootState.rootNodeId, firstDestinationId]
+  );
+  assert.deepEqual(
+    turn.edgeIds.map(edgeId => result.state.edgesById[edgeId].scoringDescription),
+    ['ok', 'ok']
   );
   assert.equal(selectCurrentSourceTopicText(multiSourceState), 'Cathedrals + Flying buttresses');
   assert.deepEqual(evaluateCalls, [
