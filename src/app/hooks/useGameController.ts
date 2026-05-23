@@ -10,6 +10,7 @@ import {
   advanceGameTurn,
   createEmptyGameState,
   getNextPlayerId,
+  selectCurrentEvaluation,
   selectCurrentPlayer,
   selectGraphRenderData,
   selectLegacyGameHistory,
@@ -29,15 +30,6 @@ import {
 } from '@/domain/gameFlow';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
-
-export type CurrentEvaluation = {
-  topic: string;
-  response: string;
-  evaluation: string;
-  scores: Score;
-  player: 'human' | 'ai';
-  finalEvaluation?: string;
-};
 
 type UseGameControllerParams = {
   maxRounds: number;
@@ -61,9 +53,9 @@ export function useGameController({
   const startedAiTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
   const [response, setResponse] = useState<string>('');
-  const [currentEvaluation, setCurrentEvaluation] = useState<CurrentEvaluation | null>(null);
 
   const graphRenderData = selectGraphRenderData(gameState);
+  const currentEvaluation = selectCurrentEvaluation(gameState);
   const currentPlayerModel = selectCurrentPlayer(gameState);
   const selectedNodePanels = selectSelectedNodePanels(gameState);
   const turnHistoryRows = selectTurnHistoryRows(gameState);
@@ -110,7 +102,6 @@ export function useGameController({
       createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
       'generatingTopic'
     ));
-    setCurrentEvaluation(null);
 
     try {
       const newTopic = await services.generateTopic({
@@ -137,15 +128,6 @@ export function useGameController({
     evaluationTopic: string;
     result: TurnEvaluation;
   }) => {
-    setCurrentEvaluation({
-      topic: params.evaluationTopic,
-      response: params.responseText,
-      player: params.player,
-      evaluation: params.result.evaluation,
-      finalEvaluation: params.result.finalEvaluation,
-      scores: params.result.scores,
-    });
-
     setGameState(prev => {
       const withTurn = addTurnToGameState(prev, {
         destinationTopic: params.responseText,
@@ -256,13 +238,11 @@ export function useGameController({
     }
 
     setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev)));
-    setCurrentEvaluation(null);
     setResponse('');
   };
 
   const resetCurrentGame = (currentPlayerId: string) => {
     setResponse('');
-    setCurrentEvaluation(null);
     setSelectedGraphNodeId(null);
     setGameState(createEmptyGameState(maxRounds, currentPlayerId));
   };
@@ -355,7 +335,6 @@ export function useGameController({
     response,
     setResponse,
     currentEvaluation,
-    setCurrentEvaluation,
     graphRenderData,
     currentPlayerModel,
     selectedNodePanels,

@@ -116,6 +116,16 @@ export type TurnHistoryRow = {
   destinationNode: TopicNode;
 };
 
+export type CurrentEvaluationView = {
+  topic: string;
+  response: string;
+  evaluation: string;
+  scores: Score;
+  playerId: string;
+  playerKind: PlayerKind;
+  finalEvaluation?: string;
+};
+
 export type LegacyGameHistoryItem = {
   round: number;
   topic: string;
@@ -413,6 +423,34 @@ export function selectPlayerScoreTotals(state: GameState): Record<string, number
     totals[turn.playerId] = (totals[turn.playerId] || 0) + (turn.totalScore || 0);
     return totals;
   }, {});
+}
+
+export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView | null {
+  if (state.gameStatus !== 'showingResults' && state.gameStatus !== 'completed') return null;
+
+  const latestTurnId = state.turnOrder[state.turnOrder.length - 1];
+  const turn = latestTurnId ? state.turnsById[latestTurnId] : null;
+  if (!turn) return null;
+
+  const destinationNode = state.nodesById[turn.destinationNodeId];
+  const sourceNodes = turn.sourceNodeIds
+    .map(nodeId => state.nodesById[nodeId])
+    .filter(Boolean);
+  const player = state.playersById[turn.playerId];
+
+  return {
+    topic: sourceNodes.map(node => node.topic).join(' + '),
+    response: destinationNode?.topic || '',
+    evaluation: turn.evaluation || '',
+    finalEvaluation: turn.finalEvaluation,
+    scores: turn.legacyScores || {
+      semanticDistance: 0,
+      relevanceQuality: 0,
+      total: turn.totalScore || 0,
+    },
+    playerId: turn.playerId,
+    playerKind: player?.kind || 'local',
+  };
 }
 
 export function selectLegacyGameHistory(state: GameState): LegacyGameHistoryItem[] {

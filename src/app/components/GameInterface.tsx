@@ -771,7 +771,7 @@ export default function GameInterface() {
                 {/* Display the response that was evaluated */}
                 <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
                   <p className="font-medium text-gray-700">
-                    {currentEvaluation.player === 'human' ? 'Your' : 'AI'} Response to "{currentEvaluation.topic}":
+                    {currentEvaluation.playerKind === 'local' ? 'Your' : 'AI'} Response to "{currentEvaluation.topic}":
                   </p>
                   <p className="mt-1 text-lg">{currentEvaluation.response}</p>
                 </div>
