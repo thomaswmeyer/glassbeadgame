@@ -14,7 +14,6 @@ import {
   selectCurrentPlayer,
   selectGraphRenderData,
   selectPlayerScoreRows,
-  selectSelectedNodePanels,
   selectTurnHistoryRows,
   setGameStatus,
   setSelectedNodeIds,
@@ -95,7 +94,6 @@ export function useGameController({
   const currentPlayerController = currentPlayerModel
     ? resolvePlayerController(currentPlayerModel, effectivePlayerControllers)
     : null;
-  const selectedNodePanels = selectSelectedNodePanels(gameState);
   const turnHistoryRows = selectTurnHistoryRows(gameState);
   const playerScoreRows = selectPlayerScoreRows(gameState);
   const gameHistory = selectTurnContextHistory(gameState);
@@ -115,11 +113,6 @@ export function useGameController({
 
   const setSelectedGraphNodeId = (nodeId: string | null) => {
     setGameState(prev => setSelectedNodeIds(prev, nodeId ? [nodeId] : []));
-  };
-
-  const getSingleCurrentSourceNode = () => {
-    if (gameState.activeSourceNodeIds.length !== 1) return null;
-    return gameState.nodesById[gameState.activeSourceNodeIds[0]] || null;
   };
 
   const generateFirstTopic = async () => {
@@ -367,7 +360,6 @@ export function useGameController({
     currentEvaluation,
     graphRenderData,
     currentPlayerModel,
-    selectedNodePanels,
     turnHistoryRows,
     selectedGraphNodeId: gameState.selectedNodeIds[0] || null,
     currentRound,
@@ -382,7 +374,6 @@ export function useGameController({
     showingResults,
     gameCompleted,
     setSelectedGraphNodeId,
-    getSingleCurrentSourceNode,
     generateFirstTopic,
     evaluateResponse,
     handleNextTurn,

@@ -2,6 +2,7 @@
 
 import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
 import {
+  DefinitionTarget,
   GameState,
   setNodeDefinitionVisibility,
   updateNodeDefinition,
@@ -9,11 +10,6 @@ import {
 
 type DefinitionServices = {
   getDefinition(topic: string): Promise<string>;
-};
-
-export type DefinitionTarget = {
-  nodeId: string;
-  topic: string;
 };
 
 type UseDefinitionsParams = {

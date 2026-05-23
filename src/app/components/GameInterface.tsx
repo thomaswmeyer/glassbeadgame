@@ -3,6 +3,7 @@
 import { useState, KeyboardEvent } from 'react';
 import ModelSelector from './ModelSelector';
 import ScoreTooltip from './ScoreTooltip';
+import SelectedNodePanel from './SelectedNodePanel';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import TurnHistoryTable, { getPlayerBadgeClass } from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
@@ -10,10 +11,12 @@ import {
   DEFAULT_ROOT_NODE_ID,
   Score,
   TurnHistoryRow,
-  getTurnHistoryRowScore,
-  getTurnHistoryRowSourceTopicText,
   addActiveSourceNode,
   removeActiveSourceNode,
+  selectActiveSourceNodeStatus,
+  selectRootDefinitionTarget,
+  selectSelectedGraphNodeView,
+  selectSingleActiveSourceDefinitionTarget,
   setSelectedNodeIds,
 } from '@/domain/game';
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
@@ -62,7 +65,6 @@ export default function GameInterface() {
     currentEvaluation,
     graphRenderData,
     currentPlayerModel,
-    selectedNodePanels,
     turnHistoryRows,
     selectedGraphNodeId,
     currentRound,
@@ -77,7 +79,6 @@ export default function GameInterface() {
     showingResults,
     gameCompleted,
     setSelectedGraphNodeId,
-    getSingleCurrentSourceNode,
     generateFirstTopic: startGame,
     evaluateResponse,
     handleNextTurn: advanceTurn,
@@ -186,13 +187,7 @@ export default function GameInterface() {
     return;
   };
 
-  const singleCurrentSourceNode = getSingleCurrentSourceNode();
-  const currentTopicDefinitionTarget = singleCurrentSourceNode
-    ? {
-        nodeId: singleCurrentSourceNode.id,
-        topic: singleCurrentSourceNode.topic,
-      }
-    : null;
+  const currentTopicDefinitionTarget = selectSingleActiveSourceDefinitionTarget(gameState);
   const currentTopicNode = currentTopicDefinitionTarget
     ? gameState.nodesById[currentTopicDefinitionTarget.nodeId]
     : null;
@@ -204,12 +199,7 @@ export default function GameInterface() {
     ? isDefinitionLoading(currentTopicDefinitionTarget.nodeId)
     : false;
 
-  const originalTopicDefinitionTarget = gameState.rootNodeId && originalTopic
-    ? {
-        nodeId: gameState.rootNodeId,
-        topic: originalTopic,
-      }
-    : null;
+  const originalTopicDefinitionTarget = selectRootDefinitionTarget(gameState);
   const originalTopicNode = originalTopicDefinitionTarget
     ? gameState.nodesById[originalTopicDefinitionTarget.nodeId]
     : null;
@@ -243,37 +233,14 @@ export default function GameInterface() {
     await fetchDefinition(originalTopicDefinitionTarget);
   };
 
-  const selectedGraphNode = (() => {
-    if (!selectedGraphNodeId) return null;
-
-    if (selectedGraphNodeId === gameState.rootNodeId) {
-      return {
-        id: gameState.rootNodeId,
-        title: originalTopic,
-        subtitle: 'Original topic',
-        topicForDefinition: originalTopic,
-        historyItem: null as TurnHistoryRow | null,
-      };
-    }
-
-    const panel = selectedNodePanels.find(selectedPanel => selectedPanel.node.id === selectedGraphNodeId);
-    const historyItem = turnHistoryRows.find(row => row.destinationNode.id === selectedGraphNodeId) || null;
-    if (!panel) return null;
-
-    return {
-      id: selectedGraphNodeId,
-      title: panel.node.topic,
-      subtitle: panel.player ? `${panel.player.name} topic` : 'Topic',
-      topicForDefinition: panel.node.topic,
-      historyItem,
-    };
-  })();
+  const selectedGraphNode = selectSelectedGraphNodeView(gameState, selectedGraphNodeId);
 
   const selectedGraphTopicNode = selectedGraphNode ? gameState.nodesById[selectedGraphNode.id] : null;
   const selectedGraphNodeDefinition = selectedGraphTopicNode?.definition || null;
-  const selectedGraphNodeIsActiveSource = Boolean(
-    selectedGraphNode && gameState.activeSourceNodeIds.includes(selectedGraphNode.id)
-  );
+  const selectedGraphSourceStatus = selectedGraphNode
+    ? selectActiveSourceNodeStatus(gameState, selectedGraphNode.id)
+    : null;
+  const selectedGraphNodeIsActiveSource = Boolean(selectedGraphSourceStatus?.isActiveSource);
   const shouldShowSelectedGraphNodePanel = Boolean(
     selectedGraphNode &&
     (!selectedGraphNodeIsActiveSource || activeSourceNodes.length > 1)
@@ -560,67 +527,20 @@ export default function GameInterface() {
             )}
 
             {shouldShowSelectedGraphNodePanel && selectedGraphNode && (
-              <div className="p-3 bg-purple-50 rounded-lg mb-4 text-sm border border-purple-100">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-purple-900">{selectedGraphNode.title}</p>
-                    <p className="text-xs text-purple-700">{selectedGraphNode.subtitle}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedGraphNodeId(null)}
-                    className="text-xs px-2 py-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-800"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {selectedGraphNode.historyItem && (
-                  <div className="mt-2 text-gray-700">
-                    <p>Topic: {getTurnHistoryRowSourceTopicText(selectedGraphNode.historyItem)}</p>
-                    <p>Score: {getTurnHistoryRowScore(selectedGraphNode.historyItem).total}/20</p>
-                  </div>
-                )}
-
-                {selectedGraphNodeDefinition && selectedGraphTopicNode?.definitionVisible ? (
-                  <div className="mt-3 pt-3 border-t border-purple-100">
-                    <div className="flex items-center justify-between gap-3 mb-1">
-                      <p className="font-medium">Definition:</p>
-                      <button
-                        onClick={() => hideDefinition(selectedGraphNode.id)}
-                        className="text-xs px-2 py-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-800"
-                      >
-                        Hide
-                      </button>
-                    </div>
-                    <p>{selectedGraphNodeDefinition}</p>
-                  </div>
-                ) : selectedGraphNodeDefinition ? (
-                  <button
-                    onClick={() => showDefinition(selectedGraphNode.id)}
-                    className="mt-3 text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full"
-                  >
-                    Show Definition
-                  </button>
-                ) : (
-                  <button
-                    onClick={fetchSelectedGraphNodeDefinition}
-                    disabled={isLoadingSelectedGraphNodeDefinition}
-                    className="mt-3 text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-full"
-                  >
-                    {isLoadingSelectedGraphNodeDefinition ? 'Loading definition...' : 'Get Definition'}
-                  </button>
-                )}
-
-                {!showingResults && !isEvaluating && !isAiThinking && !gameCompleted && (
-                  <button
-                    onClick={handleToggleSelectedGraphNodeSource}
-                    disabled={selectedGraphNodeIsActiveSource && activeSourceNodes.length <= 1}
-                    className="mt-3 ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full"
-                  >
-                    {selectedGraphNodeIsActiveSource ? 'Remove Source' : 'Add Source'}
-                  </button>
-                )}
-              </div>
+              <SelectedNodePanel
+                selectedGraphNode={selectedGraphNode}
+                selectedGraphNodeDefinition={selectedGraphNodeDefinition}
+                definitionVisible={Boolean(selectedGraphTopicNode?.definitionVisible)}
+                isLoadingDefinition={isLoadingSelectedGraphNodeDefinition}
+                canToggleSource={!showingResults && !isEvaluating && !isAiThinking && !gameCompleted}
+                isActiveSource={selectedGraphNodeIsActiveSource}
+                canRemoveActiveSource={Boolean(selectedGraphSourceStatus?.canRemoveSource)}
+                onClear={() => setSelectedGraphNodeId(null)}
+                onFetchDefinition={fetchSelectedGraphNodeDefinition}
+                onHideDefinition={() => hideDefinition(selectedGraphNode.id)}
+                onShowDefinition={() => showDefinition(selectedGraphNode.id)}
+                onToggleSource={handleToggleSelectedGraphNodeSource}
+              />
             )}
 
             {activeSourceNodes.length > 0 && (

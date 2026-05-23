@@ -34,6 +34,11 @@ export type TopicNode = {
   isRoot: boolean;
 };
 
+export type DefinitionTarget = {
+  nodeId: string;
+  topic: string;
+};
+
 export type TopicEdge = {
   id: string;
   sourceNodeId: string;
@@ -115,6 +120,14 @@ export type SelectedNodePanel = {
   createdTurn?: Turn;
 };
 
+export type SelectedGraphNodeView = {
+  id: string;
+  title: string;
+  subtitle: string;
+  topicForDefinition: string;
+  historyItem: TurnHistoryRow | null;
+};
+
 export type TurnHistoryRow = {
   turn: Turn;
   player: Player;
@@ -137,6 +150,12 @@ export type PlayerScoreRow = {
   player: Player;
   totalScore: number;
   isCurrentPlayer: boolean;
+};
+
+export type ActiveSourceNodeStatus = {
+  isActiveSource: boolean;
+  canAddSource: boolean;
+  canRemoveSource: boolean;
 };
 
 export const DEFAULT_HUMAN_PLAYER_ID = 'player-human';
@@ -354,6 +373,39 @@ export function removeActiveSourceNode(state: GameState, nodeId: string): GameSt
   };
 }
 
+export function selectActiveSourceNodeStatus(state: GameState, nodeId: string): ActiveSourceNodeStatus {
+  const nodeExists = Boolean(state.nodesById[nodeId]);
+  const isActiveSource = state.activeSourceNodeIds.includes(nodeId);
+
+  return {
+    isActiveSource,
+    canAddSource: nodeExists && !isActiveSource,
+    canRemoveSource: isActiveSource && state.activeSourceNodeIds.length > 1,
+  };
+}
+
+export function selectNodeDefinitionTarget(state: GameState, nodeId: string | null | undefined): DefinitionTarget | null {
+  if (!nodeId) return null;
+
+  const node = state.nodesById[nodeId];
+  if (!node) return null;
+
+  return {
+    nodeId: node.id,
+    topic: node.topic,
+  };
+}
+
+export function selectSingleActiveSourceDefinitionTarget(state: GameState): DefinitionTarget | null {
+  if (state.activeSourceNodeIds.length !== 1) return null;
+
+  return selectNodeDefinitionTarget(state, state.activeSourceNodeIds[0]);
+}
+
+export function selectRootDefinitionTarget(state: GameState): DefinitionTarget | null {
+  return selectNodeDefinitionTarget(state, state.rootNodeId);
+}
+
 export function advanceGameTurn(state: GameState, nextPlayerId: string): GameState {
   return {
     ...state,
@@ -428,6 +480,38 @@ export function selectTurnHistoryRows(state: GameState): TurnHistoryRow[] {
       destinationNode: state.nodesById[turn.destinationNodeId],
     };
   });
+}
+
+export function selectSelectedGraphNodeView(
+  state: GameState,
+  selectedGraphNodeId: string | null
+): SelectedGraphNodeView | null {
+  if (!selectedGraphNodeId) return null;
+
+  const node = state.nodesById[selectedGraphNodeId];
+  if (!node) return null;
+
+  if (node.isRoot) {
+    return {
+      id: node.id,
+      title: node.topic,
+      subtitle: 'Original topic',
+      topicForDefinition: node.topic,
+      historyItem: null,
+    };
+  }
+
+  const player = node.createdByPlayerId ? state.playersById[node.createdByPlayerId] : undefined;
+  const historyItem = selectTurnHistoryRows(state)
+    .find(row => row.destinationNode.id === selectedGraphNodeId) || null;
+
+  return {
+    id: node.id,
+    title: node.topic,
+    subtitle: player ? `${player.name} topic` : 'Topic',
+    topicForDefinition: node.topic,
+    historyItem,
+  };
 }
 
 export function getTurnHistoryRowSourceTopicText(row: TurnHistoryRow) {
