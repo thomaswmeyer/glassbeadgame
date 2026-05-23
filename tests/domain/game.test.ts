@@ -6,6 +6,7 @@ import {
   addActiveSourceNode,
   addTurnToGameState,
   advanceGameTurn,
+  createEmptyGameState,
   getNextPlayerId,
   removeActiveSourceNode,
   selectCurrentEvaluation,
@@ -41,6 +42,35 @@ function startedState() {
     rootCreatedByPlayerId: DEFAULT_AI_PLAYER_ID,
   });
 }
+
+test('empty game state preserves custom players and falls back to the first player when current player is invalid', () => {
+  const state = createEmptyGameState(8, 'missing-player', players);
+
+  assert.deepEqual(state.playerOrder, ['player-local', 'player-openclaw', 'player-remote-ai']);
+  assert.deepEqual(Object.keys(state.playersById), ['player-local', 'player-openclaw', 'player-remote-ai']);
+  assert.equal(state.currentPlayerId, 'player-local');
+  assert.equal(state.maxRounds, 8);
+  assert.equal(state.gameStatus, 'setup');
+  assert.deepEqual(state.nodesById, {});
+  assert.deepEqual(state.edgesById, {});
+  assert.deepEqual(state.turnsById, {});
+});
+
+test('started game state preserves custom player ownership for generated roots', () => {
+  const state = startGameState({
+    rootTopic: 'Cathedrals',
+    maxRounds: 6,
+    currentPlayerId: 'player-openclaw',
+    rootCreatedByPlayerId: 'player-remote-ai',
+    players,
+  });
+
+  assert.equal(state.currentPlayerId, 'player-openclaw');
+  assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, 'player-remote-ai');
+  assert.equal(state.playersById['player-remote-ai'].name, 'Remote AI');
+  assert.deepEqual(state.activeSourceNodeIds, [state.rootNodeId]);
+  assert.deepEqual(state.selectedNodeIds, [state.rootNodeId]);
+});
 
 test('definition updates are node-scoped and visibility can be toggled independently', () => {
   const state = startedState();
