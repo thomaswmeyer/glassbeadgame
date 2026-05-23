@@ -1,33 +1,20 @@
 "use client";
 
-import { useState, KeyboardEvent, useEffect, useRef } from 'react';
+import { useState, KeyboardEvent, useRef } from 'react';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import { LLM_CONFIG } from '@/config/llm';
 import {
-  DEFAULT_AI_PLAYER_ID,
-  DEFAULT_HUMAN_PLAYER_ID,
   DEFAULT_ROOT_NODE_ID,
   Score,
   addActiveSourceNode,
-  addTurnToGameState,
-  advanceGameTurn,
-  createEmptyGameState,
-  getNextPlayerId,
   removeActiveSourceNode,
-  selectCurrentPlayer,
-  selectGraphRenderData,
-  selectLegacyGameHistory,
-  selectPlayerScoreTotals,
-  selectSelectedNodePanels,
-  selectTurnHistoryRows,
-  setGameStatus,
   setNodeDefinitionVisibility,
   setSelectedNodeIds,
-  startGameState,
   updateNodeDefinition,
 } from '@/domain/game';
+import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
 
 // Define the GameHistory type to match what SimpleConceptGraph expects
 interface GameHistory {
@@ -39,26 +26,13 @@ interface GameHistory {
   player: 'human' | 'ai';
 }
 
-type CurrentEvaluation = {
-  topic: string;
-  response: string;
-  evaluation: string;
-  scores: Score;
-  player: 'human' | 'ai';
-  finalEvaluation?: string;
-};
-
 function normalizeDefinitionTopic(topic: string) {
   return topic.trim().toLowerCase();
 }
 
 export default function GameInterface() {
   const definitionCacheRef = useRef<Map<string, string>>(new Map());
-  const startedAiTurnKeyRef = useRef<string | null>(null);
   const [, setDefinitionCacheVersion] = useState<number>(0);
-  const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
-  const [topic, setTopic] = useState<string>('');
-  const [originalTopic, setOriginalTopic] = useState<string>('');
   const [topicDefinition, setTopicDefinition] = useState<string>('');
   const [showDefinition, setShowDefinition] = useState<boolean>(false);
   const [isLoadingDefinition, setIsLoadingDefinition] = useState<boolean>(false);
@@ -66,8 +40,6 @@ export default function GameInterface() {
   const [showOriginalDefinition, setShowOriginalDefinition] = useState<boolean>(false);
   const [isLoadingOriginalDefinition, setIsLoadingOriginalDefinition] = useState<boolean>(false);
   const [isLoadingSelectedNodeDefinition, setIsLoadingSelectedNodeDefinition] = useState<boolean>(false);
-  const [response, setResponse] = useState<string>('');
-  const [currentEvaluation, setCurrentEvaluation] = useState<CurrentEvaluation | null>(null);
   
   // New state variables for user settings
   const [maxRounds, setMaxRounds] = useState<number>(10);
@@ -76,7 +48,6 @@ export default function GameInterface() {
   const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
   
   // Simplified difficulty level - single setting for both concept and AI
-  type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
   const difficultyLevels: DifficultyLevel[] = ['secondary', 'undergrad', 'grad', 'unlimited'];
   
@@ -102,98 +73,55 @@ export default function GameInterface() {
     isCircleMode: false
   });
 
-  const graphRenderData = selectGraphRenderData(gameState);
-  const currentPlayerModel = selectCurrentPlayer(gameState);
-  const selectedNodePanels = selectSelectedNodePanels(gameState);
-  const turnHistoryRows = selectTurnHistoryRows(gameState);
-  const scoreTotalsByPlayerId = selectPlayerScoreTotals(gameState);
-  const gameHistory: GameHistory[] = selectLegacyGameHistory(gameState);
-  const selectedGraphNodeId = gameState.selectedNodeIds[0] || null;
-  const currentRound = gameState.currentRound;
-  const currentPlayer = currentPlayerModel?.kind === 'ai' ? 'ai' : 'human';
-  const totalScores = {
-    human: scoreTotalsByPlayerId[DEFAULT_HUMAN_PLAYER_ID] || 0,
-    ai: scoreTotalsByPlayerId[DEFAULT_AI_PLAYER_ID] || 0,
-  };
-  const gameStarted = gameState.gameStatus !== 'setup';
-  const isGeneratingTopic = gameState.gameStatus === 'generatingTopic';
-  const isEvaluating = gameState.gameStatus === 'evaluating';
-  const isAiThinking = gameState.gameStatus === 'aiThinking';
-  const showingResults = gameState.gameStatus === 'showingResults' || gameState.gameStatus === 'completed';
-  const gameCompleted = gameState.gameStatus === 'completed';
+  const {
+    gameState,
+    setGameState,
+    topic,
+    setTopic,
+    originalTopic,
+    response,
+    setResponse,
+    currentEvaluation,
+    graphRenderData,
+    selectedNodePanels,
+    turnHistoryRows,
+    gameHistory,
+    selectedGraphNodeId,
+    currentRound,
+    currentPlayer,
+    totalScores,
+    activeSourceNodes,
+    currentSourceTopicText,
+    gameStarted,
+    isGeneratingTopic,
+    isEvaluating,
+    isAiThinking,
+    showingResults,
+    gameCompleted,
+    setSelectedGraphNodeId,
+    findNodeIdByTopic,
+    getSingleCurrentSourceNode,
+    generateFirstTopic: startGame,
+    evaluateResponse,
+    handleNextTurn: advanceTurn,
+    handleRestart: restartGame,
+    handleReturnToSettings: returnToSettings,
+  } = useGameController({
+    maxRounds,
+    aiGoesFirst,
+    circleEnabled,
+    difficulty,
+  });
+
   const hasBranchedSourceSelection = gameState.activeSourceNodeIds.length > 1 || (
     gameState.activeSourceNodeIds.length === 1 &&
     gameState.nodesById[gameState.activeSourceNodeIds[0]]?.topic !== topic
   );
 
-  const setSelectedGraphNodeId = (nodeId: string | null) => {
-    setGameState(prev => setSelectedNodeIds(prev, nodeId ? [nodeId] : []));
-  };
-
-  const getPlayerIdForTurn = (player: 'human' | 'ai') => {
-    return player === 'ai' ? DEFAULT_AI_PLAYER_ID : DEFAULT_HUMAN_PLAYER_ID;
-  };
-
-  const findNodeIdByTopic = (topicValue: string) => {
-    return Object.values(gameState.nodesById).find(node => node.topic === topicValue)?.id || null;
-  };
-
-  const getCurrentSourceTopicText = () => {
-    const activeSourceNodes = gameState.activeSourceNodeIds
-      .map(nodeId => gameState.nodesById[nodeId])
-      .filter(Boolean);
-
-    return activeSourceNodes.length > 0
-      ? activeSourceNodes.map(sourceNode => sourceNode.topic).join(' + ')
-      : topic;
-  };
-
-  const getSingleCurrentSourceNode = () => {
-    if (gameState.activeSourceNodeIds.length !== 1) return null;
-    return gameState.nodesById[gameState.activeSourceNodeIds[0]] || null;
-  };
-
   const generateFirstTopic = async () => {
-    console.log('=== GENERATING FIRST TOPIC ===');
-    console.log('aiGoesFirst setting:', aiGoesFirst);
-
-    const initialPlayer = aiGoesFirst ? 'ai' : 'human';
-    setGameState(setGameStatus(
-      createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
-      'generatingTopic'
-    ));
-    
-    // Set a temporary loading message as the topic
-    setTopic('Generating new topic...');
-    setCurrentEvaluation(null);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
-    
-    console.log('Setting initial player to:', initialPlayer);
-    
-    try {
-      const result = await axios.post('/api/generate-topic', {
-        difficulty: difficulty
-      });
-      const newTopic = result.data.topic;
-      setTopic(newTopic);
-      setOriginalTopic(newTopic); // Store the original topic
-      setResponse('');
-      
-      console.log('Confirming player after API call:', initialPlayer);
-      setGameState(startGameState({
-        rootTopic: newTopic,
-        maxRounds,
-        currentPlayerId: getPlayerIdForTurn(initialPlayer),
-        rootCreatedByPlayerId: DEFAULT_AI_PLAYER_ID,
-      }));
-    } catch (error) {
-      console.error('Error generating topic:', error);
-      setGameState(createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)));
-      alert('Failed to generate topic. Please try again.');
-    } finally {
-      console.log('Topic generation completed. Current player:', aiGoesFirst ? 'ai' : 'human');
-    }
+    await startGame();
   };
 
   const getCachedDefinition = async (definitionTopic: string) => {
@@ -261,234 +189,6 @@ export default function GameInterface() {
     if (e.key === 'Enter' && response.trim()) {
       e.preventDefault();
       evaluateResponse();
-    }
-  };
-
-  const evaluateResponse = async () => {
-    const evaluationTopic = getCurrentSourceTopicText();
-    if (!evaluationTopic || !response) return;
-    
-    setGameState(prev => setGameStatus(prev, 'evaluating'));
-    
-    let retries = 0;
-    const maxRetries = 3;
-    
-    while (retries < maxRetries) {
-      try {
-        let evaluationEndpoint = '/api/evaluate-response';
-        let requestBody: any = { 
-          topic: evaluationTopic,
-          response,
-          difficulty: difficulty // Use the single difficulty level
-        };
-        
-        // For the final round with circle enabled, use the special evaluation endpoint
-        if (currentRound === maxRounds && circleEnabled) {
-          evaluationEndpoint = '/api/evaluate-final-response';
-          requestBody = { 
-            currentTopic: evaluationTopic,
-            originalTopic: originalTopic, 
-            response,
-            difficulty: difficulty // Use the single difficulty level
-          };
-        }
-        
-        console.log(`Evaluation attempt ${retries + 1}/${maxRetries}`);
-        const res = await fetch(evaluationEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          console.error(`HTTP error ${res.status}:`, errorData);
-          throw new Error(`HTTP error ${res.status}: ${errorData.error || 'Unknown error'}`);
-        }
-
-        const data = await res.json();
-        
-        // Handle final round evaluation differently if circle is enabled
-        if (currentRound === maxRounds && circleEnabled) {
-          setCurrentEvaluation({
-            topic: evaluationTopic,
-            response,
-            player: currentPlayer,
-            evaluation: data.evaluation,
-            finalEvaluation: data.finalEvaluation,
-            scores: data.scores,
-          });
-        } else {
-          setCurrentEvaluation({
-            topic: evaluationTopic,
-            response,
-            player: currentPlayer,
-            evaluation: data.evaluation,
-            scores: data.scores,
-          });
-        }
-        
-        setGameState(prev => addTurnToGameState(prev, {
-          destinationTopic: response,
-          playerId: getPlayerIdForTurn('human'),
-          sourceNodeIds: prev.activeSourceNodeIds,
-          evaluation: data.evaluation,
-          finalEvaluation: data.finalEvaluation,
-          totalScore: data.scores.total,
-          legacyScores: data.scores,
-        }));
-        setGameState(prev => setGameStatus(
-          prev,
-          currentRound === maxRounds ? 'completed' : 'showingResults'
-        ));
-        
-        // Reset custom topic selection
-        setResponse('');
-        
-        // Success, exit the retry loop
-        break;
-        
-      } catch (error) {
-        console.error(`Evaluation attempt ${retries + 1} failed:`, error);
-        retries++;
-        
-        if (retries >= maxRetries) {
-          setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
-          alert('Failed to evaluate response after multiple attempts. Please try again.');
-        } else {
-          // Wait before retrying (exponential backoff)
-          const backoffTime = 1000 * Math.pow(2, retries);
-          console.log(`Retrying in ${backoffTime}ms...`);
-          await new Promise(r => setTimeout(r, backoffTime));
-        }
-      }
-    }
-  };
-
-  const evaluateAiResponse = async (aiResponse: string) => {
-    const evaluationTopic = getCurrentSourceTopicText();
-    if (!evaluationTopic || !aiResponse) return;
-    
-    setGameState(prev => setGameStatus(prev, 'evaluating'));
-    
-    let retries = 0;
-    const maxRetries = 3;
-    
-    while (retries < maxRetries) {
-      try {
-        let evaluationEndpoint = '/api/evaluate-response';
-        let requestBody: any = { 
-          topic: evaluationTopic,
-          response: aiResponse,
-          difficulty: difficulty // Use the single difficulty level
-        };
-        
-        // For the final round with circle enabled, use the special evaluation endpoint
-        if (currentRound === maxRounds && circleEnabled) {
-          evaluationEndpoint = '/api/evaluate-final-response';
-          requestBody = { 
-            currentTopic: evaluationTopic,
-            originalTopic: originalTopic, 
-            response: aiResponse,
-            difficulty: difficulty // Use the single difficulty level
-          };
-        }
-        
-        console.log(`AI evaluation attempt ${retries + 1}/${maxRetries}`);
-        const res = await fetch(evaluationEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          console.error(`HTTP error ${res.status}:`, errorData);
-          throw new Error(`HTTP error ${res.status}: ${errorData.error || 'Unknown error'}`);
-        }
-
-        const data = await res.json();
-        
-        // Handle final round evaluation differently if circle is enabled
-        if (currentRound === maxRounds && circleEnabled) {
-          setCurrentEvaluation({
-            topic: evaluationTopic,
-            response: aiResponse,
-            player: 'ai',
-            evaluation: data.evaluation,
-            finalEvaluation: data.finalEvaluation,
-            scores: data.scores,
-          });
-        } else {
-          setCurrentEvaluation({
-            topic: evaluationTopic,
-            response: aiResponse,
-            player: 'ai',
-            evaluation: data.evaluation,
-            scores: data.scores,
-          });
-        }
-        
-        setGameState(prev => addTurnToGameState(prev, {
-          destinationTopic: aiResponse,
-          playerId: getPlayerIdForTurn('ai'),
-          sourceNodeIds: prev.activeSourceNodeIds,
-          evaluation: data.evaluation,
-          finalEvaluation: data.finalEvaluation,
-          totalScore: data.scores.total,
-          legacyScores: data.scores,
-        }));
-        setGameState(prev => setGameStatus(
-          prev,
-          currentRound === maxRounds ? 'completed' : 'showingResults'
-        ));
-        
-        // Success, exit the retry loop
-        break;
-        
-      } catch (error) {
-        console.error(`AI evaluation attempt ${retries + 1} failed:`, error);
-        retries++;
-        
-        if (retries >= maxRetries) {
-          // If all retries fail, create a fallback evaluation
-          const fallbackScores = {
-            semanticDistance: 5,
-            relevanceQuality: 5,
-            total: 10
-          };
-          
-          setCurrentEvaluation({
-            topic: evaluationTopic,
-            response: aiResponse,
-            player: 'ai',
-            evaluation: "I couldn't evaluate this response properly. Here's a default score.",
-            scores: fallbackScores,
-          });
-          
-          setGameState(prev => addTurnToGameState(prev, {
-            destinationTopic: aiResponse,
-            playerId: getPlayerIdForTurn('ai'),
-            sourceNodeIds: prev.activeSourceNodeIds,
-            evaluation: "Evaluation failed. Default score applied.",
-            totalScore: fallbackScores.total,
-            legacyScores: fallbackScores,
-          }));
-          setGameState(prev => setGameStatus(
-            prev,
-            currentRound === maxRounds ? 'completed' : 'showingResults'
-          ));
-        } else {
-          // Wait before retrying (exponential backoff)
-          const backoffTime = 1000 * Math.pow(2, retries);
-          console.log(`Retrying in ${backoffTime}ms...`);
-          await new Promise(r => setTimeout(r, backoffTime));
-        }
-      }
     }
   };
 
@@ -591,12 +291,6 @@ export default function GameInterface() {
   const selectedGraphNodeIsActiveSource = Boolean(
     selectedGraphNode && gameState.activeSourceNodeIds.includes(selectedGraphNode.id)
   );
-  const activeSourceNodes = gameState.activeSourceNodeIds
-    .map(nodeId => gameState.nodesById[nodeId])
-    .filter(Boolean);
-  const currentSourceTopicText = activeSourceNodes.length > 0
-    ? activeSourceNodes.map(sourceNode => sourceNode.topic).join(' + ')
-    : topic;
   const shouldShowSelectedGraphNodePanel = Boolean(
     selectedGraphNode &&
     (!selectedGraphNodeIsActiveSource || activeSourceNodes.length > 1)
@@ -630,219 +324,26 @@ export default function GameInterface() {
     setTopicDefinition('');
   };
 
-  const handleNextTurn = () => {
-    // If game is completed, don't proceed
-    if (gameCompleted) return;
-    
-    console.log('=== NEXT TURN ===');
-    console.log('Current round:', currentRound);
-    console.log('Current player:', currentPlayer);
-    console.log('Current response state:', response);
-    console.log('Current evaluation state:', currentEvaluation);
-    console.log('Game history:', gameHistory);
-    
-    // Use the evaluated response as the next topic. The input state is cleared
-    // after evaluation, so currentEvaluation is the durable source here.
-    let nextTopic = currentEvaluation?.response || '';
-    console.log('Using evaluated response as next topic:', nextTopic);
-    
-    if (!nextTopic || !nextTopic.trim()) {
-      console.error('No valid next topic found!');
-      console.error('Response value:', response);
-      console.error('Current evaluation:', JSON.stringify(currentEvaluation, null, 2));
-      console.error('Current player:', currentPlayer);
-      
-      // Try to recover by using the last response from game history
-      if (gameHistory.length > 0) {
-        const lastEntry = gameHistory[gameHistory.length - 1];
-        console.log('Attempting to recover using last game history entry:', lastEntry);
-        if (lastEntry && lastEntry.response) {
-          nextTopic = lastEntry.response;
-          console.log('Recovered next topic from game history:', nextTopic);
-        }
-      }
-      
-      // If still no valid topic, alert the user
-      if (!nextTopic || !nextTopic.trim()) {
-        console.error('Recovery failed, no valid topic found in game history');
-        alert('Error: Could not determine the next topic. Please restart the game.');
-        return;
-      }
-    }
-    
-    // Use the player's response as the next topic
-    console.log('Setting next topic:', nextTopic);
-    setTopic(nextTopic);
-    
-    // Increment round and reset states
-    setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev)));
-    setCurrentEvaluation(null);
-    setResponse('');
-    setShowDefinition(false);
-    setShowOriginalDefinition(false);
-  };
-
-  // AI's turn to respond
-  useEffect(() => {
-    const aiTakeTurn = async () => {
-      if (gameState.gameStatus === 'awaitingResponse' && currentPlayerModel?.kind === 'ai') {
-        // Skip AI turn if the topic is still loading
-        if (topic === 'Generating new topic...') {
-          console.log('Skipping AI turn because topic is still loading');
-          return;
-        }
-
-        const aiTurnKey = `${gameState.currentRound}:${gameState.currentPlayerId}:${gameState.turnOrder.length}`;
-        if (startedAiTurnKeyRef.current === aiTurnKey) return;
-
-        startedAiTurnKeyRef.current = aiTurnKey;
-        setGameState(prev => setGameStatus(prev, 'aiThinking'));
-        const aiPromptTopic = currentSourceTopicText;
-        
-        console.log('=== AI TURN STARTED ===');
-        console.log('Current round:', currentRound);
-        console.log('Current topic:', aiPromptTopic);
-        console.log('Original topic:', originalTopic);
-        console.log('Game history length:', gameHistory.length);
-        console.log('Full game history:', JSON.stringify(gameHistory, null, 2));
-        console.log('Max rounds:', maxRounds);
-        console.log('Difficulty level:', difficulty);
-        console.log('Circle enabled:', circleEnabled);
-        
-        try {
-          // For the final round with circle enabled, we need to inform the AI that it needs to connect back to the original topic
-          const endpoint = (currentRound === maxRounds && circleEnabled) ? '/api/ai-final-response' : '/api/ai-response';
-          console.log('Using endpoint:', endpoint);
-          
-          // Prepare game history in the correct format
-          const formattedHistory = gameHistory.map(item => ({
-            round: item.round,
-            topic: item.topic,
-            response: item.response,
-            evaluation: item.evaluation,
-            scores: item.scores,
-            player: item.player
-          }));
-          
-          console.log('Sending request to AI endpoint:', {
-            endpoint,
-            topic: aiPromptTopic,
-            originalTopic,
-            gameHistoryLength: formattedHistory.length,
-            difficulty: difficulty
-          });
-          
-          // Create a simplified payload for debugging
-          const debugPayload = {
-            topic: aiPromptTopic,
-            originalTopic,
-            gameHistoryCount: formattedHistory.length,
-            difficulty: difficulty,
-            circleEnabled: circleEnabled
-          };
-          console.log('Request payload (simplified):', JSON.stringify(debugPayload));
-          
-          // Get AI response to the current topic
-          console.log('Making axios request...');
-          const result = await axios.post(endpoint, {
-            topic: aiPromptTopic,
-            originalTopic: originalTopic,
-            gameHistory: formattedHistory,
-            difficulty: difficulty,
-            circleEnabled: circleEnabled
-          });
-          
-          console.log('Axios request completed');
-          console.log('Response status:', result.status);
-          console.log('Response data:', result.data);
-          
-          let aiResponse = result.data.response;
-          console.log('Received AI response:', aiResponse);
-          
-          // Ensure we have a valid response
-          if (!aiResponse || !aiResponse.trim()) {
-            console.warn('Empty AI response received, generating a fallback response');
-            
-            // Generate a fallback response based on the current topic
-            aiResponse = `Response to ${aiPromptTopic}`;
-            console.log('Generated fallback response:', aiResponse);
-          }
-          
-          console.log('Final AI response:', aiResponse);
-          setResponse(aiResponse);
-          
-          await evaluateAiResponse(aiResponse);
-          
-        } catch (error: any) {
-          console.error('=== AI RESPONSE ERROR ===');
-          console.error('Error getting AI response:', error);
-          
-          // Provide more detailed error information
-          if (error.response) {
-            console.error('Error response status:', error.response.status);
-            console.error('Error response data:', error.response.data);
-            console.error('Error response headers:', error.response.headers);
-          } else if (error.request) {
-            console.error('Error request:', error.request);
-          } else {
-            console.error('Error message:', error.message);
-          }
-          console.error('Error config:', error.config);
-          console.error('Error stack:', error.stack);
-          
-          // Generate a fallback response based on the current topic
-          const aiResponse = `Response to ${aiPromptTopic}`;
-          console.log('Generated fallback response after error:', aiResponse);
-          
-          setResponse(aiResponse);
-          
-          await evaluateAiResponse(aiResponse);
-        }
-      }
-    };
-    
-    aiTakeTurn();
-  }, [gameState.gameStatus, gameState.currentRound, gameState.currentPlayerId, gameState.turnOrder.length, currentPlayerModel?.kind, currentRound, topic, currentSourceTopicText, originalTopic, gameHistory, maxRounds, difficulty, circleEnabled]);
-
   const handleRestart = () => {
-    console.log('=== RESTARTING GAME ===');
-    console.log('aiGoesFirst setting:', aiGoesFirst);
-    
-    // Immediately clear the topic and response to prevent showing previous game data
-    setTopic('');
-    setOriginalTopic('');
-    setResponse('');
-    
-    setGameState(createEmptyGameState(maxRounds, getPlayerIdForTurn(aiGoesFirst ? 'ai' : 'human')));
-    setSelectedGraphNodeId(null);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
     setTopicDefinition('');
-    setCurrentEvaluation(null);
-    
-    generateFirstTopic();
-    
-    // Log the current player after generateFirstTopic is called
-    console.log('Current player after restart:', aiGoesFirst ? 'ai' : 'human');
+    restartGame();
   };
 
-  // Add function to return to settings screen
   const handleReturnToSettings = () => {
-    console.log('=== RETURNING TO SETTINGS ===');
-    
-    setGameState(createEmptyGameState(maxRounds, DEFAULT_HUMAN_PLAYER_ID));
-    setSelectedGraphNodeId(null);
     setShowDefinition(false);
     setShowOriginalDefinition(false);
     setOriginalTopicDefinition('');
     setTopicDefinition('');
-    setCurrentEvaluation(null);
-    setResponse('');
-    setTopic('');
-    setOriginalTopic('');
-    
-    console.log('Game state reset completed');
+    returnToSettings();
+  };
+
+  const handleNextTurn = () => {
+    setShowDefinition(false);
+    setShowOriginalDefinition(false);
+    advanceTurn();
   };
 
   // Function to handle showing the tooltip

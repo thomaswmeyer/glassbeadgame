@@ -36,7 +36,7 @@ the game develops.
 - Human vs AI turn-based play.
 - Configurable round count.
 - Human-first or AI-first game start.
-- Difficulty levels: secondary, university, and unlimited.
+- Difficulty levels: secondary, undergrad, grad, and unlimited.
 - LLM scoring and written evaluations after each turn.
 - Definition lookup for the current and original topics.
 - Concept graph visualization using D3.
