@@ -163,6 +163,11 @@ export type ActiveSourceRow = {
   canRemoveSource: boolean;
 };
 
+export type SetupPlayerNames = {
+  localPlayerName: string;
+  aiPlayerName: string;
+};
+
 export const DEFAULT_HUMAN_PLAYER_ID = 'player-human';
 export const DEFAULT_AI_PLAYER_ID = 'player-ai';
 export const DEFAULT_ROOT_NODE_ID = 'root';
@@ -399,6 +404,21 @@ export function selectActiveSourceRows(state: GameState): ActiveSourceRow[] {
     }));
 }
 
+export function selectHasBranchedSourceSelection(state: GameState) {
+  const latestTurnId = state.turnOrder[state.turnOrder.length - 1];
+  const defaultSourceNodeId = latestTurnId
+    ? state.turnsById[latestTurnId]?.destinationNodeId
+    : state.rootNodeId;
+
+  return Boolean(
+    defaultSourceNodeId &&
+    (
+      state.activeSourceNodeIds.length !== 1 ||
+      state.activeSourceNodeIds[0] !== defaultSourceNodeId
+    )
+  );
+}
+
 export function selectNodeDefinitionTarget(state: GameState, nodeId: string | null | undefined): DefinitionTarget | null {
   if (!nodeId) return null;
 
@@ -529,6 +549,42 @@ export function selectSelectedGraphNodeView(
   };
 }
 
+export function selectShouldShowSelectedGraphNodePanel(
+  state: GameState,
+  selectedGraphNodeId: string | null
+) {
+  if (!selectSelectedGraphNodeView(state, selectedGraphNodeId)) return false;
+
+  const isActiveSource = Boolean(
+    selectedGraphNodeId && state.activeSourceNodeIds.includes(selectedGraphNodeId)
+  );
+
+  return !isActiveSource || state.activeSourceNodeIds.length > 1;
+}
+
+export function selectTopicNodeIdByTopic(
+  state: GameState,
+  topicValue: string,
+  beforeHistoryIndex = state.turnOrder.length
+) {
+  const normalizedTopic = topicValue.trim();
+  if (!normalizedTopic) return null;
+
+  const rootTopic = state.rootNodeId ? state.nodesById[state.rootNodeId]?.topic : '';
+  if (normalizedTopic === rootTopic) {
+    return state.rootNodeId || DEFAULT_ROOT_NODE_ID;
+  }
+
+  const historyRows = selectTurnHistoryRows(state);
+  for (let index = Math.min(beforeHistoryIndex - 1, historyRows.length - 1); index >= 0; index--) {
+    if (historyRows[index].destinationNode.topic === normalizedTopic) {
+      return historyRows[index].destinationNode.id || null;
+    }
+  }
+
+  return null;
+}
+
 export function getTurnHistoryRowSourceTopicText(row: TurnHistoryRow) {
   return row.sourceNodes.map(node => node.topic).join(' + ');
 }
@@ -560,6 +616,13 @@ export function selectPlayerScoreRows(state: GameState): PlayerScoreRow[] {
       totalScore: scoreTotals[player.id] || 0,
       isCurrentPlayer: player.id === state.currentPlayerId,
     }));
+}
+
+export function selectSetupPlayerNames(playerScoreRows: PlayerScoreRow[]): SetupPlayerNames {
+  return {
+    localPlayerName: playerScoreRows.find(row => row.player.kind === 'local')?.player.name || 'Local player',
+    aiPlayerName: playerScoreRows.find(row => row.player.kind === 'ai')?.player.name || 'AI player',
+  };
 }
 
 export function getGameOutcomeText(playerScoreRows: PlayerScoreRow[]) {

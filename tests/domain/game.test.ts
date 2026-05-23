@@ -16,11 +16,15 @@ import {
   selectActiveSourceRows,
   selectCurrentEvaluation,
   selectGraphRenderData,
+  selectHasBranchedSourceSelection,
   selectPlayerScoreRows,
   selectRootDefinitionTarget,
   selectSelectedGraphNodeView,
   selectSelectedNodePanels,
+  selectSetupPlayerNames,
+  selectShouldShowSelectedGraphNodePanel,
   selectSingleActiveSourceDefinitionTarget,
+  selectTopicNodeIdByTopic,
   selectTurnHistoryRows,
   setGameStatus,
   setNodeDefinitionVisibility,
@@ -256,6 +260,65 @@ test('active source rows expose source nodes with removable state', () => {
   ]);
 });
 
+test('branched source selection compares active sources to the default latest topic', () => {
+  const state = startedState();
+  assert.equal(selectHasBranchedSourceSelection(state), false);
+
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const withRootSource = {
+    ...withTurn,
+    activeSourceNodeIds: [state.rootNodeId],
+  };
+
+  assert.equal(selectHasBranchedSourceSelection(withTurn), false);
+  assert.equal(selectHasBranchedSourceSelection(withRootSource), true);
+  assert.equal(selectHasBranchedSourceSelection(addActiveSourceNode(withTurn, state.rootNodeId)), true);
+});
+
+test('selected node panel visibility hides the sole active source but shows selected branches and multi-source selections', () => {
+  const state = startedState();
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
+
+  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, turn.destinationNodeId), false);
+  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, state.rootNodeId), true);
+  assert.equal(
+    selectShouldShowSelectedGraphNodePanel(addActiveSourceNode(withTurn, state.rootNodeId), turn.destinationNodeId),
+    true
+  );
+  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, 'missing-node'), false);
+});
+
+test('topic node lookup resolves roots and duplicate destination topics by history position', () => {
+  const state = startedState();
+  const first = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const firstTurn = first.turnsById[first.turnOrder[0]];
+  const second = addTurnToGameState(advanceGameTurn(first, DEFAULT_AI_PLAYER_ID), {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_AI_PLAYER_ID,
+    sourceNodeIds: [firstTurn.destinationNodeId],
+  });
+  const secondTurn = second.turnsById[second.turnOrder[1]];
+
+  assert.equal(selectTopicNodeIdByTopic(second, 'Cathedrals'), state.rootNodeId);
+  assert.equal(selectTopicNodeIdByTopic(second, 'Flying buttresses'), secondTurn.destinationNodeId);
+  assert.equal(selectTopicNodeIdByTopic(second, 'Flying buttresses', 1), firstTurn.destinationNodeId);
+  assert.equal(selectTopicNodeIdByTopic(second, '  '), null);
+  assert.equal(selectTopicNodeIdByTopic(second, 'Missing topic'), null);
+});
+
 test('player score rows support more than two players and preserve configured order', () => {
   const state = startGameState({
     rootTopic: 'Cathedrals',
@@ -289,6 +352,25 @@ test('player score rows support more than two players and preserve configured or
       { id: 'player-remote-ai', totalScore: 0, isCurrentPlayer: false },
     ]
   );
+});
+
+test('setup player names expose local and ai player labels with fallbacks', () => {
+  const state = startGameState({
+    rootTopic: 'Cathedrals',
+    maxRounds: 6,
+    currentPlayerId: 'player-local',
+    rootCreatedByPlayerId: 'player-remote-ai',
+    players,
+  });
+
+  assert.deepEqual(selectSetupPlayerNames(selectPlayerScoreRows(state)), {
+    localPlayerName: 'Local',
+    aiPlayerName: 'OpenClaw',
+  });
+  assert.deepEqual(selectSetupPlayerNames([]), {
+    localPlayerName: 'Local player',
+    aiPlayerName: 'AI player',
+  });
 });
 
 test('game outcome text reports a winner or tie from player score rows', () => {

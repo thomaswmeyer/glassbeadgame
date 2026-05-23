@@ -12,16 +12,19 @@ import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
 import {
-  DEFAULT_ROOT_NODE_ID,
   Score,
   TurnHistoryRow,
   addActiveSourceNode,
   removeActiveSourceNode,
   selectActiveSourceNodeStatus,
   selectActiveSourceRows,
+  selectHasBranchedSourceSelection,
   selectRootDefinitionTarget,
   selectSelectedGraphNodeView,
+  selectSetupPlayerNames,
+  selectShouldShowSelectedGraphNodePanel,
   selectSingleActiveSourceDefinitionTarget,
+  selectTopicNodeIdByTopic,
   setSelectedNodeIds,
 } from '@/domain/game';
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
@@ -75,7 +78,6 @@ export default function GameInterface() {
     currentRound,
     isCurrentPlayerManual,
     playerScoreRows,
-    activeSourceNodes,
     currentSourceTopicText,
     gameStarted,
     isGeneratingTopic,
@@ -107,19 +109,8 @@ export default function GameInterface() {
     services: gameApi,
   });
 
-  const latestTurnId = gameState.turnOrder[gameState.turnOrder.length - 1];
-  const defaultSourceNodeId = latestTurnId
-    ? gameState.turnsById[latestTurnId]?.destinationNodeId
-    : gameState.rootNodeId;
-  const hasBranchedSourceSelection = Boolean(
-    defaultSourceNodeId &&
-    (
-      gameState.activeSourceNodeIds.length !== 1 ||
-      gameState.activeSourceNodeIds[0] !== defaultSourceNodeId
-    )
-  );
-  const localPlayerName = playerScoreRows.find(row => row.player.kind === 'local')?.player.name || 'Local player';
-  const aiPlayerName = playerScoreRows.find(row => row.player.kind === 'ai')?.player.name || 'AI player';
+  const hasBranchedSourceSelection = selectHasBranchedSourceSelection(gameState);
+  const { localPlayerName, aiPlayerName } = selectSetupPlayerNames(playerScoreRows);
   const activeSourceRows = selectActiveSourceRows(gameState);
 
   const generateFirstTopic = async () => {
@@ -146,20 +137,7 @@ export default function GameInterface() {
   };
 
   const getTopicGraphNodeId = (topicValue: string, beforeHistoryIndex = turnHistoryRows.length) => {
-    const normalizedTopic = topicValue.trim();
-    if (!normalizedTopic) return null;
-
-    if (normalizedTopic === originalTopic) {
-      return gameState.rootNodeId || DEFAULT_ROOT_NODE_ID;
-    }
-
-    for (let index = Math.min(beforeHistoryIndex - 1, turnHistoryRows.length - 1); index >= 0; index--) {
-      if (turnHistoryRows[index].destinationNode.topic === normalizedTopic) {
-        return turnHistoryRows[index]?.destinationNode.id || null;
-      }
-    }
-
-    return null;
+    return selectTopicNodeIdByTopic(gameState, topicValue, beforeHistoryIndex);
   };
 
   const handleTopicRowClick = (topicValue: string, beforeHistoryIndex?: number) => {
@@ -233,10 +211,7 @@ export default function GameInterface() {
     ? selectActiveSourceNodeStatus(gameState, selectedGraphNode.id)
     : null;
   const selectedGraphNodeIsActiveSource = Boolean(selectedGraphSourceStatus?.isActiveSource);
-  const shouldShowSelectedGraphNodePanel = Boolean(
-    selectedGraphNode &&
-    (!selectedGraphNodeIsActiveSource || activeSourceNodes.length > 1)
-  );
+  const shouldShowSelectedGraphNodePanel = selectShouldShowSelectedGraphNodePanel(gameState, selectedGraphNodeId);
 
   const fetchSelectedGraphNodeDefinition = async () => {
     if (!selectedGraphNode) return;
