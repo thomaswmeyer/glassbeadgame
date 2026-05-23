@@ -2,6 +2,29 @@ import { NextResponse } from 'next/server';
 import { currentModelConfig, LLM_CONFIG, updateModel } from '@/config/llm';
 import { generateTopic } from '@/services/llm';
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function getStatus(error: unknown) {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? error.status
+    : undefined;
+}
+
+function getResponseData(error: unknown) {
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return undefined;
+  }
+
+  const response = error.response;
+  if (typeof response !== 'object' || response === null || !('data' in response)) {
+    return undefined;
+  }
+
+  return response.data;
+}
+
 export async function POST(request: Request) {
   try {
     // Check if we're in production mode
@@ -61,11 +84,11 @@ export async function POST(request: Request) {
         
         testResult = 'DeepSeek API test successful';
         console.log(testResult);
-      } catch (error: any) {
+      } catch (error: unknown) {
         testError = {
-          message: error.message,
-          status: error.status,
-          details: error.response?.data || 'No detailed error data'
+          message: getErrorMessage(error),
+          status: getStatus(error),
+          details: getResponseData(error) || 'No detailed error data'
         };
         console.error('DeepSeek API test failed:', testError);
         
@@ -86,12 +109,12 @@ export async function POST(request: Request) {
       testResult,
       testError
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error setting model:', error);
     return NextResponse.json(
       { 
         error: 'Failed to set model',
-        details: error.message
+        details: getErrorMessage(error)
       },
       { status: 500 }
     );

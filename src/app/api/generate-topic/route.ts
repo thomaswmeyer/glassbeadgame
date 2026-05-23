@@ -88,7 +88,7 @@ const categories = [
 ];
 
 // Store recent topics to avoid repetition
-let recentTopics: string[] = [];
+const recentTopics: string[] = [];
 const MAX_RECENT_TOPICS = 20;
 
 export async function POST(request: Request) {
@@ -132,4 +132,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

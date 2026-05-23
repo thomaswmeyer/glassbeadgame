@@ -11,10 +11,14 @@ import {
   getTurnHistoryRowSourceTopicText,
   getNextPlayerId,
   removeActiveSourceNode,
+  selectActiveSourceNodeStatus,
   selectCurrentEvaluation,
   selectGraphRenderData,
   selectPlayerScoreRows,
+  selectRootDefinitionTarget,
+  selectSelectedGraphNodeView,
   selectSelectedNodePanels,
+  selectSingleActiveSourceDefinitionTarget,
   selectTurnHistoryRows,
   setGameStatus,
   setNodeDefinitionVisibility,
@@ -89,6 +93,28 @@ test('definition updates are node-scoped and visibility can be toggled independe
   assert.equal(setNodeDefinitionVisibility(hidden, 'missing-node', true), hidden);
 });
 
+test('definition targets are selected from nodes rather than rebuilt by UI callers', () => {
+  const state = startedState();
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
+
+  assert.deepEqual(selectRootDefinitionTarget(withTurn), {
+    nodeId: state.rootNodeId,
+    topic: 'Cathedrals',
+  });
+  assert.deepEqual(selectSingleActiveSourceDefinitionTarget(withTurn), {
+    nodeId: turn.destinationNodeId,
+    topic: 'Flying buttresses',
+  });
+
+  const multiSource = addActiveSourceNode(withTurn, state.rootNodeId);
+  assert.equal(selectSingleActiveSourceDefinitionTarget(multiSource), null);
+});
+
 test('selection filters unknown nodes and selected node panels include player and turn metadata', () => {
   const state = addTurnToGameState(startedState(), {
     destinationTopic: 'Flying buttresses',
@@ -110,6 +136,36 @@ test('selection filters unknown nodes and selected node panels include player an
   assert.equal(panels[0].createdTurn?.id, turn.id);
 });
 
+test('selected graph node view resolves root nodes and created topic history', () => {
+  const state = addTurnToGameState(startedState(), {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [],
+    evaluation: 'Strong connection.',
+    totalScore: score.total,
+    legacyScores: score,
+  });
+  const turn = state.turnsById[state.turnOrder[0]];
+
+  assert.deepEqual(selectSelectedGraphNodeView(state, state.rootNodeId), {
+    id: state.rootNodeId,
+    title: 'Cathedrals',
+    subtitle: 'Original topic',
+    topicForDefinition: 'Cathedrals',
+    historyItem: null,
+  });
+
+  const selectedTurnView = selectSelectedGraphNodeView(state, turn.destinationNodeId);
+  assert.equal(selectedTurnView?.id, turn.destinationNodeId);
+  assert.equal(selectedTurnView?.title, 'Flying buttresses');
+  assert.equal(selectedTurnView?.subtitle, 'You topic');
+  assert.equal(selectedTurnView?.topicForDefinition, 'Flying buttresses');
+  assert.equal(selectedTurnView?.historyItem?.turn.id, turn.id);
+
+  assert.equal(selectSelectedGraphNodeView(state, 'missing-node'), null);
+  assert.equal(selectSelectedGraphNodeView(state, null), null);
+});
+
 test('active source mutations ignore duplicate and unknown nodes and preserve at least one source', () => {
   const state = startedState();
   const withTurn = addTurnToGameState(state, {
@@ -128,6 +184,34 @@ test('active source mutations ignore duplicate and unknown nodes and preserve at
 
   const afterRemoval = removeActiveSourceNode(withSecondSource, turn.destinationNodeId);
   assert.deepEqual(afterRemoval.activeSourceNodeIds, [state.rootNodeId]);
+});
+
+test('active source status exposes add and remove affordances without UI state peeking into arrays', () => {
+  const state = startedState();
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
+
+  assert.deepEqual(selectActiveSourceNodeStatus(withTurn, turn.destinationNodeId), {
+    isActiveSource: true,
+    canAddSource: false,
+    canRemoveSource: false,
+  });
+
+  const withSecondSource = addActiveSourceNode(withTurn, state.rootNodeId);
+  assert.deepEqual(selectActiveSourceNodeStatus(withSecondSource, turn.destinationNodeId), {
+    isActiveSource: true,
+    canAddSource: false,
+    canRemoveSource: true,
+  });
+  assert.deepEqual(selectActiveSourceNodeStatus(withSecondSource, 'missing-node'), {
+    isActiveSource: false,
+    canAddSource: false,
+    canRemoveSource: false,
+  });
 });
 
 test('player score rows support more than two players and preserve configured order', () => {

@@ -58,9 +58,12 @@ export default function ModelSelector() {
         setApiTestError(`API Test Error: ${errorDetails.message}`);
         console.error('API Test Error Details:', errorDetails);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error changing model:', error);
-      setError(error.response?.data?.error || 'Failed to change model');
+      const responseError = axios.isAxiosError<{ error?: string }>(error)
+        ? error.response?.data?.error
+        : null;
+      setError(responseError || 'Failed to change model');
     } finally {
       setIsChanging(false);
     }
@@ -155,4 +158,4 @@ export default function ModelSelector() {
       </p>
     </div>
   );
-} 
+}

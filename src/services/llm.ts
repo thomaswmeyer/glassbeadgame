@@ -1,7 +1,47 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { OpenAI } from 'openai';
+import type {
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLM_CONFIG, currentModelConfig } from '@/config/llm';
+import { Score } from '@/domain/game';
+
+type EvaluationResponse = {
+  evaluation: string;
+  finalEvaluation?: string;
+  scores: Score;
+};
+
+type LegacyAiGameHistoryItem = {
+  topic: string;
+  response: string;
+  player: 'human' | 'ai';
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function getErrorStatus(error: unknown) {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? error.status
+    : undefined;
+}
+
+function getErrorResponseField(error: unknown, field: 'data' | 'headers') {
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return undefined;
+  }
+
+  const response = error.response;
+  if (typeof response !== 'object' || response === null || !(field in response)) {
+    return undefined;
+  }
+
+  return (response as Record<'data' | 'headers', unknown>)[field];
+}
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -57,14 +97,14 @@ async function callWithRetry<T>(
   apiCall: () => Promise<T>,
   maxRetries: number = 3
 ): Promise<T> {
-  let lastError;
+  let lastError: unknown;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       console.log(`API request attempt ${attempt + 1} of ${maxRetries}`);
       return await apiCall();
-    } catch (error: any) {
-      console.error(`Attempt ${attempt + 1} failed:`, error.message);
+    } catch (error: unknown) {
+      console.error(`Attempt ${attempt + 1} failed:`, getErrorMessage(error));
       lastError = error;
       
       // Check if we should retry
@@ -93,7 +133,7 @@ export function getModelConfig() {
 
 // Helper function to convert Anthropic-style messages to DeepSeek/OpenAI format
 function convertToOpenAIMessages(systemPrompt: string, userMessages: { role: string, content: string }[]) {
-  const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [
+  const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt }
   ];
   
@@ -108,7 +148,7 @@ function convertToOpenAIMessages(systemPrompt: string, userMessages: { role: str
 }
 
 // Add a wrapper function for DeepSeek API calls with detailed logging
-async function callDeepSeekAPI(params: any) {
+async function callDeepSeekAPI(params: ChatCompletionCreateParamsNonStreaming) {
   // Log the complete request details
   console.log('=== DEEPSEEK API REQUEST DETAILS ===');
   console.log('Base URL:', LLM_CONFIG.endpoints.deepseek);
@@ -124,12 +164,12 @@ async function callDeepSeekAPI(params: any) {
     const response = await deepseekClient.chat.completions.create(params);
     console.log('DeepSeek API request successful');
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('=== DEEPSEEK API ERROR ===');
-    console.error('Error status:', error.status);
-    console.error('Error message:', error.message);
-    console.error('Error details:', error.response?.data || 'No detailed error data');
-    console.error('Error headers:', error.response?.headers || 'No headers');
+    console.error('Error status:', getErrorStatus(error));
+    console.error('Error message:', getErrorMessage(error));
+    console.error('Error details:', getErrorResponseField(error, 'data') || 'No detailed error data');
+    console.error('Error headers:', getErrorResponseField(error, 'headers') || 'No headers');
     throw error;
   }
 }
@@ -219,7 +259,7 @@ export async function generateTopic(
     const response = await callWithRetry(() => 
       callDeepSeekAPI({
         model: currentModelConfig.model,
-        messages: messages as any,
+        messages,
         max_tokens: 100,
         temperature: LLM_CONFIG.temperature.creative,
       })
@@ -322,7 +362,7 @@ export async function getDefinition(topic: string): Promise<string> {
       const response = await callWithRetry(() => 
         callDeepSeekAPI({
           model: currentModelConfig.model,
-          messages: messages as any,
+        messages,
           max_tokens: LLM_CONFIG.maxTokens.definition,
           temperature: LLM_CONFIG.temperature.factual,
         })
@@ -367,7 +407,7 @@ export async function getDefinition(topic: string): Promise<string> {
 export async function getAiResponse(
   topic: string,
   originalTopic: string,
-  gameHistory: any[],
+  gameHistory: LegacyAiGameHistoryItem[],
   difficulty: string,
   circleEnabled: boolean,
   isFinalRound: boolean
@@ -378,11 +418,11 @@ export async function getAiResponse(
   
   // Format game history for context
   let historyContext = '';
-  let previousResponses: string[] = [];
+  const previousResponses: string[] = [];
   
   if (gameHistory && gameHistory.length > 0) {
     historyContext = 'Previous rounds:\n';
-    gameHistory.slice(-5).forEach((item: any, index: number) => {
+    gameHistory.slice(-5).forEach((item, index) => {
       historyContext += `Round ${gameHistory.length - 5 + index + 1}: Topic "${item.topic}" → ${item.player === 'human' ? 'Human' : 'AI'} responded "${item.response}"\n`;
       
       // Collect previous AI responses to avoid repetition
@@ -479,7 +519,7 @@ export async function getAiResponse(
         const response = await callWithRetry(() => 
           callDeepSeekAPI({
             model: currentModelConfig.model,
-            messages: messages as any,
+            messages,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
           })
@@ -588,7 +628,7 @@ export async function getAiResponse(
         const response = await callWithRetry(() => 
           callDeepSeekAPI({
             model: currentModelConfig.model,
-            messages: messages as any,
+            messages,
             max_tokens: 100,
             temperature: LLM_CONFIG.temperature.creative,
           })
@@ -636,7 +676,7 @@ export async function evaluateResponse(
   difficulty: string,
   originalTopic?: string,
   isFinalRound?: boolean
-): Promise<any> {
+): Promise<EvaluationResponse> {
   // Log current model configuration to help debug provider issues
   console.log('=== EVALUATE RESPONSE API CALL ===');
   console.log('Current model config:', JSON.stringify(currentModelConfig));
@@ -728,7 +768,7 @@ export async function evaluateResponse(
             const evaluationData = JSON.parse(evaluationText);
             console.log('Evaluation data parsed successfully as direct JSON');
             return evaluationData;
-          } catch (directParseError) {
+          } catch {
             // If direct parsing fails, try to extract JSON using regex
             console.log('Direct JSON parsing failed, trying regex extraction');
             
@@ -761,7 +801,7 @@ export async function evaluateResponse(
             
             console.log('Fixed JSON string:', fixedJsonString);
             
-            const evaluationData = JSON.parse(fixedJsonString);
+            const evaluationData = JSON.parse(fixedJsonString) as EvaluationResponse;
             console.log('Evaluation data parsed successfully after fixes');
             
             return evaluationData;
@@ -777,6 +817,8 @@ export async function evaluateResponse(
             evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
             finalEvaluation: "Error parsing the evaluation.",
             scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
               currentConnection: {
                 semanticDistance: 5,
                 similarity: 5,
@@ -804,7 +846,7 @@ export async function evaluateResponse(
         const result = await callWithRetry(() => 
           callDeepSeekAPI({
             model: currentModelConfig.model,
-            messages: messages as any,
+            messages,
             max_tokens: LLM_CONFIG.maxTokens.evaluation,
             temperature: LLM_CONFIG.temperature.evaluation,
             response_format: responseFormat
@@ -821,7 +863,7 @@ export async function evaluateResponse(
             const evaluationData = JSON.parse(evaluationText);
             console.log('Evaluation data parsed successfully as direct JSON');
             return evaluationData;
-          } catch (directParseError) {
+          } catch {
             // If direct parsing fails, try to extract JSON using regex
             console.log('Direct JSON parsing failed, trying regex extraction');
             
@@ -846,7 +888,7 @@ export async function evaluateResponse(
             console.log('Raw evaluation text:', evaluationText);
             console.log('Extracted JSON string:', jsonString);
             
-            const evaluationData = JSON.parse(jsonString);
+            const evaluationData = JSON.parse(jsonString) as EvaluationResponse;
             console.log('Evaluation data parsed successfully');
             
             return evaluationData;
@@ -862,6 +904,8 @@ export async function evaluateResponse(
             evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
             finalEvaluation: "Error parsing the evaluation.",
             scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
               currentConnection: {
                 semanticDistance: 5,
                 similarity: 5,
@@ -915,6 +959,8 @@ export async function evaluateResponse(
             evaluation: "Error parsing the evaluation. The response could not be properly evaluated.",
             finalEvaluation: "Error parsing the evaluation.",
             scores: {
+              semanticDistance: 5,
+              relevanceQuality: 5,
               currentConnection: {
                 semanticDistance: 5,
                 similarity: 5,
@@ -1006,7 +1052,7 @@ export async function evaluateResponse(
             const evaluationData = JSON.parse(evaluationText);
             console.log('Evaluation data parsed successfully as direct JSON');
             return evaluationData;
-          } catch (directParseError) {
+          } catch {
             // If direct parsing fails, try to extract JSON using regex
             console.log('Direct JSON parsing failed, trying regex extraction');
             
@@ -1039,7 +1085,7 @@ export async function evaluateResponse(
             
             console.log('Fixed JSON string:', fixedJsonString);
             
-            const evaluationData = JSON.parse(fixedJsonString);
+            const evaluationData = JSON.parse(fixedJsonString) as EvaluationResponse;
             console.log('Evaluation data parsed successfully after fixes');
             
             return evaluationData;
@@ -1073,7 +1119,7 @@ export async function evaluateResponse(
         const result = await callWithRetry(() => 
           callDeepSeekAPI({
             model: currentModelConfig.model,
-            messages: messages as any,
+            messages,
             max_tokens: LLM_CONFIG.maxTokens.evaluation,
             temperature: LLM_CONFIG.temperature.evaluation,
             response_format: responseFormat
@@ -1090,7 +1136,7 @@ export async function evaluateResponse(
             const evaluationData = JSON.parse(evaluationText);
             console.log('Evaluation data parsed successfully as direct JSON');
             return evaluationData;
-          } catch (directParseError) {
+          } catch {
             // If direct parsing fails, try to extract JSON using regex
             console.log('Direct JSON parsing failed, trying regex extraction');
             
@@ -1115,7 +1161,7 @@ export async function evaluateResponse(
             console.log('Raw evaluation text:', evaluationText);
             console.log('Extracted JSON string:', jsonString);
             
-            const evaluationData = JSON.parse(jsonString);
+            const evaluationData = JSON.parse(jsonString) as EvaluationResponse;
             console.log('Evaluation data parsed successfully');
             
             return evaluationData;

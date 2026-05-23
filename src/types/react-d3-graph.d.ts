@@ -1,13 +1,13 @@
 declare module 'react-d3-graph' {
   export interface GraphNode {
     id: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }
 
   export interface GraphLink {
     source: string;
     target: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }
 
   export interface GraphData {
@@ -20,10 +20,10 @@ declare module 'react-d3-graph' {
     directed?: boolean;
     d3?: {
       gravity?: number;
-      linkLength?: number | ((link: any) => number);
+      linkLength?: number | ((link: GraphLink) => number);
       linkStrength?: number;
       alphaTarget?: number;
-      [key: string]: any;
+      [key: string]: unknown;
     };
     node?: {
       color?: string;
@@ -38,7 +38,7 @@ declare module 'react-d3-graph' {
       fontSize?: number;
       fontColor?: string;
       symbolType?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
     link?: {
       color?: string;
@@ -46,9 +46,9 @@ declare module 'react-d3-graph' {
       strokeWidth?: number;
       type?: string;
       renderLabel?: boolean;
-      [key: string]: any;
+      [key: string]: unknown;
     };
-    [key: string]: any;
+    [key: string]: unknown;
   }
 
   export interface GraphProps {
@@ -61,8 +61,8 @@ declare module 'react-d3-graph' {
     onMouseOutNode?: (nodeId: string) => void;
     onMouseOverLink?: (source: string, target: string) => void;
     onMouseOutLink?: (source: string, target: string) => void;
-    [key: string]: any;
+    [key: string]: unknown;
   }
 
   export class Graph extends React.Component<GraphProps> {}
-} 
+}
