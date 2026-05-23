@@ -17,6 +17,7 @@ package-lock.json
 
 # Testing
 /coverage
+/.test-dist
 *.test.ts.snap
 .nyc_output
 

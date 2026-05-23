@@ -6,7 +6,8 @@
     "dev": "next dev -p 4321",
     "build": "next build",
     "start": "next start -p 4321",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
