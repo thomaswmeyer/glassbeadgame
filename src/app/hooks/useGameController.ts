@@ -108,7 +108,6 @@ export function useGameController({
   const isGeneratingTopic = gameState.gameStatus === 'generatingTopic';
   const originalTopic = selectRootTopic(gameState);
   const currentSourceTopicText = selectCurrentSourceTopicText(gameState);
-  const topic = isGeneratingTopic ? 'Generating new topic...' : currentSourceTopicText;
   const isEvaluating = gameState.gameStatus === 'evaluating';
   const isAiThinking = gameState.gameStatus === 'aiThinking';
   const showingResults = gameState.gameStatus === 'showingResults' || gameState.gameStatus === 'completed';
@@ -116,10 +115,6 @@ export function useGameController({
 
   const setSelectedGraphNodeId = (nodeId: string | null) => {
     setGameState(prev => setSelectedNodeIds(prev, nodeId ? [nodeId] : []));
-  };
-
-  const findNodeIdByTopic = (topicValue: string) => {
-    return Object.values(gameState.nodesById).find(node => node.topic === topicValue)?.id || null;
   };
 
   const getSingleCurrentSourceNode = () => {
@@ -367,7 +362,6 @@ export function useGameController({
   return {
     gameState,
     setGameState,
-    topic,
     originalTopic,
     response,
     setResponse,
@@ -390,7 +384,6 @@ export function useGameController({
     showingResults,
     gameCompleted,
     setSelectedGraphNodeId,
-    findNodeIdByTopic,
     getSingleCurrentSourceNode,
     generateFirstTopic,
     evaluateResponse,

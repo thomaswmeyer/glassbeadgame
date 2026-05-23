@@ -3,23 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { GraphRenderEdge, GraphRenderNode } from '@/domain/game';
+import {
+  GraphLayoutEdge,
+  GraphLayoutNode,
+  GraphPosition,
+  calculateGraphViewportTransform,
+  createGraphLayoutData,
+} from '@/domain/graphLayout';
 
-interface SimulationNode extends GraphRenderNode, d3.SimulationNodeDatum {
-  color: string;
-  radius: number;
-}
+type SimulationNode = GraphLayoutNode & d3.SimulationNodeDatum;
 
-interface SimulationEdge extends d3.SimulationLinkDatum<SimulationNode> {
-  id: string;
+type SimulationEdge = Omit<GraphLayoutEdge, 'source' | 'target'> & d3.SimulationLinkDatum<SimulationNode> & {
   source: string | SimulationNode;
   target: string | SimulationNode;
-  color: string;
-  semanticDistanceScore?: number;
-  strengthScore?: number;
-  scoringDescription?: string;
-  semanticDistanceDescription?: string;
-  strengthDescription?: string;
-}
+};
 
 interface GraphData {
   nodes: SimulationNode[];
@@ -36,62 +33,20 @@ interface SimpleConceptGraphProps {
   onRemoveSourceNode: (nodeId: string) => void;
 }
 
-function getNodeColor(node: GraphRenderNode) {
-  if (node.isRoot) return '#D97706';
-  if (node.playerKind === 'ai') return '#DC2626';
-  return '#2563EB';
-}
-
 function buildGraphData(
   renderNodes: GraphRenderNode[],
   renderEdges: GraphRenderEdge[],
-  previousPositions: Map<string, { x: number; y: number }>,
+  previousPositions: Map<string, GraphPosition>,
   width: number,
   height: number
 ): GraphData {
-  const rootNode = renderNodes.find(node => node.isRoot);
-  const rootPosition = previousPositions.get(rootNode?.id || '') || {
-    x: width / 2,
-    y: height / 2,
-  };
-
-  const nodes = renderNodes.map((node, index) => {
-    const previousPosition = previousPositions.get(node.id);
-    const incomingEdge = renderEdges.find(edge => edge.destinationNodeId === node.id);
-    const parentPosition = incomingEdge
-      ? previousPositions.get(incomingEdge.sourceNodeId) || rootPosition
-      : rootPosition;
-    const angle = index * 0.9;
-    const seededPosition = previousPosition || {
-      x: parentPosition.x + Math.cos(angle) * 72,
-      y: parentPosition.y + Math.sin(angle) * 72,
-    };
-
-    return {
-      ...node,
-      color: getNodeColor(node),
-      radius: node.isRoot ? 16 : 12,
-      x: seededPosition.x,
-      y: seededPosition.y,
-    };
+  return createGraphLayoutData({
+    nodes: renderNodes,
+    edges: renderEdges,
+    previousPositions,
+    width,
+    height,
   });
-
-  const nodeIds = new Set(nodes.map(node => node.id));
-  const edges = renderEdges
-    .filter(edge => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.destinationNodeId))
-    .map(edge => ({
-      id: edge.id,
-      source: edge.sourceNodeId,
-      target: edge.destinationNodeId,
-      color: '#94A3B8',
-      semanticDistanceScore: edge.semanticDistanceScore,
-      strengthScore: edge.strengthScore,
-      scoringDescription: edge.scoringDescription,
-      semanticDistanceDescription: edge.semanticDistanceDescription,
-      strengthDescription: edge.strengthDescription,
-    }));
-
-  return { nodes, edges };
 }
 
 export default function SimpleConceptGraph({
@@ -110,7 +65,7 @@ export default function SimpleConceptGraph({
   const actionGroupRef = useRef<SVGGElement>(null);
   const labelGroupRef = useRef<SVGGElement>(null);
   const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
-  const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const positionsRef = useRef<Map<string, GraphPosition>>(new Map());
   const hoveredNodeIdRef = useRef<string | null>(null);
   const onNodeClickRef = useRef(onNodeClick);
   const onAddSourceNodeRef = useRef(onAddSourceNode);
@@ -158,38 +113,18 @@ export default function SimpleConceptGraph({
     const viewport = viewportRef.current;
     if (!viewport || graphData.nodes.length === 0) return;
 
-    const padding = 48;
-    const bounds = graphData.nodes.reduce(
-      (acc, node) => {
-        const x = node.x || dimensions.width / 2;
-        const y = node.y || dimensions.height / 2;
-        const radius = node.radius + 42;
-
-        return {
-          minX: Math.min(acc.minX, x - radius),
-          maxX: Math.max(acc.maxX, x + radius),
-          minY: Math.min(acc.minY, y - radius),
-          maxY: Math.max(acc.maxY, y + radius),
-        };
-      },
-      { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
-    );
-
-    const graphWidth = Math.max(bounds.maxX - bounds.minX, 1);
-    const graphHeight = Math.max(bounds.maxY - bounds.minY, 1);
-    const scale = Math.min(
-      1.1,
-      (dimensions.width - padding * 2) / graphWidth,
-      (dimensions.height - padding * 2) / graphHeight
-    );
-    const translateX = dimensions.width / 2 - scale * ((bounds.minX + bounds.maxX) / 2);
-    const translateY = dimensions.height / 2 - scale * ((bounds.minY + bounds.maxY) / 2);
+    const transform = calculateGraphViewportTransform({
+      nodes: graphData.nodes,
+      width: dimensions.width,
+      height: dimensions.height,
+    });
+    if (!transform) return;
 
     d3.select(viewport)
       .transition()
       .duration(duration)
       .ease(d3.easeCubicOut)
-      .attr('transform', `translate(${translateX},${translateY}) scale(${scale})`);
+      .attr('transform', `translate(${transform.translateX},${transform.translateY}) scale(${transform.scale})`);
   }, [dimensions.height, dimensions.width, graphData.nodes]);
 
   useEffect(() => {
