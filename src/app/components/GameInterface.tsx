@@ -4,7 +4,7 @@ import { useState } from 'react';
 import CurrentTopicPanel from './CurrentTopicPanel';
 import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
-import ModelSelector from './ModelSelector';
+import GameSetupPanel from './GameSetupPanel';
 import ScoreTooltip from './ScoreTooltip';
 import SelectedNodePanel from './SelectedNodePanel';
 import SimpleConceptGraph from './SimpleConceptGraph';
@@ -30,25 +30,17 @@ import {
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
 import { useDefinitions } from '@/app/hooks/useDefinitions';
 import { gameApi } from '@/app/services/gameApi';
+import {
+  DEFAULT_DIFFICULTY_LEVELS,
+  DEFAULT_ROUND_OPTIONS,
+  difficultyDescriptions,
+} from '@/domain/setupDisplay';
 
 export default function GameInterface() {
-  // New state variables for user settings
   const [maxRounds, setMaxRounds] = useState<number>(10);
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const circleEnabled = false;
-  const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
-  
-  // Simplified difficulty level - single setting for both concept and AI
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
-  const difficultyLevels: DifficultyLevel[] = ['secondary', 'undergrad', 'grad', 'unlimited'];
-  
-  // Difficulty level descriptions
-  const difficultyDescriptions = {
-    secondary: "High school level concepts and vocabulary",
-    undergrad: "Recognizable undergraduate-level academic concepts",
-    grad: "Specialized graduate-level concepts",
-    unlimited: "Advanced, obscure, and highly technical concepts"
-  };
 
   const [tooltipData, setTooltipData] = useState<{
     visible: boolean;
@@ -112,10 +104,9 @@ export default function GameInterface() {
   const hasBranchedSourceSelection = selectHasBranchedSourceSelection(gameState);
   const { localPlayerName, aiPlayerName } = selectSetupPlayerNames(playerScoreRows);
   const activeSourceRows = selectActiveSourceRows(gameState);
-
-  const generateFirstTopic = async () => {
-    await startGame();
-  };
+  const productionModelName = LLM_CONFIG.models[
+    LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models
+  ].displayName;
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (showingResults || isEvaluating || isAiThinking || gameCompleted) {
@@ -278,127 +269,24 @@ export default function GameInterface() {
       <h1 className="text-3xl font-bold text-center mb-8">The Glass Bead Game</h1>
       
       {!gameStarted ? (
-        <div className="text-center">
-          <p className="mb-6 text-lg">
-            Welcome to the Glass Bead Game, a turn-based journey of connected concepts.
-          </p>
-          
-          {/* Game settings */}
-          <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="font-bold mb-3 text-left">Game Settings:</h3>
-            
-            <div className="mb-4">
-              <label className="block text-left mb-2 font-medium">Number of Rounds:</label>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {roundOptions.map(option => (
-                  <button
-                    key={option}
-                    onClick={() => setMaxRounds(option)}
-                    className={`px-3 py-1 rounded-full text-sm ${
-                      maxRounds === option 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-left mb-2 font-medium">Who Goes First:</label>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setAiGoesFirst(false)}
-                  className={`px-4 py-2 rounded ${
-                    !aiGoesFirst 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {localPlayerName} First
-                </button>
-                <button
-                  onClick={() => setAiGoesFirst(true)}
-                  className={`px-4 py-2 rounded ${
-                    aiGoesFirst 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {aiPlayerName} First
-                </button>
-              </div>
-            </div>
-            
-            {/* Single difficulty selector */}
-            <div className="mb-0">
-              <label className="block text-left mb-2 font-medium">Game Difficulty:</label>
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as DifficultyLevel)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {difficultyLevels.map(level => (
-                  <option key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                {difficultyDescriptions[difficulty]}
-              </p>
-            </div>
-          </div>
-          
-          {/* Add the ModelSelector component if not in production mode */}
-          {!LLM_CONFIG.production.isProduction && <ModelSelector />}
-          
-          {/* Display model info in production mode */}
-          {LLM_CONFIG.production.isProduction && (
-            <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="font-bold mb-2 text-left">AI Model:</h3>
-              <p className="text-sm">
-                This game uses {LLM_CONFIG.models[LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models].displayName} for all AI interactions.
-              </p>
-            </div>
-          )}
-          
-          <div className="mb-6 text-center">
-            <button
-              onClick={generateFirstTopic}
-              disabled={isGeneratingTopic}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-            >
-              {isGeneratingTopic ? 'Generating Topic...' : 'Start Game'}
-            </button>
-          </div>
-          
-          <div className="mb-6 text-left max-w-md mx-auto">
-            <h3 className="font-bold mb-2">Rules:</h3>
-            <ol className="list-decimal pl-5 space-y-2">
-              <li>The game starts with a randomly generated topic.</li>
-              <li>Players take turns responding to the current topic with a brief answer.</li>
-              <li><strong>Responses should be brief</strong> - ideally a single word or short phrase (1-5 words). The quality of the conceptual connection is what matters, not the length of your response.</li>
-              <li>Each response becomes the topic for the next round.</li>
-              <li>The game lasts for {maxRounds} rounds ({Math.ceil(maxRounds/2)} turns each).</li>
-              {circleEnabled && (
-                <li>In the final round, the response must connect back to the original starting topic.</li>
-              )}
-              <li>Responses are evaluated based on:
-                <ul className="list-disc pl-5 mt-1">
-                  <li><strong>Semantic Distance (1-10):</strong> How semantically remote yet meaningfully connected is the overall topic from the prompt? Higher scores for connections that are not obvious.</li>
-                  <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
-                </ul>
-              </li>
-              {circleEnabled && (
-                <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
-              )}
-              <li>The player with the highest total score at the end wins!</li>
-            </ol>
-          </div>
-        </div>
+        <GameSetupPanel
+          maxRounds={maxRounds}
+          roundOptions={DEFAULT_ROUND_OPTIONS}
+          aiGoesFirst={aiGoesFirst}
+          circleEnabled={circleEnabled}
+          difficulty={difficulty}
+          difficultyLevels={DEFAULT_DIFFICULTY_LEVELS}
+          difficultyDescriptions={difficultyDescriptions}
+          localPlayerName={localPlayerName}
+          aiPlayerName={aiPlayerName}
+          isGeneratingTopic={isGeneratingTopic}
+          productionMode={LLM_CONFIG.production.isProduction}
+          productionModelName={productionModelName}
+          onMaxRoundsChange={setMaxRounds}
+          onAiGoesFirstChange={setAiGoesFirst}
+          onDifficultyChange={setDifficulty}
+          onStartGame={startGame}
+        />
       ) : (
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Main game area - left side */}
