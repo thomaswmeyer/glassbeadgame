@@ -3,7 +3,7 @@ import {
   GameState,
   Score,
   addTurnToGameState,
-  selectLegacyGameHistory,
+  selectTurnHistoryRows,
   setGameStatus,
   startGameState,
 } from './game';
@@ -37,13 +37,24 @@ export type EvaluateTurnRequest = {
   isFinalCircleRound: boolean;
 };
 
+export type TurnContextHistoryItem = {
+  round: number;
+  sourceTopics: string[];
+  destinationTopic: string;
+  evaluation: string;
+  scores: Score;
+  playerId: string;
+  playerName: string;
+  playerKind: 'local' | 'ai';
+};
+
 export type GenerateAiResponseRequest = {
   topic: string;
   originalTopic: string;
   difficulty: DifficultyLevel;
   circleEnabled: boolean;
   isFinalCircleRound: boolean;
-  gameHistory: ReturnType<typeof selectLegacyGameHistory>;
+  gameHistory: TurnContextHistoryItem[];
 };
 
 export type GameFlowServices = {
@@ -62,6 +73,23 @@ export function selectCurrentSourceTopicText(state: GameState) {
 
 export function selectRootTopic(state: GameState) {
   return state.rootNodeId ? state.nodesById[state.rootNodeId]?.topic || '' : '';
+}
+
+export function selectTurnContextHistory(state: GameState): TurnContextHistoryItem[] {
+  return selectTurnHistoryRows(state).map(row => ({
+    round: row.turn.round,
+    sourceTopics: row.sourceNodes.map(node => node.topic),
+    destinationTopic: row.destinationNode.topic,
+    evaluation: row.turn.evaluation || '',
+    scores: row.turn.legacyScores || {
+      semanticDistance: 0,
+      relevanceQuality: 0,
+      total: row.turn.totalScore || 0,
+    },
+    playerId: row.player.id,
+    playerName: row.player.name,
+    playerKind: row.player.kind,
+  }));
 }
 
 export async function startGeneratedGame(params: {
@@ -143,7 +171,7 @@ export async function generateAiResponseForCurrentTurn(params: {
     difficulty: params.difficulty,
     circleEnabled: params.circleEnabled,
     isFinalCircleRound: params.state.currentRound === params.state.maxRounds && params.circleEnabled,
-    gameHistory: selectLegacyGameHistory(params.state),
+    gameHistory: selectTurnContextHistory(params.state),
   });
 
   return response.trim() || `Response to ${topic}`;

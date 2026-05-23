@@ -7,6 +7,8 @@ import {
   addTurnToGameState,
   advanceGameTurn,
   createEmptyGameState,
+  getTurnHistoryRowScore,
+  getTurnHistoryRowSourceTopicText,
   getNextPlayerId,
   removeActiveSourceNode,
   selectCurrentEvaluation,
@@ -263,6 +265,12 @@ test('turn history rows preserve multiple source nodes for direct UI rendering',
     rows[1].sourceNodes.map(node => node.topic),
     ['Cathedrals', 'Flying buttresses']
   );
+  assert.equal(getTurnHistoryRowSourceTopicText(rows[1]), 'Cathedrals + Flying buttresses');
+  assert.deepEqual(getTurnHistoryRowScore(rows[1]), {
+    semanticDistance: 0,
+    relevanceQuality: 0,
+    total: 17,
+  });
   assert.equal(rows[1].destinationNode.topic, 'Load-bearing symbols');
   assert.equal(rows[1].player.id, DEFAULT_AI_PLAYER_ID);
 });

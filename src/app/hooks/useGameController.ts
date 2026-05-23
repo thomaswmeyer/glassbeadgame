@@ -13,7 +13,6 @@ import {
   selectCurrentEvaluation,
   selectCurrentPlayer,
   selectGraphRenderData,
-  selectLegacyGameHistory,
   selectPlayerScoreRows,
   selectSelectedNodePanels,
   selectTurnHistoryRows,
@@ -27,6 +26,7 @@ import {
   TurnEvaluation,
   selectCurrentSourceTopicText,
   selectRootTopic,
+  selectTurnContextHistory,
 } from '@/domain/gameFlow';
 import {
   PlayerTurnController,
@@ -98,7 +98,7 @@ export function useGameController({
   const selectedNodePanels = selectSelectedNodePanels(gameState);
   const turnHistoryRows = selectTurnHistoryRows(gameState);
   const playerScoreRows = selectPlayerScoreRows(gameState);
-  const gameHistory = selectLegacyGameHistory(gameState);
+  const gameHistory = selectTurnContextHistory(gameState);
   const currentRound = gameState.currentRound;
   const isCurrentPlayerManual = currentPlayerController?.mode !== 'automatic' || !currentPlayerController.submitTurn;
   const activeSourceNodes = gameState.activeSourceNodeIds

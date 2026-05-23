@@ -4,6 +4,7 @@ import {
   GameFlowServices,
   GenerateAiResponseRequest,
   GenerateTopicRequest,
+  TurnContextHistoryItem,
   TurnEvaluation,
 } from '@/domain/gameFlow';
 
@@ -22,6 +23,17 @@ async function postJson<TResponse>(endpoint: string, body: unknown): Promise<TRe
   }
 
   return res.json();
+}
+
+function toLegacyAiGameHistory(gameHistory: TurnContextHistoryItem[]) {
+  return gameHistory.map(item => ({
+    round: item.round,
+    topic: item.sourceTopics[0] || '',
+    response: item.destinationTopic,
+    evaluation: item.evaluation,
+    scores: item.scores,
+    player: item.playerKind === 'ai' ? 'ai' : 'human',
+  }));
 }
 
 export const gameApi: GameFlowServices & {
@@ -56,7 +68,7 @@ export const gameApi: GameFlowServices & {
     const result = await axios.post(endpoint, {
       topic: request.topic,
       originalTopic: request.originalTopic,
-      gameHistory: request.gameHistory,
+      gameHistory: toLegacyAiGameHistory(request.gameHistory),
       difficulty: request.difficulty,
       circleEnabled: request.circleEnabled,
     });

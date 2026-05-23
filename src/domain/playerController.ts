@@ -1,9 +1,8 @@
 import {
   GameState,
-  LegacyGameHistoryItem,
   Player,
 } from './game';
-import { DifficultyLevel } from './gameFlow';
+import { DifficultyLevel, TurnContextHistoryItem } from './gameFlow';
 
 export type PlayerControllerMode = 'manual' | 'automatic';
 
@@ -15,7 +14,7 @@ export type PlayerTurnContext = {
   difficulty: DifficultyLevel;
   circleEnabled: boolean;
   isFinalCircleRound: boolean;
-  gameHistory: LegacyGameHistoryItem[];
+  gameHistory: TurnContextHistoryItem[];
 };
 
 export type PlayerTurnSubmission = {

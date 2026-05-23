@@ -14,6 +14,7 @@ import {
   generateAiResponseForCurrentTurn,
   selectCurrentSourceTopicText,
   selectRootTopic,
+  selectTurnContextHistory,
   startGeneratedGame,
   type GameFlowServices,
 } from '../../src/domain/gameFlow';
@@ -298,6 +299,80 @@ test('AI response generation uses graph context and falls back for empty respons
     circleEnabled: true,
     isFinalCircleRound: false,
     gameHistory: [],
+  }]);
+});
+
+test('AI response generation sends player-neutral turn context with multi-source history', async () => {
+  const rootState = startGameState({
+    rootTopic: 'Cathedrals',
+    maxRounds: 6,
+    currentPlayerId: DEFAULT_AI_PLAYER_ID,
+    rootCreatedByPlayerId: DEFAULT_AI_PLAYER_ID,
+  });
+  const first = await evaluateAndApplyTurn({
+    state: rootState,
+    response: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    originalTopic: 'Cathedrals',
+    difficulty: 'undergrad',
+    circleEnabled: false,
+    services: {
+      async evaluateTurn() {
+        return {
+          evaluation: 'Strong connection.',
+          scores: defaultScore,
+        };
+      },
+    },
+  });
+  const firstTurn = first.state.turnsById[first.state.turnOrder[0]];
+  const multiSourceState = {
+    ...advanceGameTurn(first.state, DEFAULT_AI_PLAYER_ID),
+    activeSourceNodeIds: [rootState.rootNodeId, firstTurn.destinationNodeId],
+  };
+  const calls: unknown[] = [];
+  const services = {
+    async generateAiResponse(request) {
+      calls.push(request);
+      return 'Sacred geometry';
+    },
+  } satisfies Pick<GameFlowServices, 'generateAiResponse'>;
+
+  const response = await generateAiResponseForCurrentTurn({
+    state: multiSourceState,
+    originalTopic: 'Cathedrals',
+    difficulty: 'grad',
+    circleEnabled: false,
+    services,
+  });
+
+  assert.equal(response, 'Sacred geometry');
+  assert.deepEqual(calls, [{
+    topic: 'Cathedrals + Flying buttresses',
+    originalTopic: 'Cathedrals',
+    difficulty: 'grad',
+    circleEnabled: false,
+    isFinalCircleRound: false,
+    gameHistory: [{
+      round: 1,
+      sourceTopics: ['Cathedrals'],
+      destinationTopic: 'Flying buttresses',
+      evaluation: 'Strong connection.',
+      scores: defaultScore,
+      playerId: DEFAULT_HUMAN_PLAYER_ID,
+      playerName: 'You',
+      playerKind: 'local',
+    }],
+  }]);
+  assert.deepEqual(selectTurnContextHistory(first.state), [{
+    round: 1,
+    sourceTopics: ['Cathedrals'],
+    destinationTopic: 'Flying buttresses',
+    evaluation: 'Strong connection.',
+    scores: defaultScore,
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    playerName: 'You',
+    playerKind: 'local',
   }]);
 });
 

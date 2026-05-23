@@ -3,11 +3,14 @@
 import { useState, KeyboardEvent } from 'react';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
+import TurnHistoryTable, { getPlayerBadgeClass } from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
 import {
   DEFAULT_ROOT_NODE_ID,
   Score,
   TurnHistoryRow,
+  getTurnHistoryRowScore,
+  getTurnHistoryRowSourceTopicText,
   addActiveSourceNode,
   removeActiveSourceNode,
   setSelectedNodeIds,
@@ -15,24 +18,6 @@ import {
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
 import { useDefinitions } from '@/app/hooks/useDefinitions';
 import { gameApi } from '@/app/services/gameApi';
-
-function getPlayerBadgeClass(playerKind?: string) {
-  if (playerKind === 'local') return 'bg-blue-100 text-blue-800';
-  if (playerKind === 'ai') return 'bg-red-100 text-red-800';
-  return 'bg-gray-100 text-gray-800';
-}
-
-function getTurnSourceTopicText(row: TurnHistoryRow) {
-  return row.sourceNodes.map(node => node.topic).join(' + ');
-}
-
-function getTurnScore(row: TurnHistoryRow): Score {
-  return row.turn.legacyScores || {
-    semanticDistance: 0,
-    relevanceQuality: 0,
-    total: row.turn.totalScore || 0,
-  };
-}
 
 export default function GameInterface() {
   // New state variables for user settings
@@ -590,8 +575,8 @@ export default function GameInterface() {
 
                 {selectedGraphNode.historyItem && (
                   <div className="mt-2 text-gray-700">
-                    <p>Topic: {getTurnSourceTopicText(selectedGraphNode.historyItem)}</p>
-                    <p>Score: {getTurnScore(selectedGraphNode.historyItem).total}/20</p>
+                    <p>Topic: {getTurnHistoryRowSourceTopicText(selectedGraphNode.historyItem)}</p>
+                    <p>Score: {getTurnHistoryRowScore(selectedGraphNode.historyItem).total}/20</p>
                   </div>
                 )}
 
@@ -850,110 +835,28 @@ export default function GameInterface() {
             )}
             
             {gameStarted && (
-              <div className="mt-8">
-                <h2 className="text-xl font-semibold mb-4">Game History</h2>
-                <p className="text-sm text-gray-600 mb-2">
-                  Click a row to select that row's topic in the graph.
-                </p>
-                <div className="overflow-auto max-h-60">
-                  <table className="min-w-full bg-white">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="py-2 px-4 text-left">Round</th>
-                        <th className="py-2 px-4 text-left">Topic</th>
-                        <th className="py-2 px-4 text-left">Player</th>
-                        <th className="py-2 px-4 text-left">Response</th>
-                        <th className="py-2 px-4 text-left">Score</th>
-                        <th className="py-2 px-4 text-left">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const currentTopicNodeId = gameState.activeSourceNodeIds.length === 1
-                          ? gameState.activeSourceNodeIds[0]
-                          : null;
-                        const isCurrentTopicSelected = Boolean(currentTopicNodeId && selectedGraphNodeId === currentTopicNodeId);
-
-                        return (
-                          <tr
-                            key="current-topic"
-                            onClick={() => currentTopicNodeId && handleGraphNodeClick(currentTopicNodeId)}
-                            className={`border-t cursor-pointer ${isCurrentTopicSelected ? 'bg-purple-50' : 'bg-green-50 hover:bg-green-100'}`}
-                          >
-                            <td className="py-2 px-4">{currentRound}</td>
-                            <td className="py-2 px-4 font-medium">{currentSourceTopicText}</td>
-                            <td className="py-2 px-4">
-                              <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                                Current
-                              </span>
-                            </td>
-                            <td className="py-2 px-4 text-gray-400">-</td>
-                            <td className="py-2 px-4 text-gray-400">-</td>
-                            <td className="py-2 px-4 text-xs text-gray-500">Topic</td>
-                          </tr>
-                        );
-                      })()}
-                      {turnHistoryRows
-                        .slice()
-                        .reverse()
-                        .map((round, index) => {
-                          const historyIndex = turnHistoryRows.length - index - 1;
-                          const topicText = getTurnSourceTopicText(round);
-                          const score = getTurnScore(round);
-                          const isCircleRound = circleEnabled && round.turn.round === maxRounds;
-                          const topicNodeId = getTopicGraphNodeId(topicText, historyIndex);
-                          const isTopicSelected = selectedGraphNodeId === topicNodeId;
-                          const destinationNodeId = round.destinationNode.id;
-                          const isResponseSelectedForTopic = Boolean(destinationNodeId && gameState.activeSourceNodeIds.includes(destinationNodeId));
-                          const player = round.player;
-                          
-                          return (
-                            <tr
-                              key={round.turn.id}
-                              onClick={() => handleTopicRowClick(topicText, historyIndex)}
-                              className={`border-t cursor-pointer ${isTopicSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
-                            >
-                              <td className="py-2 px-4">{round.turn.round}</td>
-                              <td className="py-2 px-4">{topicText}</td>
-                              <td className="py-2 px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(player?.kind)}`}>
-                                  {player?.name || 'Player'}
-                                </span>
-                              </td>
-                              <td className="py-2 px-4">{round.destinationNode.topic}</td>
-                              <td className="py-2 px-4">
-                                <span 
-                                  className="cursor-help underline decoration-dotted"
-                                  onMouseEnter={(e) => handleScoreMouseEnter(e, score, isCircleRound)}
-                                  onMouseLeave={handleScoreMouseLeave}
-                                >
-                                  {score.total}/20
-                                </span>
-                              </td>
-                              <td className="py-2 px-4">
-                                {!showingResults && !isEvaluating && !isAiThinking && !gameCompleted && (
-                                  <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleSelectHistoryItem(round);
-                                    }}
-                                    className={`text-xs px-2 py-1 rounded-full ${
-                                      isResponseSelectedForTopic
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                    }`}
-                                  >
-                                    {isResponseSelectedForTopic ? 'Selected' : 'Use as Topic'}
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <TurnHistoryTable
+                activeSourceNodeIds={gameState.activeSourceNodeIds}
+                canSelectHistoryRows={!showingResults && !isEvaluating && !isAiThinking && !gameCompleted}
+                circleEnabled={circleEnabled}
+                currentRound={currentRound}
+                currentSourceTopicText={currentSourceTopicText}
+                currentTopicNodeId={gameState.activeSourceNodeIds.length === 1 ? gameState.activeSourceNodeIds[0] : null}
+                maxRounds={maxRounds}
+                selectedGraphNodeId={selectedGraphNodeId}
+                turnHistoryRows={turnHistoryRows}
+                getTopicGraphNodeId={getTopicGraphNodeId}
+                onCurrentTopicClick={() => {
+                  const currentTopicNodeId = gameState.activeSourceNodeIds.length === 1
+                    ? gameState.activeSourceNodeIds[0]
+                    : null;
+                  if (currentTopicNodeId) handleGraphNodeClick(currentTopicNodeId);
+                }}
+                onHistoryTopicClick={handleTopicRowClick}
+                onScoreMouseEnter={handleScoreMouseEnter}
+                onScoreMouseLeave={handleScoreMouseLeave}
+                onSelectHistoryItem={handleSelectHistoryItem}
+              />
             )}
           </div>
           

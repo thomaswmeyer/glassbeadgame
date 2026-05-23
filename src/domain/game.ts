@@ -139,15 +139,6 @@ export type PlayerScoreRow = {
   isCurrentPlayer: boolean;
 };
 
-export type LegacyGameHistoryItem = {
-  round: number;
-  topic: string;
-  response: string;
-  evaluation: string;
-  scores: Score;
-  player: 'human' | 'ai';
-};
-
 export const DEFAULT_HUMAN_PLAYER_ID = 'player-human';
 export const DEFAULT_AI_PLAYER_ID = 'player-ai';
 export const DEFAULT_ROOT_NODE_ID = 'root';
@@ -439,6 +430,18 @@ export function selectTurnHistoryRows(state: GameState): TurnHistoryRow[] {
   });
 }
 
+export function getTurnHistoryRowSourceTopicText(row: TurnHistoryRow) {
+  return row.sourceNodes.map(node => node.topic).join(' + ');
+}
+
+export function getTurnHistoryRowScore(row: TurnHistoryRow): Score {
+  return row.turn.legacyScores || {
+    semanticDistance: 0,
+    relevanceQuality: 0,
+    total: row.turn.totalScore || 0,
+  };
+}
+
 export function selectPlayerScoreTotals(state: GameState): Record<string, number> {
   return state.turnOrder.reduce<Record<string, number>>((totals, turnId) => {
     const turn = state.turnsById[turnId];
@@ -487,28 +490,6 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     playerKind: player?.kind || 'local',
     playerName: player?.name || 'Player',
   };
-}
-
-export function selectLegacyGameHistory(state: GameState): LegacyGameHistoryItem[] {
-  return state.turnOrder.map(turnId => {
-    const turn = state.turnsById[turnId];
-    const destinationNode = state.nodesById[turn.destinationNodeId];
-    const firstSourceNode = state.nodesById[turn.sourceNodeIds[0]];
-    const player = state.playersById[turn.playerId];
-
-    return {
-      round: turn.round,
-      topic: firstSourceNode?.topic || '',
-      response: destinationNode?.topic || '',
-      evaluation: turn.evaluation || '',
-      scores: turn.legacyScores || {
-        semanticDistance: 0,
-        relevanceQuality: 0,
-        total: turn.totalScore || 0,
-      },
-      player: player?.kind === 'ai' ? 'ai' : 'human',
-    };
-  });
 }
 
 export function getNextPlayerId(state: GameState) {
