@@ -261,9 +261,8 @@ export function useGameController({
     let nextTopic = currentEvaluation?.response || '';
 
     if (!nextTopic || !nextTopic.trim()) {
-      if (gameHistory.length > 0) {
-        nextTopic = gameHistory[gameHistory.length - 1]?.response || '';
-      }
+      const latestTurnRow = turnHistoryRows[turnHistoryRows.length - 1];
+      nextTopic = latestTurnRow?.destinationNode.topic || '';
 
       if (!nextTopic || !nextTopic.trim()) {
         alert('Error: Could not determine the next topic. Please restart the game.');
@@ -370,7 +369,6 @@ export function useGameController({
     currentPlayerModel,
     selectedNodePanels,
     turnHistoryRows,
-    gameHistory,
     selectedGraphNodeId: gameState.selectedNodeIds[0] || null,
     currentRound,
     isCurrentPlayerManual,

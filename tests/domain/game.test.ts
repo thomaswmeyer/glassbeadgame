@@ -238,3 +238,31 @@ test('turn history and graph render selectors expose edge scoring details', () =
     strengthDescription: 'Strong structural similarity.',
   }]);
 });
+
+test('turn history rows preserve multiple source nodes for direct UI rendering', () => {
+  const state = startedState();
+  const first = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+    totalScore: 11,
+  });
+  const firstTurn = first.turnsById[first.turnOrder[0]];
+  const second = addTurnToGameState({
+    ...advanceGameTurn(first, DEFAULT_AI_PLAYER_ID),
+    activeSourceNodeIds: [state.rootNodeId, firstTurn.destinationNodeId],
+  }, {
+    destinationTopic: 'Load-bearing symbols',
+    playerId: DEFAULT_AI_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId, firstTurn.destinationNodeId],
+    totalScore: 17,
+  });
+
+  const rows = selectTurnHistoryRows(second);
+  assert.deepEqual(
+    rows[1].sourceNodes.map(node => node.topic),
+    ['Cathedrals', 'Flying buttresses']
+  );
+  assert.equal(rows[1].destinationNode.topic, 'Load-bearing symbols');
+  assert.equal(rows[1].player.id, DEFAULT_AI_PLAYER_ID);
+});

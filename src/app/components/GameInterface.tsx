@@ -7,6 +7,7 @@ import { LLM_CONFIG } from '@/config/llm';
 import {
   DEFAULT_ROOT_NODE_ID,
   Score,
+  TurnHistoryRow,
   addActiveSourceNode,
   removeActiveSourceNode,
   setSelectedNodeIds,
@@ -15,20 +16,22 @@ import { DifficultyLevel, useGameController } from '@/app/hooks/useGameControlle
 import { useDefinitions } from '@/app/hooks/useDefinitions';
 import { gameApi } from '@/app/services/gameApi';
 
-// Define the GameHistory type to match what SimpleConceptGraph expects
-interface GameHistory {
-  round: number;
-  topic: string;
-  response: string;
-  evaluation: string;
-  scores: Score;
-  player: 'human' | 'ai';
-}
-
 function getPlayerBadgeClass(playerKind?: string) {
   if (playerKind === 'local') return 'bg-blue-100 text-blue-800';
   if (playerKind === 'ai') return 'bg-red-100 text-red-800';
   return 'bg-gray-100 text-gray-800';
+}
+
+function getTurnSourceTopicText(row: TurnHistoryRow) {
+  return row.sourceNodes.map(node => node.topic).join(' + ');
+}
+
+function getTurnScore(row: TurnHistoryRow): Score {
+  return row.turn.legacyScores || {
+    semanticDistance: 0,
+    relevanceQuality: 0,
+    total: row.turn.totalScore || 0,
+  };
 }
 
 export default function GameInterface() {
@@ -75,7 +78,6 @@ export default function GameInterface() {
     currentPlayerModel,
     selectedNodePanels,
     turnHistoryRows,
-    gameHistory,
     selectedGraphNodeId,
     currentRound,
     isCurrentPlayerManual,
@@ -145,20 +147,13 @@ export default function GameInterface() {
     }
   };
 
-  // New function to handle selecting a previous topic from history
-  const handleSelectHistoryItem = (historyItem: GameHistory) => {
+  const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (showingResults || isEvaluating || isAiThinking || gameCompleted) {
       // Don't allow selection during evaluation or when showing results
       return;
     }
 
-    const selectedIndex = gameHistory.findIndex(item =>
-      item.round === historyItem.round &&
-      item.topic === historyItem.topic &&
-      item.response === historyItem.response
-    );
-    
-    const sourceNodeId = selectedIndex === -1 ? null : turnHistoryRows[selectedIndex]?.destinationNode.id || null;
+    const sourceNodeId = historyItem.destinationNode.id;
 
     setSelectedGraphNodeId(sourceNodeId);
     if (sourceNodeId) {
@@ -168,10 +163,10 @@ export default function GameInterface() {
       }));
     }
     
-    console.log(`Selected previous topic: "${historyItem.response}" from round ${historyItem.round}`);
+    console.log(`Selected previous topic: "${historyItem.destinationNode.topic}" from round ${historyItem.turn.round}`);
   };
 
-  const getTopicGraphNodeId = (topicValue: string, beforeHistoryIndex = gameHistory.length) => {
+  const getTopicGraphNodeId = (topicValue: string, beforeHistoryIndex = turnHistoryRows.length) => {
     const normalizedTopic = topicValue.trim();
     if (!normalizedTopic) return null;
 
@@ -179,8 +174,8 @@ export default function GameInterface() {
       return gameState.rootNodeId || DEFAULT_ROOT_NODE_ID;
     }
 
-    for (let index = Math.min(beforeHistoryIndex - 1, gameHistory.length - 1); index >= 0; index--) {
-      if (gameHistory[index].response === normalizedTopic) {
+    for (let index = Math.min(beforeHistoryIndex - 1, turnHistoryRows.length - 1); index >= 0; index--) {
+      if (turnHistoryRows[index].destinationNode.topic === normalizedTopic) {
         return turnHistoryRows[index]?.destinationNode.id || null;
       }
     }
@@ -271,12 +266,12 @@ export default function GameInterface() {
         title: originalTopic,
         subtitle: 'Original topic',
         topicForDefinition: originalTopic,
-        historyItem: null as GameHistory | null,
+        historyItem: null as TurnHistoryRow | null,
       };
     }
 
     const panel = selectedNodePanels.find(selectedPanel => selectedPanel.node.id === selectedGraphNodeId);
-    const historyItem = gameHistory.find(item => item.response === panel?.node.topic) || null;
+    const historyItem = turnHistoryRows.find(row => row.destinationNode.id === selectedGraphNodeId) || null;
     if (!panel) return null;
 
     return {
@@ -595,8 +590,8 @@ export default function GameInterface() {
 
                 {selectedGraphNode.historyItem && (
                   <div className="mt-2 text-gray-700">
-                    <p>Topic: {selectedGraphNode.historyItem.topic}</p>
-                    <p>Score: {selectedGraphNode.historyItem.scores.total}/20</p>
+                    <p>Topic: {getTurnSourceTopicText(selectedGraphNode.historyItem)}</p>
+                    <p>Score: {getTurnScore(selectedGraphNode.historyItem).total}/20</p>
                   </div>
                 )}
 
@@ -898,42 +893,41 @@ export default function GameInterface() {
                           </tr>
                         );
                       })()}
-                      {gameHistory
+                      {turnHistoryRows
                         .slice()
                         .reverse()
                         .map((round, index) => {
-                          // Calculate the actual round number for display
-                          const actualRoundNumber = gameHistory.length - index;
-                          const historyIndex = actualRoundNumber - 1;
-                          const isCircleRound = circleEnabled && actualRoundNumber === maxRounds;
-                          const topicNodeId = getTopicGraphNodeId(round.topic, historyIndex);
+                          const historyIndex = turnHistoryRows.length - index - 1;
+                          const topicText = getTurnSourceTopicText(round);
+                          const score = getTurnScore(round);
+                          const isCircleRound = circleEnabled && round.turn.round === maxRounds;
+                          const topicNodeId = getTopicGraphNodeId(topicText, historyIndex);
                           const isTopicSelected = selectedGraphNodeId === topicNodeId;
-                          const turnHistoryRow = turnHistoryRows[historyIndex];
-                          const destinationNodeId = turnHistoryRow?.destinationNode.id;
+                          const destinationNodeId = round.destinationNode.id;
                           const isResponseSelectedForTopic = Boolean(destinationNodeId && gameState.activeSourceNodeIds.includes(destinationNodeId));
-                          const player = turnHistoryRow?.player;
+                          const player = round.player;
                           
                           return (
                             <tr
-                              key={index}
-                              onClick={() => handleTopicRowClick(round.topic, historyIndex)}
+                              key={round.turn.id}
+                              onClick={() => handleTopicRowClick(topicText, historyIndex)}
                               className={`border-t cursor-pointer ${isTopicSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
                             >
-                              <td className="py-2 px-4">{actualRoundNumber}</td>
-                              <td className="py-2 px-4">{round.topic}</td>
+                              <td className="py-2 px-4">{round.turn.round}</td>
+                              <td className="py-2 px-4">{topicText}</td>
                               <td className="py-2 px-4">
                                 <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(player?.kind)}`}>
                                   {player?.name || 'Player'}
                                 </span>
                               </td>
-                              <td className="py-2 px-4">{round.response}</td>
+                              <td className="py-2 px-4">{round.destinationNode.topic}</td>
                               <td className="py-2 px-4">
                                 <span 
                                   className="cursor-help underline decoration-dotted"
-                                  onMouseEnter={(e) => handleScoreMouseEnter(e, round.scores, isCircleRound)}
+                                  onMouseEnter={(e) => handleScoreMouseEnter(e, score, isCircleRound)}
                                   onMouseLeave={handleScoreMouseLeave}
                                 >
-                                  {round.scores.total}/20
+                                  {score.total}/20
                                 </span>
                               </td>
                               <td className="py-2 px-4">
