@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import CurrentTopicPanel from './CurrentTopicPanel';
+import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import ModelSelector from './ModelSelector';
 import ScoreTooltip from './ScoreTooltip';
@@ -17,6 +18,7 @@ import {
   addActiveSourceNode,
   removeActiveSourceNode,
   selectActiveSourceNodeStatus,
+  selectActiveSourceRows,
   selectRootDefinitionTarget,
   selectSelectedGraphNodeView,
   selectSingleActiveSourceDefinitionTarget,
@@ -118,6 +120,7 @@ export default function GameInterface() {
   );
   const localPlayerName = playerScoreRows.find(row => row.player.kind === 'local')?.player.name || 'Local player';
   const aiPlayerName = playerScoreRows.find(row => row.player.kind === 'ai')?.player.name || 'AI player';
+  const activeSourceRows = selectActiveSourceRows(gameState);
 
   const generateFirstTopic = async () => {
     await startGame();
@@ -463,27 +466,10 @@ export default function GameInterface() {
               />
             )}
 
-            {activeSourceNodes.length > 0 && (
-              <div className="p-3 bg-green-50 rounded-lg mb-4 text-sm border border-green-100">
-                <p className="font-medium text-green-900 mb-2">Current turn sources</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeSourceNodes.map(sourceNode => (
-                    <span key={sourceNode.id} className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white border border-green-200 text-green-900">
-                      {sourceNode.topic}
-                      {activeSourceNodes.length > 1 && (
-                        <button
-                          onClick={() => setGameState(prev => removeActiveSourceNode(prev, sourceNode.id))}
-                          className="h-5 w-5 rounded-full bg-green-100 hover:bg-green-200 text-green-900 leading-none"
-                          title="Remove source"
-                        >
-                          -
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <CurrentTurnSourcesPanel
+              activeSourceRows={activeSourceRows}
+              onRemoveSource={(nodeId) => setGameState(prev => removeActiveSourceNode(prev, nodeId))}
+            />
 
             {!showingResults ? (
               <TurnResponsePanel

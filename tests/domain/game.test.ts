@@ -13,6 +13,7 @@ import {
   getGameOutcomeText,
   removeActiveSourceNode,
   selectActiveSourceNodeStatus,
+  selectActiveSourceRows,
   selectCurrentEvaluation,
   selectGraphRenderData,
   selectPlayerScoreRows,
@@ -213,6 +214,46 @@ test('active source status exposes add and remove affordances without UI state p
     canAddSource: false,
     canRemoveSource: false,
   });
+});
+
+test('active source rows expose source nodes with removable state', () => {
+  const state = startedState();
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
+
+  assert.deepEqual(selectActiveSourceRows(withTurn).map(row => ({
+    nodeId: row.node.id,
+    topic: row.node.topic,
+    canRemoveSource: row.canRemoveSource,
+  })), [
+    {
+      nodeId: turn.destinationNodeId,
+      topic: 'Flying buttresses',
+      canRemoveSource: false,
+    },
+  ]);
+
+  const withSecondSource = addActiveSourceNode(withTurn, state.rootNodeId);
+  assert.deepEqual(selectActiveSourceRows(withSecondSource).map(row => ({
+    nodeId: row.node.id,
+    topic: row.node.topic,
+    canRemoveSource: row.canRemoveSource,
+  })), [
+    {
+      nodeId: turn.destinationNodeId,
+      topic: 'Flying buttresses',
+      canRemoveSource: true,
+    },
+    {
+      nodeId: state.rootNodeId,
+      topic: 'Cathedrals',
+      canRemoveSource: true,
+    },
+  ]);
 });
 
 test('player score rows support more than two players and preserve configured order', () => {

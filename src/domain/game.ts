@@ -158,6 +158,11 @@ export type ActiveSourceNodeStatus = {
   canRemoveSource: boolean;
 };
 
+export type ActiveSourceRow = {
+  node: TopicNode;
+  canRemoveSource: boolean;
+};
+
 export const DEFAULT_HUMAN_PLAYER_ID = 'player-human';
 export const DEFAULT_AI_PLAYER_ID = 'player-ai';
 export const DEFAULT_ROOT_NODE_ID = 'root';
@@ -382,6 +387,16 @@ export function selectActiveSourceNodeStatus(state: GameState, nodeId: string): 
     canAddSource: nodeExists && !isActiveSource,
     canRemoveSource: isActiveSource && state.activeSourceNodeIds.length > 1,
   };
+}
+
+export function selectActiveSourceRows(state: GameState): ActiveSourceRow[] {
+  return state.activeSourceNodeIds
+    .map(nodeId => state.nodesById[nodeId])
+    .filter((node): node is TopicNode => Boolean(node))
+    .map(node => ({
+      node,
+      canRemoveSource: state.activeSourceNodeIds.length > 1,
+    }));
 }
 
 export function selectNodeDefinitionTarget(state: GameState, nodeId: string | null | undefined): DefinitionTarget | null {
