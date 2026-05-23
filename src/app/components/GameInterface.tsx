@@ -2,6 +2,7 @@
 
 import { useState, KeyboardEvent } from 'react';
 import ModelSelector from './ModelSelector';
+import ScoreTooltip from './ScoreTooltip';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import TurnHistoryTable, { getPlayerBadgeClass } from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
@@ -875,76 +876,7 @@ export default function GameInterface() {
         </div>
       )}
       
-      {/* Score tooltip/popup */}
-      {tooltipData.visible && tooltipData.score && (
-        <div 
-          className="fixed bg-white shadow-lg rounded-md p-3 z-50 border border-gray-200 text-sm"
-          style={{
-            left: `${tooltipData.x}px`,
-            top: `${tooltipData.y}px`,
-            maxWidth: '300px',
-            maxHeight: '80vh',
-            overflowY: 'auto'
-          }}
-        >
-          <h4 className="font-medium text-blue-800 mb-2">Score Breakdown:</h4>
-          
-          {!tooltipData.isCircleMode ? (
-            <div>
-              <ul className="list-disc pl-5 mb-2">
-                <li>
-                  <span className="font-medium">Semantic Distance: {tooltipData.score.semanticDistance}/10</span>
-                  <p className="text-xs text-gray-600 ml-1">Measures how well the concepts are connected intellectually.</p>
-                </li>
-                <li>
-                  <span className="font-medium">Similarity: {tooltipData.score.relevanceQuality}/10</span>
-                  <p className="text-xs text-gray-600 ml-1">Measures how relevant and appropriate the response is to the topic.</p>
-                </li>
-                <li className="font-medium mt-2">Total Score: {tooltipData.score.total}/20</li>
-              </ul>
-              <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
-                <p><strong>What makes a good connection?</strong></p>
-                <p>The best connections balance novelty with relevance - they should be unexpected yet clearly related to the topic.</p>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="mb-3">
-                <p className="font-medium">Current Topic Connection:</p>
-                <ul className="list-disc pl-5">
-                  <li>
-                    <span>Semantic Distance: {tooltipData.score.currentConnection?.semanticDistance || 0}/10</span>
-                    <p className="text-xs text-gray-600 ml-1">Connection quality to the current topic.</p>
-                  </li>
-                  <li>
-                    <span>Similarity: {tooltipData.score.currentConnection?.similarity || 0}/10</span>
-                    <p className="text-xs text-gray-600 ml-1">Relevance to the current topic.</p>
-                  </li>
-                  <li>Subtotal: {tooltipData.score.currentConnection?.subtotal || 0}/20</li>
-                </ul>
-              </div>
-              <div className="mb-3">
-                <p className="font-medium">Original Topic Connection:</p>
-                <ul className="list-disc pl-5">
-                  <li>
-                    <span>Semantic Distance: {tooltipData.score.originalConnection?.semanticDistance || 0}/10</span>
-                    <p className="text-xs text-gray-600 ml-1">Connection quality to the original topic.</p>
-                  </li>
-                  <li>
-                    <span>Similarity: {tooltipData.score.originalConnection?.similarity || 0}/10</span>
-                    <p className="text-xs text-gray-600 ml-1">Relevance to the original topic.</p>
-                  </li>
-                  <li>Subtotal: {tooltipData.score.originalConnection?.subtotal || 0}/20</li>
-                </ul>
-              </div>
-              <p className="mt-2 font-medium">Final Score: {tooltipData.score.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span></p>
-              <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
-                <p><strong>Circle Mode:</strong> In the final round, your response must connect both to the current topic and back to the original starting topic.</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <ScoreTooltip tooltipData={tooltipData} />
     </div>
   );
 }
