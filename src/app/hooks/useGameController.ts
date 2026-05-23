@@ -14,7 +14,7 @@ import {
   selectCurrentPlayer,
   selectGraphRenderData,
   selectLegacyGameHistory,
-  selectPlayerScoreTotals,
+  selectPlayerScoreRows,
   selectSelectedNodePanels,
   selectTurnHistoryRows,
   setGameStatus,
@@ -59,14 +59,10 @@ export function useGameController({
   const currentPlayerModel = selectCurrentPlayer(gameState);
   const selectedNodePanels = selectSelectedNodePanels(gameState);
   const turnHistoryRows = selectTurnHistoryRows(gameState);
-  const scoreTotalsByPlayerId = selectPlayerScoreTotals(gameState);
+  const playerScoreRows = selectPlayerScoreRows(gameState);
   const gameHistory = selectLegacyGameHistory(gameState);
   const currentRound = gameState.currentRound;
-  const currentPlayer = currentPlayerModel?.kind === 'ai' ? 'ai' : 'human';
-  const totalScores = {
-    human: scoreTotalsByPlayerId[DEFAULT_HUMAN_PLAYER_ID] || 0,
-    ai: scoreTotalsByPlayerId[DEFAULT_AI_PLAYER_ID] || 0,
-  };
+  const isCurrentPlayerLocal = currentPlayerModel?.kind === 'local';
   const activeSourceNodes = gameState.activeSourceNodeIds
     .map(nodeId => gameState.nodesById[nodeId])
     .filter(Boolean);
@@ -123,7 +119,7 @@ export function useGameController({
   };
 
   const completeEvaluatedTurn = useCallback((params: {
-    player: 'human' | 'ai';
+    playerId: string;
     responseText: string;
     evaluationTopic: string;
     result: TurnEvaluation;
@@ -131,7 +127,7 @@ export function useGameController({
     setGameState(prev => {
       const withTurn = addTurnToGameState(prev, {
         destinationTopic: params.responseText,
-        playerId: getPlayerIdForTurn(params.player),
+        playerId: params.playerId,
         sourceNodeIds: prev.activeSourceNodeIds,
         evaluation: params.result.evaluation,
         finalEvaluation: params.result.finalEvaluation,
@@ -147,9 +143,10 @@ export function useGameController({
   }, [currentRound, maxRounds]);
 
   const evaluateTurnResponse = useCallback(async (params: {
-    player: 'human' | 'ai';
+    playerId: string;
     responseText: string;
     fallbackOnFailure?: boolean;
+    clearResponseOnSuccess?: boolean;
   }) => {
     const evaluationTopic = currentSourceTopicText;
     if (!evaluationTopic || !params.responseText) return;
@@ -170,13 +167,13 @@ export function useGameController({
         });
 
         completeEvaluatedTurn({
-          player: params.player,
+          playerId: params.playerId,
           responseText: params.responseText,
           evaluationTopic,
           result,
         });
 
-        if (params.player === 'human') {
+        if (params.clearResponseOnSuccess) {
           setResponse('');
         }
         break;
@@ -198,7 +195,7 @@ export function useGameController({
             total: 10,
           };
           completeEvaluatedTurn({
-            player: params.player,
+            playerId: params.playerId,
             responseText: params.responseText,
             evaluationTopic,
             result: {
@@ -215,9 +212,12 @@ export function useGameController({
   }, [circleEnabled, completeEvaluatedTurn, currentRound, currentSourceTopicText, difficulty, maxRounds, originalTopic, services]);
 
   const evaluateResponse = async () => {
+    if (!currentPlayerModel) return;
+
     await evaluateTurnResponse({
-      player: 'human',
+      playerId: currentPlayerModel.id,
       responseText: response,
+      clearResponseOnSuccess: currentPlayerModel.kind === 'local',
     });
   };
 
@@ -258,7 +258,7 @@ export function useGameController({
 
   useEffect(() => {
     const aiTakeTurn = async () => {
-      if (gameState.gameStatus !== 'awaitingResponse' || currentPlayerModel?.kind !== 'ai') {
+      if (gameState.gameStatus !== 'awaitingResponse' || !currentPlayerModel || currentPlayerModel.kind !== 'ai') {
         return;
       }
 
@@ -293,7 +293,7 @@ export function useGameController({
 
         setResponse(aiResponse);
         await evaluateTurnResponse({
-          player: 'ai',
+          playerId: currentPlayerModel.id,
           responseText: aiResponse,
           fallbackOnFailure: true,
         });
@@ -302,7 +302,7 @@ export function useGameController({
         const aiResponse = `Response to ${aiPromptTopic}`;
         setResponse(aiResponse);
         await evaluateTurnResponse({
-          player: 'ai',
+          playerId: currentPlayerModel.id,
           responseText: aiResponse,
           fallbackOnFailure: true,
         });
@@ -315,6 +315,7 @@ export function useGameController({
     gameState.currentRound,
     gameState.currentPlayerId,
     gameState.turnOrder.length,
+    currentPlayerModel,
     currentPlayerModel?.kind,
     currentRound,
     currentSourceTopicText,
@@ -342,8 +343,8 @@ export function useGameController({
     gameHistory,
     selectedGraphNodeId: gameState.selectedNodeIds[0] || null,
     currentRound,
-    currentPlayer,
-    totalScores,
+    isCurrentPlayerLocal,
+    playerScoreRows,
     activeSourceNodes,
     currentSourceTopicText,
     gameStarted,

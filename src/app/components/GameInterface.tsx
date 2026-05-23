@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, KeyboardEvent, useRef } from 'react';
+import { useState, KeyboardEvent } from 'react';
 import ModelSelector from './ModelSelector';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import { LLM_CONFIG } from '@/config/llm';
@@ -9,11 +9,10 @@ import {
   Score,
   addActiveSourceNode,
   removeActiveSourceNode,
-  setNodeDefinitionVisibility,
   setSelectedNodeIds,
-  updateNodeDefinition,
 } from '@/domain/game';
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
+import { useDefinitions } from '@/app/hooks/useDefinitions';
 import { gameApi } from '@/app/services/gameApi';
 
 // Define the GameHistory type to match what SimpleConceptGraph expects
@@ -26,25 +25,17 @@ interface GameHistory {
   player: 'human' | 'ai';
 }
 
-function normalizeDefinitionTopic(topic: string) {
-  return topic.trim().toLowerCase();
+function getPlayerBadgeClass(playerKind?: string) {
+  if (playerKind === 'local') return 'bg-blue-100 text-blue-800';
+  if (playerKind === 'ai') return 'bg-red-100 text-red-800';
+  return 'bg-gray-100 text-gray-800';
 }
 
 export default function GameInterface() {
-  const definitionCacheRef = useRef<Map<string, string>>(new Map());
-  const [, setDefinitionCacheVersion] = useState<number>(0);
-  const [topicDefinition, setTopicDefinition] = useState<string>('');
-  const [showDefinition, setShowDefinition] = useState<boolean>(false);
-  const [isLoadingDefinition, setIsLoadingDefinition] = useState<boolean>(false);
-  const [originalTopicDefinition, setOriginalTopicDefinition] = useState<string>('');
-  const [showOriginalDefinition, setShowOriginalDefinition] = useState<boolean>(false);
-  const [isLoadingOriginalDefinition, setIsLoadingOriginalDefinition] = useState<boolean>(false);
-  const [isLoadingSelectedNodeDefinition, setIsLoadingSelectedNodeDefinition] = useState<boolean>(false);
-  
   // New state variables for user settings
   const [maxRounds, setMaxRounds] = useState<number>(10);
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
-  const [circleEnabled, setCircleEnabled] = useState<boolean>(false);
+  const circleEnabled = false;
   const [roundOptions] = useState<number[]>([4, 6, 8, 10, 12, 14, 16, 20]);
   
   // Simplified difficulty level - single setting for both concept and AI
@@ -76,19 +67,19 @@ export default function GameInterface() {
   const {
     gameState,
     setGameState,
-    topic,
     originalTopic,
     response,
     setResponse,
     currentEvaluation,
     graphRenderData,
+    currentPlayerModel,
     selectedNodePanels,
     turnHistoryRows,
     gameHistory,
     selectedGraphNodeId,
     currentRound,
-    currentPlayer,
-    totalScores,
+    isCurrentPlayerLocal,
+    playerScoreRows,
     activeSourceNodes,
     currentSourceTopicText,
     gameStarted,
@@ -98,7 +89,6 @@ export default function GameInterface() {
     showingResults,
     gameCompleted,
     setSelectedGraphNodeId,
-    findNodeIdByTopic,
     getSingleCurrentSourceNode,
     generateFirstTopic: startGame,
     evaluateResponse,
@@ -112,6 +102,17 @@ export default function GameInterface() {
     difficulty,
   });
 
+  const {
+    fetchDefinition,
+    hideDefinition,
+    isDefinitionLoading,
+    showDefinition,
+  } = useDefinitions({
+    gameState,
+    setGameState,
+    services: gameApi,
+  });
+
   const latestTurnId = gameState.turnOrder[gameState.turnOrder.length - 1];
   const defaultSourceNodeId = latestTurnId
     ? gameState.turnsById[latestTurnId]?.destinationNodeId
@@ -123,69 +124,18 @@ export default function GameInterface() {
       gameState.activeSourceNodeIds[0] !== defaultSourceNodeId
     )
   );
+  const winningScore = playerScoreRows.length > 0
+    ? Math.max(...playerScoreRows.map(row => row.totalScore))
+    : 0;
+  const winningPlayers = playerScoreRows.filter(row => row.totalScore === winningScore);
+  const gameOutcomeText = winningPlayers.length === 1
+    ? `${winningPlayers[0].player.name} won.`
+    : "It's a tie!";
+  const localPlayerName = playerScoreRows.find(row => row.player.kind === 'local')?.player.name || 'Local player';
+  const aiPlayerName = playerScoreRows.find(row => row.player.kind === 'ai')?.player.name || 'AI player';
 
   const generateFirstTopic = async () => {
-    setShowDefinition(false);
-    setShowOriginalDefinition(false);
     await startGame();
-  };
-
-  const getCachedDefinition = async (definitionTopic: string) => {
-    const cacheKey = normalizeDefinitionTopic(definitionTopic);
-    const cachedDefinition = definitionCacheRef.current.get(cacheKey);
-
-    if (cachedDefinition) {
-      return cachedDefinition;
-    }
-
-    const definition = await gameApi.getDefinition(definitionTopic);
-    definitionCacheRef.current.set(cacheKey, definition);
-    setDefinitionCacheVersion(version => version + 1);
-    return definition;
-  };
-
-  const fetchTopicDefinition = async () => {
-    const singleSourceNode = getSingleCurrentSourceNode();
-    const definitionTopic = singleSourceNode?.topic || topic;
-    if (!definitionTopic || isLoadingDefinition) return;
-    
-    setIsLoadingDefinition(true);
-    try {
-      const definition = await getCachedDefinition(definitionTopic);
-      setTopicDefinition(definition);
-      const nodeId = singleSourceNode?.id || findNodeIdByTopic(definitionTopic);
-      if (nodeId) {
-        setGameState(prev => updateNodeDefinition(prev, nodeId, definition));
-      }
-      setShowDefinition(true);
-    } catch (error) {
-      console.error('Error fetching definition:', error);
-      setTopicDefinition('Unable to fetch definition at this time.');
-      setShowDefinition(true);
-    } finally {
-      setIsLoadingDefinition(false);
-    }
-  };
-
-  const fetchOriginalTopicDefinition = async () => {
-    if (!originalTopic || isLoadingOriginalDefinition) return;
-    
-    setIsLoadingOriginalDefinition(true);
-    try {
-      const definition = await getCachedDefinition(originalTopic);
-      setOriginalTopicDefinition(definition);
-      const nodeId = findNodeIdByTopic(originalTopic);
-      if (nodeId) {
-        setGameState(prev => updateNodeDefinition(prev, nodeId, definition));
-      }
-      setShowOriginalDefinition(true);
-    } catch (error) {
-      console.error('Error fetching original topic definition:', error);
-      setOriginalTopicDefinition('Unable to fetch definition at this time.');
-      setShowOriginalDefinition(true);
-    } finally {
-      setIsLoadingOriginalDefinition(false);
-    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -217,9 +167,6 @@ export default function GameInterface() {
         activeSourceNodeIds: [sourceNodeId],
       }));
     }
-    // Clear any existing definition since we're changing topics
-    setShowDefinition(false);
-    setTopicDefinition('');
     
     console.log(`Selected previous topic: "${historyItem.response}" from round ${historyItem.round}`);
   };
@@ -258,6 +205,63 @@ export default function GameInterface() {
     return;
   };
 
+  const singleCurrentSourceNode = getSingleCurrentSourceNode();
+  const currentTopicDefinitionTarget = singleCurrentSourceNode
+    ? {
+        nodeId: singleCurrentSourceNode.id,
+        topic: singleCurrentSourceNode.topic,
+      }
+    : null;
+  const currentTopicNode = currentTopicDefinitionTarget
+    ? gameState.nodesById[currentTopicDefinitionTarget.nodeId]
+    : null;
+  const currentTopicDefinition = currentTopicNode?.definition || null;
+  const currentTopicDefinitionVisible = Boolean(
+    currentTopicDefinition && currentTopicNode?.definitionVisible
+  );
+  const isLoadingCurrentTopicDefinition = currentTopicDefinitionTarget
+    ? isDefinitionLoading(currentTopicDefinitionTarget.nodeId)
+    : false;
+
+  const originalTopicDefinitionTarget = gameState.rootNodeId && originalTopic
+    ? {
+        nodeId: gameState.rootNodeId,
+        topic: originalTopic,
+      }
+    : null;
+  const originalTopicNode = originalTopicDefinitionTarget
+    ? gameState.nodesById[originalTopicDefinitionTarget.nodeId]
+    : null;
+  const originalTopicDefinition = originalTopicNode?.definition || null;
+  const originalTopicDefinitionVisible = Boolean(
+    originalTopicDefinition && originalTopicNode?.definitionVisible
+  );
+  const isLoadingOriginalTopicDefinition = originalTopicDefinitionTarget
+    ? isDefinitionLoading(originalTopicDefinitionTarget.nodeId)
+    : false;
+
+  const handleCurrentTopicDefinitionClick = async () => {
+    if (!currentTopicDefinitionTarget || isGeneratingTopic) return;
+
+    if (currentTopicDefinitionVisible) {
+      hideDefinition(currentTopicDefinitionTarget.nodeId);
+      return;
+    }
+
+    await fetchDefinition(currentTopicDefinitionTarget);
+  };
+
+  const handleOriginalTopicDefinitionClick = async () => {
+    if (!originalTopicDefinitionTarget) return;
+
+    if (originalTopicDefinitionVisible) {
+      hideDefinition(originalTopicDefinitionTarget.nodeId);
+      return;
+    }
+
+    await fetchDefinition(originalTopicDefinitionTarget);
+  };
+
   const selectedGraphNode = (() => {
     if (!selectedGraphNodeId) return null;
 
@@ -284,11 +288,8 @@ export default function GameInterface() {
     };
   })();
 
-  const selectedGraphNodeDefinition = selectedGraphNode
-    ? gameState.nodesById[selectedGraphNode.id]?.definition ||
-      definitionCacheRef.current.get(normalizeDefinitionTopic(selectedGraphNode.topicForDefinition))
-    : null;
   const selectedGraphTopicNode = selectedGraphNode ? gameState.nodesById[selectedGraphNode.id] : null;
+  const selectedGraphNodeDefinition = selectedGraphTopicNode?.definition || null;
   const selectedGraphNodeIsActiveSource = Boolean(
     selectedGraphNode && gameState.activeSourceNodeIds.includes(selectedGraphNode.id)
   );
@@ -298,18 +299,15 @@ export default function GameInterface() {
   );
 
   const fetchSelectedGraphNodeDefinition = async () => {
-    if (!selectedGraphNode || isLoadingSelectedNodeDefinition) return;
-
-    setIsLoadingSelectedNodeDefinition(true);
-    try {
-      const definition = await getCachedDefinition(selectedGraphNode.topicForDefinition);
-      setGameState(prev => updateNodeDefinition(prev, selectedGraphNode.id, definition));
-    } catch (error) {
-      console.error('Error fetching selected node definition:', error);
-    } finally {
-      setIsLoadingSelectedNodeDefinition(false);
-    }
+    if (!selectedGraphNode) return;
+    await fetchDefinition({
+      nodeId: selectedGraphNode.id,
+      topic: selectedGraphNode.topicForDefinition,
+    });
   };
+  const isLoadingSelectedGraphNodeDefinition = selectedGraphNode
+    ? isDefinitionLoading(selectedGraphNode.id)
+    : false;
 
   const handleToggleSelectedGraphNodeSource = () => {
     if (!selectedGraphNode || showingResults || isEvaluating || isAiThinking || gameCompleted) return;
@@ -321,29 +319,17 @@ export default function GameInterface() {
 
       return addActiveSourceNode(prev, selectedGraphNode.id);
     });
-    setShowDefinition(false);
-    setTopicDefinition('');
   };
 
   const handleRestart = () => {
-    setShowDefinition(false);
-    setShowOriginalDefinition(false);
-    setOriginalTopicDefinition('');
-    setTopicDefinition('');
     restartGame();
   };
 
   const handleReturnToSettings = () => {
-    setShowDefinition(false);
-    setShowOriginalDefinition(false);
-    setOriginalTopicDefinition('');
-    setTopicDefinition('');
     returnToSettings();
   };
 
   const handleNextTurn = () => {
-    setShowDefinition(false);
-    setShowOriginalDefinition(false);
     advanceTurn();
   };
 
@@ -391,8 +377,7 @@ export default function GameInterface() {
       {!gameStarted ? (
         <div className="text-center">
           <p className="mb-6 text-lg">
-            Welcome to the Glass Bead Game! In this game, you'll compete against an AI opponent
-            in a journey of connected concepts.
+            Welcome to the Glass Bead Game, a turn-based journey of connected concepts.
           </p>
           
           {/* Game settings */}
@@ -429,7 +414,7 @@ export default function GameInterface() {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  You First
+                  {localPlayerName} First
                 </button>
                 <button
                   onClick={() => setAiGoesFirst(true)}
@@ -439,7 +424,7 @@ export default function GameInterface() {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  AI First
+                  {aiPlayerName} First
                 </button>
               </div>
             </div>
@@ -491,7 +476,7 @@ export default function GameInterface() {
             <h3 className="font-bold mb-2">Rules:</h3>
             <ol className="list-decimal pl-5 space-y-2">
               <li>The game starts with a randomly generated topic.</li>
-              <li>You and the AI will take turns responding to the current topic with a brief answer.</li>
+              <li>Players take turns responding to the current topic with a brief answer.</li>
               <li><strong>Responses should be brief</strong> - ideally a single word or short phrase (1-5 words). The quality of the conceptual connection is what matters, not the length of your response.</li>
               <li>Each response becomes the topic for the next round.</li>
               <li>The game lasts for {maxRounds} rounds ({Math.ceil(maxRounds/2)} turns each).</li>
@@ -534,8 +519,14 @@ export default function GameInterface() {
               <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-500">Round {currentRound}/{maxRounds}</span>
                 <div className="flex gap-2">
-                  <span className="text-sm font-medium bg-blue-100 px-3 py-1 rounded-full">You: {totalScores.human}</span>
-                  <span className="text-sm font-medium bg-red-100 px-3 py-1 rounded-full">AI: {totalScores.ai}</span>
+                  {playerScoreRows.map(scoreRow => (
+                    <span
+                      key={scoreRow.player.id}
+                      className={`text-sm font-medium px-3 py-1 rounded-full ${getPlayerBadgeClass(scoreRow.player.kind)}`}
+                    >
+                      {scoreRow.player.name}: {scoreRow.totalScore}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
@@ -555,12 +546,12 @@ export default function GameInterface() {
                   )}
                 </p>
                 <button 
-                  onClick={fetchTopicDefinition}
-                  disabled={isLoadingDefinition || isGeneratingTopic}
+                  onClick={handleCurrentTopicDefinitionClick}
+                  disabled={!currentTopicDefinitionTarget || isLoadingCurrentTopicDefinition || isGeneratingTopic}
                   className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-700 flex items-center"
-                  title="Show definition"
+                  title={currentTopicDefinitionTarget ? 'Show definition' : 'Definitions are available for a single selected source'}
                 >
-                  {isLoadingDefinition ? (
+                  {isLoadingCurrentTopicDefinition ? (
                     <span className="flex items-center">
                       <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -573,17 +564,17 @@ export default function GameInterface() {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Definition
+                      {currentTopicDefinitionVisible ? 'Hide Definition' : 'Definition'}
                     </span>
                   )}
                 </button>
               </div>
             </div>
             
-            {showDefinition && (
+            {currentTopicDefinitionVisible && currentTopicDefinition && (
               <div className="p-3 bg-blue-50 rounded-lg mb-4 text-sm">
                 <p className="font-medium mb-1">Definition:</p>
-                <p>{topicDefinition}</p>
+                <p>{currentTopicDefinition}</p>
               </div>
             )}
 
@@ -614,7 +605,7 @@ export default function GameInterface() {
                     <div className="flex items-center justify-between gap-3 mb-1">
                       <p className="font-medium">Definition:</p>
                       <button
-                        onClick={() => setGameState(prev => setNodeDefinitionVisibility(prev, selectedGraphNode.id, false))}
+                        onClick={() => hideDefinition(selectedGraphNode.id)}
                         className="text-xs px-2 py-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-800"
                       >
                         Hide
@@ -624,7 +615,7 @@ export default function GameInterface() {
                   </div>
                 ) : selectedGraphNodeDefinition ? (
                   <button
-                    onClick={() => setGameState(prev => setNodeDefinitionVisibility(prev, selectedGraphNode.id, true))}
+                    onClick={() => showDefinition(selectedGraphNode.id)}
                     className="mt-3 text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full"
                   >
                     Show Definition
@@ -632,10 +623,10 @@ export default function GameInterface() {
                 ) : (
                   <button
                     onClick={fetchSelectedGraphNodeDefinition}
-                    disabled={isLoadingSelectedNodeDefinition}
+                    disabled={isLoadingSelectedGraphNodeDefinition}
                     className="mt-3 text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-full"
                   >
-                    {isLoadingSelectedNodeDefinition ? 'Loading definition...' : 'Get Definition'}
+                    {isLoadingSelectedGraphNodeDefinition ? 'Loading definition...' : 'Get Definition'}
                   </button>
                 )}
 
@@ -680,12 +671,12 @@ export default function GameInterface() {
                 
                 <div className="mt-2 flex justify-end">
                   <button 
-                    onClick={fetchOriginalTopicDefinition}
-                    disabled={isLoadingOriginalDefinition}
+                    onClick={handleOriginalTopicDefinitionClick}
+                    disabled={!originalTopicDefinitionTarget || isLoadingOriginalTopicDefinition}
                     className="text-xs px-2 py-1 bg-yellow-200 hover:bg-yellow-300 rounded-full text-yellow-800 flex items-center"
                     title="Show original topic definition"
                   >
-                    {isLoadingOriginalDefinition ? (
+                    {isLoadingOriginalTopicDefinition ? (
                       <span className="flex items-center">
                         <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-yellow-800" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -698,7 +689,7 @@ export default function GameInterface() {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        Original Topic Definition
+                        {originalTopicDefinitionVisible ? 'Hide Original Topic Definition' : 'Original Topic Definition'}
                       </span>
                     )}
                   </button>
@@ -706,7 +697,7 @@ export default function GameInterface() {
               </div>
             )}
 
-            {showOriginalDefinition && (
+            {originalTopicDefinitionVisible && originalTopicDefinition && (
               <div className="p-3 bg-yellow-100 rounded-lg mb-4 text-sm">
                 <p className="font-medium mb-1">Original Topic Definition ("{originalTopic}"):</p>
                 <p>{originalTopicDefinition}</p>
@@ -716,10 +707,10 @@ export default function GameInterface() {
             {!showingResults ? (
               <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-2">
-                  {currentPlayer === 'human' ? 'Your Response:' : 'AI is thinking...'}
+                  {isCurrentPlayerLocal ? 'Your Response:' : `${currentPlayerModel?.name || 'Player'} is thinking...`}
                 </h2>
                 
-                {currentPlayer === 'human' ? (
+                {isCurrentPlayerLocal ? (
                   <>
                     <input
                       type="text"
@@ -759,7 +750,7 @@ export default function GameInterface() {
                         <div className="h-3 w-3 bg-red-300 rounded-full"></div>
                         <div className="h-3 w-3 bg-red-300 rounded-full"></div>
                       </div>
-                      <span className="ml-3 text-gray-600">AI is formulating a response...</span>
+                      <span className="ml-3 text-gray-600">{currentPlayerModel?.name || 'Player'} is formulating a response...</span>
                     </div>
                   </div>
                 )}
@@ -771,7 +762,7 @@ export default function GameInterface() {
                 {/* Display the response that was evaluated */}
                 <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
                   <p className="font-medium text-gray-700">
-                    {currentEvaluation.playerKind === 'local' ? 'Your' : 'AI'} Response to "{currentEvaluation.topic}":
+                    {currentEvaluation.playerName} Response to "{currentEvaluation.topic}":
                   </p>
                   <p className="mt-1 text-lg">{currentEvaluation.response}</p>
                 </div>
@@ -828,14 +819,13 @@ export default function GameInterface() {
                     <h3 className="text-xl font-bold">Game Completed!</h3>
                     <div className="mt-2 p-3 bg-green-50 rounded border border-green-200">
                       <p className="font-medium">Final Scores:</p>
-                      <p>Your Score: {totalScores.human}</p>
-                      <p>AI Score: {totalScores.ai}</p>
+                      {playerScoreRows.map(scoreRow => (
+                        <p key={scoreRow.player.id}>
+                          {scoreRow.player.name} Score: {scoreRow.totalScore}
+                        </p>
+                      ))}
                       <p className="mt-2 font-medium">
-                        {totalScores.human > totalScores.ai 
-                          ? "Congratulations! You won!" 
-                          : totalScores.human < totalScores.ai 
-                            ? "The AI won this time." 
-                            : "It's a tie!"}
+                        {gameOutcomeText}
                       </p>
                     </div>
                     <div className="mt-4 flex gap-3 justify-center">
@@ -918,8 +908,10 @@ export default function GameInterface() {
                           const isCircleRound = circleEnabled && actualRoundNumber === maxRounds;
                           const topicNodeId = getTopicGraphNodeId(round.topic, historyIndex);
                           const isTopicSelected = selectedGraphNodeId === topicNodeId;
-                          const destinationNodeId = turnHistoryRows[historyIndex]?.destinationNode.id;
+                          const turnHistoryRow = turnHistoryRows[historyIndex];
+                          const destinationNodeId = turnHistoryRow?.destinationNode.id;
                           const isResponseSelectedForTopic = Boolean(destinationNodeId && gameState.activeSourceNodeIds.includes(destinationNodeId));
+                          const player = turnHistoryRow?.player;
                           
                           return (
                             <tr
@@ -930,8 +922,8 @@ export default function GameInterface() {
                               <td className="py-2 px-4">{actualRoundNumber}</td>
                               <td className="py-2 px-4">{round.topic}</td>
                               <td className="py-2 px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs ${round.player === 'human' ? 'bg-blue-100' : 'bg-red-100'}`}>
-                                  {round.player === 'human' ? 'You' : 'AI'}
+                                <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(player?.kind)}`}>
+                                  {player?.name || 'Player'}
                                 </span>
                               </td>
                               <td className="py-2 px-4">{round.response}</td>

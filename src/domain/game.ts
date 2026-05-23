@@ -123,7 +123,14 @@ export type CurrentEvaluationView = {
   scores: Score;
   playerId: string;
   playerKind: PlayerKind;
+  playerName: string;
   finalEvaluation?: string;
+};
+
+export type PlayerScoreRow = {
+  player: Player;
+  totalScore: number;
+  isCurrentPlayer: boolean;
 };
 
 export type LegacyGameHistoryItem = {
@@ -425,6 +432,19 @@ export function selectPlayerScoreTotals(state: GameState): Record<string, number
   }, {});
 }
 
+export function selectPlayerScoreRows(state: GameState): PlayerScoreRow[] {
+  const scoreTotals = selectPlayerScoreTotals(state);
+
+  return state.playerOrder
+    .map(playerId => state.playersById[playerId])
+    .filter((player): player is Player => Boolean(player))
+    .map(player => ({
+      player,
+      totalScore: scoreTotals[player.id] || 0,
+      isCurrentPlayer: player.id === state.currentPlayerId,
+    }));
+}
+
 export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView | null {
   if (state.gameStatus !== 'showingResults' && state.gameStatus !== 'completed') return null;
 
@@ -450,6 +470,7 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     },
     playerId: turn.playerId,
     playerKind: player?.kind || 'local',
+    playerName: player?.name || 'Player',
   };
 }
 
