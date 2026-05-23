@@ -10,6 +10,7 @@ import {
   getTurnHistoryRowScore,
   getTurnHistoryRowSourceTopicText,
   getNextPlayerId,
+  getGameOutcomeText,
   removeActiveSourceNode,
   selectActiveSourceNodeStatus,
   selectCurrentEvaluation,
@@ -247,6 +248,22 @@ test('player score rows support more than two players and preserve configured or
       { id: 'player-remote-ai', totalScore: 0, isCurrentPlayer: false },
     ]
   );
+});
+
+test('game outcome text reports a winner or tie from player score rows', () => {
+  const scoreRows = players.map((player, index) => ({
+    player,
+    totalScore: index === 1 ? 12 : 6,
+    isCurrentPlayer: false,
+  }));
+
+  assert.equal(getGameOutcomeText(scoreRows), 'OpenClaw won.');
+  assert.equal(getGameOutcomeText([
+    { ...scoreRows[0], totalScore: 12 },
+    scoreRows[1],
+    scoreRows[2],
+  ]), "It's a tie!");
+  assert.equal(getGameOutcomeText([]), "It's a tie!");
 });
 
 test('next player cycles through the configured player order', () => {

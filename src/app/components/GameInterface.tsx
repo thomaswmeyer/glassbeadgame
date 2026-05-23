@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, KeyboardEvent } from 'react';
+import EvaluationResultsPanel from './EvaluationResultsPanel';
 import ModelSelector from './ModelSelector';
 import ScoreTooltip from './ScoreTooltip';
 import SelectedNodePanel from './SelectedNodePanel';
@@ -113,13 +114,6 @@ export default function GameInterface() {
       gameState.activeSourceNodeIds[0] !== defaultSourceNodeId
     )
   );
-  const winningScore = playerScoreRows.length > 0
-    ? Math.max(...playerScoreRows.map(row => row.totalScore))
-    : 0;
-  const winningPlayers = playerScoreRows.filter(row => row.totalScore === winningScore);
-  const gameOutcomeText = winningPlayers.length === 1
-    ? `${winningPlayers[0].player.name} won.`
-    : "It's a tie!";
   const localPlayerName = playerScoreRows.find(row => row.player.kind === 'local')?.player.name || 'Local player';
   const aiPlayerName = playerScoreRows.find(row => row.player.kind === 'ai')?.player.name || 'AI player';
 
@@ -267,18 +261,6 @@ export default function GameInterface() {
 
       return addActiveSourceNode(prev, selectedGraphNode.id);
     });
-  };
-
-  const handleRestart = () => {
-    restartGame();
-  };
-
-  const handleReturnToSettings = () => {
-    returnToSettings();
-  };
-
-  const handleNextTurn = () => {
-    advanceTurn();
   };
 
   // Function to handle showing the tooltip
@@ -657,102 +639,17 @@ export default function GameInterface() {
                 )}
               </div>
             ) : currentEvaluation && (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Evaluation Results</h3>
-                
-                {/* Display the response that was evaluated */}
-                <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
-                  <p className="font-medium text-gray-700">
-                    {currentEvaluation.playerName} Response to "{currentEvaluation.topic}":
-                  </p>
-                  <p className="mt-1 text-lg">{currentEvaluation.response}</p>
-                </div>
-                
-                <div className="whitespace-pre-wrap">{currentEvaluation.evaluation}</div>
-                
-                {/* Score breakdown for regular rounds */}
-                {(currentRound !== maxRounds || !circleEnabled) && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
-                    <h4 className="font-medium text-blue-800 text-sm">Score Breakdown:</h4>
-                    <div className="mt-1 text-sm">
-                      <ul className="list-disc pl-5">
-                        <li>Semantic Distance: {currentEvaluation.scores.semanticDistance}/10</li>
-                        <li>Similarity: {currentEvaluation.scores.relevanceQuality}/10</li>
-                        <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}/20</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Final round score breakdown for circle mode */}
-                {currentRound === maxRounds && circleEnabled && currentEvaluation.finalEvaluation && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
-                    <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
-                    <p>{currentEvaluation.finalEvaluation}</p>
-                    
-                    <div className="mt-3 pt-3 border-t border-blue-200">
-                      <h5 className="font-medium text-blue-800 text-sm">Final Round Scoring:</h5>
-                      <div className="grid grid-cols-2 gap-2 mt-1 text-sm">
-                        <div>
-                          <p><strong>Current Topic Connection:</strong></p>
-                          <ul className="list-disc pl-5">
-                            <li>Semantic Distance: {currentEvaluation.scores.currentConnection?.semanticDistance || 0}/10</li>
-                            <li>Similarity: {currentEvaluation.scores.currentConnection?.similarity || 0}/10</li>
-                            <li>Subtotal: {currentEvaluation.scores.currentConnection?.subtotal || 0}/20</li>
-                          </ul>
-                        </div>
-                        <div>
-                          <p><strong>Original Topic Connection:</strong></p>
-                          <ul className="list-disc pl-5">
-                            <li>Semantic Distance: {currentEvaluation.scores.originalConnection?.semanticDistance || 0}/10</li>
-                            <li>Similarity: {currentEvaluation.scores.originalConnection?.similarity || 0}/10</li>
-                            <li>Subtotal: {currentEvaluation.scores.originalConnection?.subtotal || 0}/20</li>
-                          </ul>
-                        </div>
-                      </div>
-                      <p className="mt-2 font-medium">Final Score: {currentEvaluation.scores.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span></p>
-                    </div>
-                  </div>
-                )}
-                
-                {gameCompleted ? (
-                  <div className="mt-4">
-                    <h3 className="text-xl font-bold">Game Completed!</h3>
-                    <div className="mt-2 p-3 bg-green-50 rounded border border-green-200">
-                      <p className="font-medium">Final Scores:</p>
-                      {playerScoreRows.map(scoreRow => (
-                        <p key={scoreRow.player.id}>
-                          {scoreRow.player.name} Score: {scoreRow.totalScore}
-                        </p>
-                      ))}
-                      <p className="mt-2 font-medium">
-                        {gameOutcomeText}
-                      </p>
-                    </div>
-                    <div className="mt-4 flex gap-3 justify-center">
-                      <button
-                        onClick={handleRestart}
-                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                      >
-                        Start New Game
-                      </button>
-                      <button
-                        onClick={handleReturnToSettings}
-                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition"
-                      >
-                        Choose Game Settings
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleNextTurn}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                  >
-                    Next Round
-                  </button>
-                )}
-              </div>
+              <EvaluationResultsPanel
+                currentEvaluation={currentEvaluation}
+                circleEnabled={circleEnabled}
+                currentRound={currentRound}
+                maxRounds={maxRounds}
+                gameCompleted={gameCompleted}
+                playerScoreRows={playerScoreRows}
+                onNextTurn={advanceTurn}
+                onRestart={restartGame}
+                onReturnToSettings={returnToSettings}
+              />
             )}
             
             {gameStarted && (

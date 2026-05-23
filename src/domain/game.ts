@@ -547,6 +547,17 @@ export function selectPlayerScoreRows(state: GameState): PlayerScoreRow[] {
     }));
 }
 
+export function getGameOutcomeText(playerScoreRows: PlayerScoreRow[]) {
+  const winningScore = playerScoreRows.length > 0
+    ? Math.max(...playerScoreRows.map(row => row.totalScore))
+    : 0;
+  const winningPlayers = playerScoreRows.filter(row => row.totalScore === winningScore);
+
+  return winningPlayers.length === 1
+    ? `${winningPlayers[0].player.name} won.`
+    : "It's a tie!";
+}
+
 export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView | null {
   if (state.gameStatus !== 'showingResults' && state.gameStatus !== 'completed') return null;
 
