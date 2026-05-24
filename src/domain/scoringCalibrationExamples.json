@@ -1,0 +1,110 @@
+[
+  {
+    "topic": "chords",
+    "response": "harmony",
+    "semanticDistance": 1,
+    "relevance": 10,
+    "semanticDistanceTolerance": 1,
+    "relevanceTolerance": 1,
+    "rationale": "Same musical domain and closely associated, but almost perfectly relevant."
+  },
+  {
+    "topic": "fish",
+    "response": "relativity",
+    "semanticDistance": 10,
+    "relevance": 1,
+    "semanticDistanceTolerance": 1,
+    "relevanceTolerance": 1,
+    "rationale": "Extremely remote concepts with no clear structural connection by default."
+  },
+  {
+    "topic": "cathedral",
+    "response": "flying buttress",
+    "semanticDistance": 2,
+    "relevance": 10,
+    "semanticDistanceTolerance": 1,
+    "relevanceTolerance": 1,
+    "rationale": "A directly related architectural feature, highly relevant but not distant."
+  },
+  {
+    "topic": "stock market crash",
+    "response": "avalanche",
+    "semanticDistance": 7,
+    "relevance": 8,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Different domains with a strong shared pattern of cascading instability."
+  },
+  {
+    "topic": "DNA",
+    "response": "language",
+    "semanticDistance": 6,
+    "relevance": 9,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 1,
+    "rationale": "Biology and linguistics are distinct domains, connected by coding, syntax, and information."
+  },
+  {
+    "topic": "river delta",
+    "response": "neural network",
+    "semanticDistance": 8,
+    "relevance": 7,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Remote domains with meaningful branching, flow, and distributed pathway structure."
+  },
+  {
+    "topic": "lighthouse",
+    "response": "GPS",
+    "semanticDistance": 5,
+    "relevance": 8,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Different technologies linked by navigation, orientation, and reducing uncertainty."
+  },
+  {
+    "topic": "photosynthesis",
+    "response": "jazz improvisation",
+    "semanticDistance": 9,
+    "relevance": 4,
+    "semanticDistanceTolerance": 1,
+    "relevanceTolerance": 2,
+    "rationale": "Very distant domains with only a loose transformation-and-production analogy."
+  },
+  {
+    "topic": "volcano",
+    "response": "democracy",
+    "semanticDistance": 8,
+    "relevance": 3,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Remote concepts with possible pressure-release metaphors, but weak direct relevance."
+  },
+  {
+    "topic": "melody",
+    "response": "carbon tax",
+    "semanticDistance": 10,
+    "relevance": 2,
+    "semanticDistanceTolerance": 1,
+    "relevanceTolerance": 1,
+    "rationale": "Highly distant domains with little meaningful connection unless extra context is supplied."
+  },
+  {
+    "topic": "chess",
+    "response": "monarchy",
+    "semanticDistance": 4,
+    "relevance": 8,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Related through kings, hierarchy, and strategy, but not as directly as a subtype or synonym."
+  },
+  {
+    "topic": "mirror",
+    "response": "self-awareness",
+    "semanticDistance": 6,
+    "relevance": 8,
+    "semanticDistanceTolerance": 2,
+    "relevanceTolerance": 2,
+    "rationale": "Different conceptual domains with a strong symbolic and cognitive relationship."
+  }
+]

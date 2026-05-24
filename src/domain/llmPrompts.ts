@@ -1,3 +1,5 @@
+import { formatScoringCalibrationExamples } from './scoringCalibration';
+
 export type LegacyAiGameHistoryItem = {
   topic: string;
   response: string;
@@ -187,6 +189,19 @@ export function buildEvaluationPrompt(params: {
   const difficultyPrompt = evaluationDifficultyPrompts[
     params.difficulty as keyof typeof evaluationDifficultyPrompts
   ];
+  const scoringCalibrationText = formatScoringCalibrationExamples();
+  const scoringCalibrationInstructions = [
+    'Use the full 1-10 range for each score. Do not cluster most scores in the middle.',
+    '',
+    'Calibration anchors:',
+    scoringCalibrationText,
+    '',
+    'Treat semantic distance and relevance as independent axes:',
+    '- High semantic distance means the concepts come from remote domains or frames.',
+    '- High relevance means the response creates a meaningful, defensible connection.',
+    '- A distant but weakly connected response should have high distance and low relevance.',
+    '- An obvious but very apt response should have low distance and high relevance.',
+  ].join('\n');
 
   if (params.isFinalRound && params.originalTopic) {
     return {
@@ -202,6 +217,8 @@ export function buildEvaluationPrompt(params: {
         This is by design and should NOT be penalized. Brief responses are perfectly acceptable and should be 
         evaluated solely on the quality of the conceptual connection they create, not on their length or elaboration.
         
+        ${scoringCalibrationInstructions}
+
         Provide your evaluation in the following format:
         
         First, evaluate the connection between the response and the CURRENT topic. Consider:
@@ -252,6 +269,8 @@ export function buildEvaluationPrompt(params: {
         This is by design and should NOT be penalized. Brief responses are perfectly acceptable and should be 
         evaluated solely on the quality of the conceptual connection they create, not on their length or elaboration.
         
+        ${scoringCalibrationInstructions}
+
         Evaluate the player's response to the given topic. Consider:
         
         1. Semantic Distance (1-10): How semantically remote yet meaningfully connected is the response to the topic? 

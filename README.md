@@ -26,7 +26,7 @@ Scores are based on:
 
 - **Semantic distance**: how non-obvious the connection is while still being
   meaningful.
-- **Relevance / similarity / quality**: how well the new concept maps back to
+- **Relevance / quality**: how well the new concept maps back to
   the selected source topic or topics.
 
 The UI also shows a D3 concept graph so the branching shape of the game can be
@@ -215,7 +215,7 @@ when it supports the next feature pass.
 
 ## Scoring Pass Notes
 
-The current scoring model adds semantic distance and relevance/similarity. In
+The previous scoring model added semantic distance and relevance. In
 practice, that tends to compress scores into a narrow mid-high range, often
 around 12-18, which makes good and great moves hard to distinguish.
 
@@ -242,10 +242,21 @@ This rewards agents for finding several meaningful connections while avoiding a
 simple linear advantage for selecting many nodes. The combined turn score is
 rounded to the nearest integer before it is added to the player's total.
 
-The scoring prompt will also need tuning. It should include concrete examples
-across the full score range, including failed connections, obvious-but-valid
-connections, elegant connections, and strained high-distance connections. The
-goal is to make the judge use the whole range, not just a safe middle band.
+The scoring prompt includes calibration anchors across the full score range,
+including failed connections, obvious-but-valid connections, elegant
+connections, and strained high-distance connections. The goal is to make the
+judge use the whole range, not just a safe middle band.
+
+Normal tests do not call the model. To run the live model calibration suite,
+start the app and then run:
+
+```bash
+npm run calibrate:scoring
+```
+
+The calibration command posts the examples in
+`src/domain/scoringCalibrationExamples.json` to the running evaluation API and
+checks whether the configured model stays within the expected score bands.
 
 ## Leaderboards, Hosting, and Partnerships
 

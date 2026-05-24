@@ -6,6 +6,7 @@ import {
   buildEvaluationPrompt,
   buildGenerateTopicPrompt,
 } from '../../src/domain/llmPrompts';
+import { scoringCalibrationExamples } from '../../src/domain/scoringCalibration';
 
 test('topic prompt includes difficulty, category context, recent exclusions, and timestamp seed', () => {
   const prompt = buildGenerateTopicPrompt({
@@ -65,4 +66,28 @@ test('evaluation prompt uses final-round JSON schema only when original topic is
   assert.doesNotMatch(regular.systemPrompt, /finalEvaluation/);
   assert.match(final.systemPrompt, /finalEvaluation/);
   assert.match(final.userMessage, /Cathedral/);
+});
+
+test('evaluation prompt includes calibration anchors for scoring dynamic range', () => {
+  const prompt = buildEvaluationPrompt({
+    topic: 'Fugue',
+    response: 'Lattice',
+    difficulty: 'undergrad',
+  });
+
+  assert.match(prompt.systemPrompt, /Use the full 1-10 range/);
+  assert.match(prompt.systemPrompt, /chords" -> "harmony": semanticDistance 1, relevance 10/);
+  assert.match(prompt.systemPrompt, /fish" -> "relativity": semanticDistance 10, relevance 1/);
+  assert.match(prompt.systemPrompt, /semantic distance and relevance as independent axes/);
+});
+
+test('scoring calibration examples cover low and high values on both axes', () => {
+  const distances = scoringCalibrationExamples.map(example => example.semanticDistance);
+  const relevances = scoringCalibrationExamples.map(example => example.relevance);
+
+  assert.ok(distances.some(score => score <= 2));
+  assert.ok(distances.some(score => score >= 9));
+  assert.ok(relevances.some(score => score <= 2));
+  assert.ok(relevances.some(score => score >= 9));
+  assert.ok(scoringCalibrationExamples.length >= 10);
 });
