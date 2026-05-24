@@ -212,7 +212,8 @@ export function buildEvaluationPrompt(params: {
         - How semantically remote yet meaningfully connected is the response to the original topic? (1-10)
         - How well do the ideas map onto each other in terms of similarity of structure or function? (1-10)
         
-        The final score will be the average of these two connections.
+        Each connection subtotal is semantic distance multiplied by similarity. The final score will be
+        the average of these two connection subtotals.
         
         IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
@@ -222,14 +223,14 @@ export function buildEvaluationPrompt(params: {
             "currentConnection": {
               "semanticDistance": X, // 1-10 score for semantic distance to current topic
               "similarity": Y, // 1-10 score for similarity to current topic
-              "subtotal": X+Y // Sum of the two scores (max 20)
+              "subtotal": X*Y // Product of the two scores (max 100)
             },
             "originalConnection": {
               "semanticDistance": X, // 1-10 score for semantic distance to original topic
               "similarity": Y, // 1-10 score for similarity to original topic
-              "subtotal": X+Y // Sum of the two scores (max 20)
+              "subtotal": X*Y // Product of the two scores (max 100)
             },
-            "total": Z // Average of the two subtotals (max 20)
+            "total": Z // Average of the two subtotals (max 100)
           }
         }
         
@@ -271,7 +272,7 @@ export function buildEvaluationPrompt(params: {
           "scores": {
             "semanticDistance": X, // 1-10 score
             "relevanceQuality": Y, // 1-10 score
-            "total": Z // Sum of the two scores (max 20)
+            "total": Z // Product of the two scores (max 100)
           }
         }
         

@@ -117,7 +117,7 @@ export default function TurnHistoryTable({
                         onMouseEnter={(event) => onScoreMouseEnter(event, score, isCircleRound)}
                         onMouseLeave={onScoreMouseLeave}
                       >
-                        {score.total}/20
+                        {score.total}
                       </span>
                     </td>
                     <td className="py-2 px-4">

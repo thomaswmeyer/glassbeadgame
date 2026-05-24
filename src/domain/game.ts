@@ -47,6 +47,17 @@ export type TopicEdge = {
   turnId: string;
   strengthScore?: number;
   semanticDistanceScore?: number;
+  totalScore?: number;
+  scoringDescription?: string;
+  semanticDistanceDescription?: string;
+  strengthDescription?: string;
+};
+
+export type TurnEdgeEvaluation = {
+  sourceNodeId: string;
+  evaluation?: string;
+  finalEvaluation?: string;
+  scores?: Score;
   scoringDescription?: string;
   semanticDistanceDescription?: string;
   strengthDescription?: string;
@@ -109,6 +120,7 @@ export type GraphRenderEdge = {
   playerId: string;
   semanticDistanceScore?: number;
   strengthScore?: number;
+  totalScore?: number;
   scoringDescription?: string;
   semanticDistanceDescription?: string;
   strengthDescription?: string;
@@ -240,6 +252,7 @@ export function addTurnToGameState(
     finalEvaluation?: string;
     totalScore?: number;
     legacyScores?: Score;
+    edgeEvaluations?: TurnEdgeEvaluation[];
     scoringDescription?: string;
     semanticDistanceDescription?: string;
     strengthDescription?: string;
@@ -250,6 +263,9 @@ export function addTurnToGameState(
   const destinationNodeId = `node-${turnIndex + 1}`;
   const sourceNodeIds = params.sourceNodeIds.length > 0 ? params.sourceNodeIds : state.activeSourceNodeIds;
   const edgeIds = sourceNodeIds.map((sourceNodeId, index) => `edge-${turnIndex}-${index}`);
+  const edgeEvaluationBySourceId = new Map(
+    params.edgeEvaluations?.map(edgeEvaluation => [edgeEvaluation.sourceNodeId, edgeEvaluation])
+  );
 
   const destinationNode: TopicNode = {
     id: destinationNodeId,
@@ -262,17 +278,28 @@ export function addTurnToGameState(
 
   const newEdges = Object.fromEntries(
     sourceNodeIds.map((sourceNodeId, index) => {
+      const edgeEvaluation = edgeEvaluationBySourceId.get(sourceNodeId);
+      const scores = edgeEvaluation?.scores || params.legacyScores;
       const edge: TopicEdge = {
         id: edgeIds[index],
         sourceNodeId,
         destinationNodeId,
         playerId: params.playerId,
         turnId,
-        semanticDistanceScore: params.legacyScores?.semanticDistance,
-        strengthScore: params.legacyScores?.relevanceQuality,
-        scoringDescription: params.scoringDescription || params.evaluation,
-        semanticDistanceDescription: params.semanticDistanceDescription,
-        strengthDescription: params.strengthDescription,
+        semanticDistanceScore: scores?.semanticDistance,
+        strengthScore: scores?.relevanceQuality,
+        totalScore: scores?.total,
+        scoringDescription: (
+          edgeEvaluation?.scoringDescription ||
+          edgeEvaluation?.evaluation ||
+          params.scoringDescription ||
+          params.evaluation
+        ),
+        semanticDistanceDescription: (
+          edgeEvaluation?.semanticDistanceDescription ||
+          params.semanticDistanceDescription
+        ),
+        strengthDescription: edgeEvaluation?.strengthDescription || params.strengthDescription,
       };
       return [edge.id, edge];
     })
@@ -483,6 +510,7 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
       playerId: edge.playerId,
       semanticDistanceScore: edge.semanticDistanceScore,
       strengthScore: edge.strengthScore,
+      totalScore: edge.totalScore,
       scoringDescription: edge.scoringDescription,
       semanticDistanceDescription: edge.semanticDistanceDescription,
       strengthDescription: edge.strengthDescription,

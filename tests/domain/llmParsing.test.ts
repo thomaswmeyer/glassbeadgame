@@ -62,5 +62,5 @@ test('evaluation parser returns final-round fallback shape on invalid final JSON
 
   assert.deepEqual(parsed, fallback);
   assert.equal(parsed.finalEvaluation, 'Error parsing the evaluation.');
-  assert.equal(parsed.scores.currentConnection?.subtotal, 10);
+  assert.equal(parsed.scores.currentConnection?.subtotal, 25);
 });

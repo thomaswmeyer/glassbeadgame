@@ -153,6 +153,7 @@ export default function GameSetupPanel({
               <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
             </ul>
           </li>
+          <li>Each source connection is scored by multiplying those two components; multi-source turns combine edge scores with diminishing returns.</li>
           {circleEnabled && (
             <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
           )}

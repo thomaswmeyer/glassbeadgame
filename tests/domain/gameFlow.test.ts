@@ -24,6 +24,11 @@ const defaultScore = {
   relevanceQuality: 8,
   total: 15,
 };
+const normalizedDefaultScore = {
+  semanticDistance: 7,
+  relevanceQuality: 8,
+  total: 56,
+};
 
 test('starts a generated game with an AI-created root topic', async () => {
   const calls: unknown[] = [];
@@ -90,16 +95,18 @@ test('applies a turn by evaluating the active source topic with mocked LLM servi
   assert.equal(result.state.turnOrder.length, 1);
   assert.equal(result.currentEvaluation.topic, 'Cathedrals');
   assert.equal(result.currentEvaluation.response, 'Flying buttresses');
-  assert.equal(result.currentEvaluation.scores.total, 15);
+  assert.equal(result.currentEvaluation.scores.total, 56);
 
   const turn = result.state.turnsById[result.state.turnOrder[0]];
   const destination = result.state.nodesById[turn.destinationNodeId];
   const edge = result.state.edgesById[turn.edgeIds[0]];
+  assert.equal(turn.totalScore, 56);
   assert.equal(destination.topic, 'Flying buttresses');
   assert.equal(edge.sourceNodeId, state.rootNodeId);
   assert.equal(edge.destinationNodeId, destination.id);
   assert.equal(edge.semanticDistanceScore, 7);
   assert.equal(edge.strengthScore, 8);
+  assert.equal(edge.totalScore, 56);
   assert.equal(edge.scoringDescription, 'Strong architectural connection.');
 });
 
@@ -205,6 +212,14 @@ test('supports multi-source turns with one edge per active source', async () => 
     turn.edgeIds.map(edgeId => result.state.edgesById[edgeId].scoringDescription),
     ['ok', 'ok']
   );
+  assert.deepEqual(
+    turn.edgeIds.map(edgeId => result.state.edgesById[edgeId].totalScore),
+    [56, 56]
+  );
+  assert.equal(turn.totalScore, 79);
+  assert.equal(result.currentEvaluation.scores.total, 79);
+  assert.match(result.currentEvaluation.evaluation, /Connection to "Cathedrals":/);
+  assert.match(result.currentEvaluation.evaluation, /Connection to "Flying buttresses":/);
   assert.equal(selectCurrentSourceTopicText(multiSourceState), 'Cathedrals + Flying buttresses');
   assert.deepEqual(evaluateCalls, [
     {
@@ -215,7 +230,14 @@ test('supports multi-source turns with one edge per active source', async () => 
       isFinalCircleRound: false,
     },
     {
-      topic: 'Cathedrals + Flying buttresses',
+      topic: 'Cathedrals',
+      originalTopic: 'Cathedrals',
+      response: 'Load-bearing symbols',
+      difficulty: 'undergrad',
+      isFinalCircleRound: false,
+    },
+    {
+      topic: 'Flying buttresses',
       originalTopic: 'Cathedrals',
       response: 'Load-bearing symbols',
       difficulty: 'undergrad',
@@ -266,6 +288,9 @@ test('marks final circle-mode evaluation as completed and sends final-round cont
 
   assert.equal(result.state.gameStatus, 'completed');
   assert.equal(result.currentEvaluation.finalEvaluation, 'Connects back to root topic.');
+  assert.equal(result.currentEvaluation.scores.currentConnection?.subtotal, 56);
+  assert.equal(result.currentEvaluation.scores.originalConnection?.subtotal, 48);
+  assert.equal(result.currentEvaluation.scores.total, 52);
 });
 
 test('AI response generation uses graph context and falls back for empty responses', async () => {
@@ -358,7 +383,7 @@ test('AI response generation sends player-neutral turn context with multi-source
       sourceTopics: ['Cathedrals'],
       destinationTopic: 'Flying buttresses',
       evaluation: 'Strong connection.',
-      scores: defaultScore,
+      scores: normalizedDefaultScore,
       playerId: DEFAULT_HUMAN_PLAYER_ID,
       playerName: 'You',
       playerKind: 'local',
@@ -369,7 +394,7 @@ test('AI response generation sends player-neutral turn context with multi-source
     sourceTopics: ['Cathedrals'],
     destinationTopic: 'Flying buttresses',
     evaluation: 'Strong connection.',
-    scores: defaultScore,
+    scores: normalizedDefaultScore,
     playerId: DEFAULT_HUMAN_PLAYER_ID,
     playerName: 'You',
     playerKind: 'local',

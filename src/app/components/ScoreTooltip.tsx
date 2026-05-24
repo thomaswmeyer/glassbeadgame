@@ -44,7 +44,7 @@ export default function ScoreTooltip({ tooltipData }: ScoreTooltipProps) {
                 <p className="text-xs text-gray-600 ml-1">{item.description}</p>
               </li>
             ))}
-            <li className="font-medium mt-2">Total Score: {tooltipData.score.total}/20</li>
+            <li className="font-medium mt-2">Total Score: {tooltipData.score.total}</li>
           </ul>
           <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
             <p><strong>What makes a good connection?</strong></p>
@@ -63,12 +63,12 @@ export default function ScoreTooltip({ tooltipData }: ScoreTooltipProps) {
                     <p className="text-xs text-gray-600 ml-1">{item.description}</p>
                   </li>
                 ))}
-                <li>Subtotal: {section.subtotal}/20</li>
+                <li>Subtotal: {section.subtotal}</li>
               </ul>
             </div>
           ))}
           <p className="mt-2 font-medium">
-            Final Score: {tooltipData.score.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span>
+            Final Score: {tooltipData.score.total} <span className="text-xs text-gray-500">(average of both subtotals)</span>
           </p>
           <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-700">
             <p><strong>Circle Mode:</strong> In the final round, your response must connect both to the current topic and back to the original starting topic.</p>

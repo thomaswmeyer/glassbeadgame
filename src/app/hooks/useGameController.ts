@@ -33,6 +33,13 @@ import {
   resolvePlayerController,
   shouldAutoSubmitTurn,
 } from '@/domain/playerController';
+import {
+  SourceTurnEvaluation,
+  combineSourceScores,
+  formatCombinedEvaluation,
+  formatCombinedFinalEvaluation,
+  normalizeScore,
+} from '@/domain/turnScoring';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
 
@@ -99,9 +106,12 @@ export function useGameController({
   const gameHistory = selectTurnContextHistory(gameState);
   const currentRound = gameState.currentRound;
   const isCurrentPlayerManual = currentPlayerController?.mode !== 'automatic' || !currentPlayerController.submitTurn;
-  const activeSourceNodes = gameState.activeSourceNodeIds
-    .map(nodeId => gameState.nodesById[nodeId])
-    .filter(Boolean);
+  const activeSourceNodes = useMemo(
+    () => gameState.activeSourceNodeIds
+      .map(nodeId => gameState.nodesById[nodeId])
+      .filter(Boolean),
+    [gameState.activeSourceNodeIds, gameState.nodesById]
+  );
   const gameStarted = gameState.gameStatus !== 'setup';
   const isGeneratingTopic = gameState.gameStatus === 'generatingTopic';
   const originalTopic = selectRootTopic(gameState);
@@ -159,6 +169,7 @@ export function useGameController({
         finalEvaluation: params.result.finalEvaluation,
         totalScore: params.result.scores.total,
         legacyScores: params.result.scores,
+        edgeEvaluations: params.result.edgeEvaluations,
         scoringDescription: params.result.evaluation,
       });
 
@@ -176,6 +187,7 @@ export function useGameController({
     clearResponseOnSuccess?: boolean;
   }) => {
     const evaluationTopic = currentSourceTopicText;
+    const evaluationTargets = activeSourceNodes;
     if (!evaluationTopic || !params.responseText) return;
 
     setGameState(prev => setGameStatus(prev, 'evaluating'));
@@ -185,13 +197,33 @@ export function useGameController({
 
     while (retries < maxRetries) {
       try {
-        const result = await services.evaluateTurn({
-          topic: evaluationTopic,
-          originalTopic,
-          response: params.responseText,
-          difficulty,
-          isFinalCircleRound: currentRound === maxRounds && circleEnabled,
-        });
+        const isFinalCircleRound = currentRound === maxRounds && circleEnabled;
+        const edgeEvaluations = await Promise.all(
+          evaluationTargets.map(async sourceNode => {
+            const result = await services.evaluateTurn({
+              topic: sourceNode.topic,
+              originalTopic,
+              response: params.responseText,
+              difficulty,
+              isFinalCircleRound,
+            });
+
+            return {
+              sourceNodeId: sourceNode.id,
+              sourceTopic: sourceNode.topic,
+              evaluation: result.evaluation,
+              finalEvaluation: result.finalEvaluation,
+              scores: normalizeScore(result.scores),
+            } satisfies SourceTurnEvaluation;
+          })
+        );
+        const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
+        const result: TurnEvaluation = {
+          evaluation: formatCombinedEvaluation(edgeEvaluations),
+          finalEvaluation: formatCombinedFinalEvaluation(edgeEvaluations),
+          scores: combinedScores,
+          edgeEvaluations,
+        };
 
         completeEvaluatedTurn({
           playerId: params.playerId,
@@ -219,15 +251,23 @@ export function useGameController({
           const fallbackScores: Score = {
             semanticDistance: 5,
             relevanceQuality: 5,
-            total: 10,
+            total: 25,
           };
+          const edgeEvaluations = evaluationTargets.map(sourceNode => ({
+            sourceNodeId: sourceNode.id,
+            sourceTopic: sourceNode.topic,
+            evaluation: "I couldn't evaluate this response properly. Here's a default score.",
+            scores: fallbackScores,
+          } satisfies SourceTurnEvaluation));
+          const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
           completeEvaluatedTurn({
             playerId: params.playerId,
             responseText: params.responseText,
             evaluationTopic,
             result: {
-              evaluation: "I couldn't evaluate this response properly. Here's a default score.",
-              scores: fallbackScores,
+              evaluation: formatCombinedEvaluation(edgeEvaluations),
+              scores: combinedScores,
+              edgeEvaluations,
             },
           });
         } else {
@@ -236,7 +276,17 @@ export function useGameController({
         }
       }
     }
-  }, [circleEnabled, completeEvaluatedTurn, currentRound, currentSourceTopicText, difficulty, maxRounds, originalTopic, services]);
+  }, [
+    activeSourceNodes,
+    circleEnabled,
+    completeEvaluatedTurn,
+    currentRound,
+    currentSourceTopicText,
+    difficulty,
+    maxRounds,
+    originalTopic,
+    services,
+  ]);
 
   const evaluateResponse = async () => {
     if (!currentPlayerModel) return;

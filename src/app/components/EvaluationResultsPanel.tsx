@@ -59,7 +59,7 @@ export default function EvaluationResultsPanel({
                   {item.label}: {item.value}/{item.max}
                 </li>
               ))}
-              <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}/20</li>
+              <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}</li>
             </ul>
           </div>
         </div>
@@ -82,13 +82,13 @@ export default function EvaluationResultsPanel({
                         {item.label}: {item.value}/{item.max}
                       </li>
                     ))}
-                    <li>Subtotal: {section.subtotal}/20</li>
+                    <li>Subtotal: {section.subtotal}</li>
                   </ul>
                 </div>
               ))}
             </div>
             <p className="mt-2 font-medium">
-              Final Score: {currentEvaluation.scores.total}/20 <span className="text-xs text-gray-500">(average of both subtotals)</span>
+              Final Score: {currentEvaluation.scores.total} <span className="text-xs text-gray-500">(average of both subtotals)</span>
             </p>
           </div>
         </div>

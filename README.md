@@ -18,7 +18,7 @@ domain test suite for game logic.
 5. By default the new node connects to the current topic, but players can
    branch from an older topic or select multiple source topics for a
    multi-source turn.
-6. The response is evaluated by an LLM and given a score out of 20.
+6. The response is evaluated by an LLM and assigned a turn score.
 7. After the configured number of rounds, the player with the highest total
    score wins.
 
@@ -219,7 +219,7 @@ The current scoring model adds semantic distance and relevance/similarity. In
 practice, that tends to compress scores into a narrow mid-high range, often
 around 12-18, which makes good and great moves hard to distinguish.
 
-The scoring pass should test a multiplicative edge score instead:
+The scoring pass now uses a multiplicative edge score:
 
 ```text
 edgeScore = semanticDistance * relevance
@@ -239,7 +239,8 @@ turnScore = sum(edgeScores) / sqrt(numberOfEdges)
 ```
 
 This rewards agents for finding several meaningful connections while avoiding a
-simple linear advantage for selecting many nodes.
+simple linear advantage for selecting many nodes. The combined turn score is
+rounded to the nearest integer before it is added to the player's total.
 
 The scoring prompt will also need tuning. It should include concrete examples
 across the full score range, including failed connections, obvious-but-valid

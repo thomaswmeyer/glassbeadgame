@@ -39,14 +39,14 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
         currentConnection: {
           semanticDistance: 5,
           similarity: 5,
-          subtotal: 10,
+          subtotal: 25,
         },
         originalConnection: {
           semanticDistance: 5,
           similarity: 5,
-          subtotal: 10,
+          subtotal: 25,
         },
-        total: 10,
+        total: 25,
       },
     };
   }
@@ -56,7 +56,7 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
     scores: {
       semanticDistance: 5,
       relevanceQuality: 5,
-      total: 10,
+      total: 25,
     },
   };
 }

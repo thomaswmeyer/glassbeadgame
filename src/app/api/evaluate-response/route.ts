@@ -38,7 +38,7 @@ export async function POST(request: Request) {
         scores: {
           semanticDistance: 5,
           relevanceQuality: 5,
-          total: 10
+          total: 25
         }
       };
       
@@ -51,4 +51,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

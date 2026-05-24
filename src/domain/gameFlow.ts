@@ -7,6 +7,13 @@ import {
   setGameStatus,
   startGameState,
 } from './game';
+import {
+  SourceTurnEvaluation,
+  combineSourceScores,
+  formatCombinedEvaluation,
+  formatCombinedFinalEvaluation,
+  normalizeScore,
+} from './turnScoring';
 
 export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
@@ -14,6 +21,7 @@ export type TurnEvaluation = {
   evaluation: string;
   finalEvaluation?: string;
   scores: Score;
+  edgeEvaluations?: SourceTurnEvaluation[];
 };
 
 export type CurrentEvaluation = {
@@ -120,24 +128,44 @@ export async function evaluateAndApplyTurn(params: {
   circleEnabled: boolean;
   services: Pick<GameFlowServices, 'evaluateTurn'>;
 }) {
-  const topic = selectCurrentSourceTopicText(params.state);
-  const evaluation = await params.services.evaluateTurn({
-    topic,
-    originalTopic: params.originalTopic,
-    response: params.response,
-    difficulty: params.difficulty,
-    isFinalCircleRound: params.state.currentRound === params.state.maxRounds && params.circleEnabled,
-  });
+  const sourceNodes = params.state.activeSourceNodeIds
+    .map(nodeId => params.state.nodesById[nodeId])
+    .filter(Boolean);
+  const topic = sourceNodes.map(node => node.topic).join(' + ');
+  const isFinalCircleRound = params.state.currentRound === params.state.maxRounds && params.circleEnabled;
+  const edgeEvaluations = await Promise.all(
+    sourceNodes.map(async sourceNode => {
+      const evaluation = await params.services.evaluateTurn({
+        topic: sourceNode.topic,
+        originalTopic: params.originalTopic,
+        response: params.response,
+        difficulty: params.difficulty,
+        isFinalCircleRound,
+      });
+
+      return {
+        sourceNodeId: sourceNode.id,
+        sourceTopic: sourceNode.topic,
+        evaluation: evaluation.evaluation,
+        finalEvaluation: evaluation.finalEvaluation,
+        scores: normalizeScore(evaluation.scores),
+      } satisfies SourceTurnEvaluation;
+    })
+  );
+  const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
+  const combinedEvaluation = formatCombinedEvaluation(edgeEvaluations);
+  const combinedFinalEvaluation = formatCombinedFinalEvaluation(edgeEvaluations);
 
   const stateWithTurn = addTurnToGameState(params.state, {
     destinationTopic: params.response,
     playerId: params.playerId,
     sourceNodeIds: params.state.activeSourceNodeIds,
-    evaluation: evaluation.evaluation,
-    finalEvaluation: evaluation.finalEvaluation,
-    totalScore: evaluation.scores.total,
-    legacyScores: evaluation.scores,
-    scoringDescription: evaluation.evaluation,
+    evaluation: combinedEvaluation,
+    finalEvaluation: combinedFinalEvaluation,
+    totalScore: combinedScores.total,
+    legacyScores: combinedScores,
+    edgeEvaluations,
+    scoringDescription: combinedEvaluation,
   });
 
   const nextStatus = params.state.currentRound === params.state.maxRounds
@@ -150,9 +178,9 @@ export async function evaluateAndApplyTurn(params: {
       topic,
       response: params.response,
       playerId: params.playerId,
-      evaluation: evaluation.evaluation,
-      finalEvaluation: evaluation.finalEvaluation,
-      scores: evaluation.scores,
+      evaluation: combinedEvaluation,
+      finalEvaluation: combinedFinalEvaluation,
+      scores: combinedScores,
     } satisfies CurrentEvaluation,
   };
 }

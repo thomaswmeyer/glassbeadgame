@@ -47,14 +47,14 @@ export async function POST(request: Request) {
           currentConnection: {
             semanticDistance: 5,
             similarity: 5,
-            subtotal: 10
+            subtotal: 25
           },
           originalConnection: {
             semanticDistance: 5,
             similarity: 5,
-            subtotal: 10
+            subtotal: 25
           },
-          total: 10
+          total: 25
         }
       };
       
@@ -67,4 +67,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

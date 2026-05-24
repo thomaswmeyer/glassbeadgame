@@ -19,6 +19,7 @@ export type GraphLayoutEdge = {
   color: string;
   semanticDistanceScore?: number;
   strengthScore?: number;
+  totalScore?: number;
   scoringDescription?: string;
   semanticDistanceDescription?: string;
   strengthDescription?: string;
@@ -87,6 +88,7 @@ export function createGraphLayoutData(params: {
       color: '#94A3B8',
       semanticDistanceScore: edge.semanticDistanceScore,
       strengthScore: edge.strengthScore,
+      totalScore: edge.totalScore,
       scoringDescription: edge.scoringDescription,
       semanticDistanceDescription: edge.semanticDistanceDescription,
       strengthDescription: edge.strengthDescription,

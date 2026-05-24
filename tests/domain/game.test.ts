@@ -423,6 +423,7 @@ test('turn history and graph render selectors expose edge scoring details', () =
     playerId: DEFAULT_HUMAN_PLAYER_ID,
     semanticDistanceScore: 6,
     strengthScore: 7,
+    totalScore: 13,
     scoringDescription: 'Overall scoring rationale.',
     semanticDistanceDescription: 'Distant but coherent.',
     strengthDescription: 'Strong structural similarity.',
