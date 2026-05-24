@@ -263,12 +263,12 @@ test('marks final circle-mode evaluation as completed and sends final-round cont
           ...defaultScore,
           currentConnection: {
             semanticDistance: 7,
-            similarity: 8,
+            relevance: 8,
             subtotal: 15,
           },
           originalConnection: {
             semanticDistance: 6,
-            similarity: 8,
+            relevance: 8,
             subtotal: 14,
           },
         },

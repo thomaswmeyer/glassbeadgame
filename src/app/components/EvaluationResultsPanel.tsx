@@ -1,4 +1,5 @@
 import {
+  CurrentEvaluationEdgeScore,
   CurrentEvaluationView,
   PlayerScoreRow,
   getGameOutcomeText,
@@ -35,6 +36,7 @@ export default function EvaluationResultsPanel({
   const regularScoreItems = getRegularScoreDisplayItems(currentEvaluation.scores);
   const circleScoreSections = getCircleScoreDisplaySections(currentEvaluation.scores);
   const gameOutcomeText = getGameOutcomeText(playerScoreRows);
+  const hasMultipleScoreEdges = currentEvaluation.edgeScores.length > 1;
 
   return (
     <div className="mt-4 p-4 bg-gray-100 rounded-lg">
@@ -52,16 +54,23 @@ export default function EvaluationResultsPanel({
       {!isFinalCircleRound && (
         <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
           <h4 className="font-medium text-blue-800 text-sm">Score Breakdown:</h4>
-          <div className="mt-1 text-sm">
-            <ul className="list-disc pl-5">
-              {regularScoreItems.map(item => (
-                <li key={item.label}>
-                  {item.label}: {item.value}/{item.max}
-                </li>
-              ))}
-              <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}</li>
-            </ul>
-          </div>
+          {hasMultipleScoreEdges ? (
+            <MultiEdgeScoreBreakdown
+              edgeScores={currentEvaluation.edgeScores}
+              combinedTotal={currentEvaluation.scores.total}
+            />
+          ) : (
+            <div className="mt-1 text-sm">
+              <ul className="list-disc pl-5">
+                {regularScoreItems.map(item => (
+                  <li key={item.label}>
+                    {item.label}: {item.value}/{item.max}
+                  </li>
+                ))}
+                <li className="font-medium mt-1">Total Score: {currentEvaluation.scores.total}</li>
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -70,27 +79,35 @@ export default function EvaluationResultsPanel({
           <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
           <p>{currentEvaluation.finalEvaluation}</p>
 
-          <div className="mt-3 pt-3 border-t border-blue-200">
-            <h5 className="font-medium text-blue-800 text-sm">Final Round Scoring:</h5>
-            <div className="grid grid-cols-2 gap-2 mt-1 text-sm">
-              {circleScoreSections.map(section => (
-                <div key={section.title}>
-                  <p><strong>{section.title}:</strong></p>
-                  <ul className="list-disc pl-5">
-                    {section.items.map(item => (
-                      <li key={item.label}>
-                        {item.label}: {item.value}/{item.max}
-                      </li>
-                    ))}
-                    <li>Subtotal: {section.subtotal}</li>
-                  </ul>
-                </div>
-              ))}
+          {hasMultipleScoreEdges ? (
+            <MultiEdgeScoreBreakdown
+              edgeScores={currentEvaluation.edgeScores}
+              combinedTotal={currentEvaluation.scores.total}
+              isFinalCircleRound
+            />
+          ) : (
+            <div className="mt-3 pt-3 border-t border-blue-200">
+              <h5 className="font-medium text-blue-800 text-sm">Final Round Scoring:</h5>
+              <div className="grid grid-cols-2 gap-2 mt-1 text-sm">
+                {circleScoreSections.map(section => (
+                  <div key={section.title}>
+                    <p><strong>{section.title}:</strong></p>
+                    <ul className="list-disc pl-5">
+                      {section.items.map(item => (
+                        <li key={item.label}>
+                          {item.label}: {item.value}/{item.max}
+                        </li>
+                      ))}
+                      <li>Subtotal: {section.subtotal}</li>
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 font-medium">
+                Final Score: {currentEvaluation.scores.total} <span className="text-xs text-gray-500">(average of both subtotals)</span>
+              </p>
             </div>
-            <p className="mt-2 font-medium">
-              Final Score: {currentEvaluation.scores.total} <span className="text-xs text-gray-500">(average of both subtotals)</span>
-            </p>
-          </div>
+          )}
         </div>
       )}
 
@@ -131,6 +148,57 @@ export default function EvaluationResultsPanel({
           Next Round
         </button>
       )}
+    </div>
+  );
+}
+
+function MultiEdgeScoreBreakdown({
+  edgeScores,
+  combinedTotal,
+  isFinalCircleRound = false,
+}: {
+  edgeScores: CurrentEvaluationEdgeScore[];
+  combinedTotal: number;
+  isFinalCircleRound?: boolean;
+}) {
+  return (
+    <div className="mt-2 space-y-3 text-sm">
+      {edgeScores.map(edgeScore => (
+        <div key={edgeScore.sourceNodeId} className="border-t border-blue-200 pt-2 first:border-t-0 first:pt-0">
+          <p className="font-medium text-blue-900">Edge from &quot;{edgeScore.sourceTopic}&quot;</p>
+          {isFinalCircleRound ? (
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {getCircleScoreDisplaySections(edgeScore.scores).map(section => (
+                <div key={section.title}>
+                  <p><strong>{section.title}:</strong></p>
+                  <ul className="list-disc pl-5">
+                    {section.items.map(item => (
+                      <li key={item.label}>
+                        {item.label}: {item.value}/{item.max}
+                      </li>
+                    ))}
+                    <li>Subtotal: {section.subtotal}</li>
+                  </ul>
+                </div>
+              ))}
+              <p className="col-span-2 font-medium">Edge Score: {edgeScore.scores.total}</p>
+            </div>
+          ) : (
+            <ul className="list-disc pl-5 mt-1">
+              {getRegularScoreDisplayItems(edgeScore.scores).map(item => (
+                <li key={item.label}>
+                  {item.label}: {item.value}/{item.max}
+                </li>
+              ))}
+              <li className="font-medium">Edge Score: {edgeScore.scores.total}</li>
+            </ul>
+          )}
+        </div>
+      ))}
+      <p className="font-semibold border-t border-blue-200 pt-2">
+        Combined Turn Score: {combinedTotal}
+        <span className="text-xs font-normal text-gray-500"> (sum of edge scores divided by sqrt({edgeScores.length}))</span>
+      </p>
     </div>
   );
 }

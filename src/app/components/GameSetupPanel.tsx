@@ -150,7 +150,7 @@ export default function GameSetupPanel({
           <li>Responses are evaluated based on:
             <ul className="list-disc pl-5 mt-1">
               <li><strong>Semantic Distance (1-10):</strong> How semantically remote yet meaningfully connected is the new topic from the selected source topic or topics? Higher scores for connections that are not obvious.</li>
-              <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
+              <li><strong>Relevance (1-10):</strong> How meaningful and appropriate is the connection? For example, stock market crash and flocking behavior.</li>
             </ul>
           </li>
           <li>Each source connection is scored by multiplying those two components; multi-source turns combine edge scores with diminishing returns.</li>

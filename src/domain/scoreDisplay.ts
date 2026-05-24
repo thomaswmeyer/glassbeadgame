@@ -22,7 +22,7 @@ export function getRegularScoreDisplayItems(score: Score): ScoreDisplayItem[] {
       description: 'Measures how well the concepts are connected intellectually.',
     },
     {
-      label: 'Similarity',
+      label: 'Relevance',
       value: score.relevanceQuality,
       max: 10,
       description: 'Measures how relevant and appropriate the response is to the topic.',
@@ -43,8 +43,8 @@ export function getCircleScoreDisplaySections(score: Score): CircleScoreDisplayS
           description: 'Connection quality to the current topic.',
         },
         {
-          label: 'Similarity',
-          value: score.currentConnection?.similarity || 0,
+          label: 'Relevance',
+          value: score.currentConnection?.relevance ?? score.currentConnection?.similarity ?? 0,
           max: 10,
           description: 'Relevance to the current topic.',
         },
@@ -61,8 +61,8 @@ export function getCircleScoreDisplaySections(score: Score): CircleScoreDisplayS
           description: 'Connection quality to the original topic.',
         },
         {
-          label: 'Similarity',
-          value: score.originalConnection?.similarity || 0,
+          label: 'Relevance',
+          value: score.originalConnection?.relevance ?? score.originalConnection?.similarity ?? 0,
           max: 10,
           description: 'Relevance to the original topic.',
         },

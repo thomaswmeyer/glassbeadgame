@@ -14,13 +14,17 @@ export function calculateEdgeTotalScore(score: Pick<Score, 'semanticDistance' | 
 
 export function normalizeScore(score: Score): Score {
   if (score.currentConnection && score.originalConnection) {
+    const currentRelevance = score.currentConnection.relevance ?? score.currentConnection.similarity ?? 0;
+    const originalRelevance = score.originalConnection.relevance ?? score.originalConnection.similarity ?? 0;
     const currentConnection = {
       ...score.currentConnection,
-      subtotal: Math.round(score.currentConnection.semanticDistance * score.currentConnection.similarity),
+      relevance: currentRelevance,
+      subtotal: Math.round(score.currentConnection.semanticDistance * currentRelevance),
     };
     const originalConnection = {
       ...score.originalConnection,
-      subtotal: Math.round(score.originalConnection.semanticDistance * score.originalConnection.similarity),
+      relevance: originalRelevance,
+      subtotal: Math.round(score.originalConnection.semanticDistance * originalRelevance),
     };
 
     return {
@@ -68,8 +72,11 @@ export function combineSourceScores(scores: Score[]): Score {
       semanticDistance: Math.round(
         circleScores.reduce((sum, score) => sum + score.currentConnection!.semanticDistance, 0) / scoreCount
       ),
-      similarity: Math.round(
-        circleScores.reduce((sum, score) => sum + score.currentConnection!.similarity, 0) / scoreCount
+      relevance: Math.round(
+        circleScores.reduce((sum, score) => {
+          const relevance = score.currentConnection!.relevance ?? score.currentConnection!.similarity ?? 0;
+          return sum + relevance;
+        }, 0) / scoreCount
       ),
       subtotal: Math.round(
         circleScores.reduce((sum, score) => sum + score.currentConnection!.subtotal, 0) / scoreCount
@@ -79,8 +86,11 @@ export function combineSourceScores(scores: Score[]): Score {
       semanticDistance: Math.round(
         circleScores.reduce((sum, score) => sum + score.originalConnection!.semanticDistance, 0) / scoreCount
       ),
-      similarity: Math.round(
-        circleScores.reduce((sum, score) => sum + score.originalConnection!.similarity, 0) / scoreCount
+      relevance: Math.round(
+        circleScores.reduce((sum, score) => {
+          const relevance = score.originalConnection!.relevance ?? score.originalConnection!.similarity ?? 0;
+          return sum + relevance;
+        }, 0) / scoreCount
       ),
       subtotal: Math.round(
         circleScores.reduce((sum, score) => sum + score.originalConnection!.subtotal, 0) / scoreCount

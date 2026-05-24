@@ -46,12 +46,12 @@ export async function POST(request: Request) {
         scores: {
           currentConnection: {
             semanticDistance: 5,
-            similarity: 5,
+            relevance: 5,
             subtotal: 25
           },
           originalConnection: {
             semanticDistance: 5,
-            similarity: 5,
+            relevance: 5,
             subtotal: 25
           },
           total: 25

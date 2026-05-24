@@ -34,12 +34,12 @@ test('normalizes final-round connection subtotals to multiplicative totals', () 
     total: 15,
     currentConnection: {
       semanticDistance: 7,
-      similarity: 8,
+      relevance: 8,
       subtotal: 15,
     },
     originalConnection: {
       semanticDistance: 6,
-      similarity: 8,
+      relevance: 8,
       subtotal: 14,
     },
   }), {
@@ -48,12 +48,12 @@ test('normalizes final-round connection subtotals to multiplicative totals', () 
     total: 52,
     currentConnection: {
       semanticDistance: 7,
-      similarity: 8,
+      relevance: 8,
       subtotal: 56,
     },
     originalConnection: {
       semanticDistance: 6,
-      similarity: 8,
+      relevance: 8,
       subtotal: 48,
     },
   });

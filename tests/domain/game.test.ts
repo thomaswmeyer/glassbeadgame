@@ -388,6 +388,17 @@ test('current evaluation is derived only for result states and includes latest p
     evaluation: 'Strong connection.',
     finalEvaluation: 'Back to the root.',
     scores: score,
+    edgeScores: [{
+      sourceNodeId: state.rootNodeId,
+      sourceTopic: 'Cathedrals',
+      evaluation: 'Strong connection.',
+      finalEvaluation: undefined,
+      scores: {
+        semanticDistance: 6,
+        relevanceQuality: 7,
+        total: 13,
+      },
+    }],
     playerId: DEFAULT_HUMAN_PLAYER_ID,
     playerKind: 'local',
     playerName: 'You',
@@ -412,6 +423,13 @@ test('turn history and graph render selectors expose edge scoring details', () =
   assert.equal(historyRows.length, 1);
   assert.equal(historyRows[0].sourceNodes[0].topic, 'Cathedrals');
   assert.equal(historyRows[0].destinationNode.topic, 'Flying buttresses');
+  assert.deepEqual(historyRows[0].edgeScores, [{
+    sourceNodeId: state.rootNodeId,
+    sourceTopic: 'Cathedrals',
+    evaluation: 'Overall scoring rationale.',
+    finalEvaluation: undefined,
+    scores: score,
+  }]);
 
   const graphData = selectGraphRenderData(state);
   assert.equal(graphData.nodes.find(node => node.id === state.rootNodeId)?.isRoot, true);

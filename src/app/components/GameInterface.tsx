@@ -10,6 +10,7 @@ import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
 import { LLM_CONFIG } from '@/config/llm';
 import {
+  CurrentEvaluationEdgeScore,
   Score,
   TurnHistoryRow,
   addActiveSourceNode,
@@ -40,6 +41,7 @@ export default function GameInterface() {
     x: number;
     y: number;
     score: Score | null;
+    edgeScores?: CurrentEvaluationEdgeScore[];
     isCircleMode: boolean;
   }>({
     visible: false,
@@ -136,7 +138,12 @@ export default function GameInterface() {
   };
 
   // Function to handle showing the tooltip
-  const handleScoreMouseEnter = (e: React.MouseEvent, score: Score, isCircleRound: boolean) => {
+  const handleScoreMouseEnter = (
+    e: React.MouseEvent,
+    score: Score,
+    isCircleRound: boolean,
+    edgeScores?: CurrentEvaluationEdgeScore[]
+  ) => {
     // Calculate tooltip position to ensure it stays within viewport
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
@@ -163,6 +170,7 @@ export default function GameInterface() {
       x: xPos,
       y: yPos,
       score,
+      edgeScores,
       isCircleMode: isCircleRound
     });
   };

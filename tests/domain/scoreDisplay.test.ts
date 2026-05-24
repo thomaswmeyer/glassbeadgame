@@ -5,7 +5,7 @@ import {
   getRegularScoreDisplayItems,
 } from '../../src/domain/scoreDisplay';
 
-test('regular score display maps semantic distance and similarity labels', () => {
+test('regular score display maps semantic distance and relevance labels', () => {
   assert.deepEqual(getRegularScoreDisplayItems({
     semanticDistance: 7,
     relevanceQuality: 8,
@@ -18,7 +18,7 @@ test('regular score display maps semantic distance and similarity labels', () =>
       description: 'Measures how well the concepts are connected intellectually.',
     },
     {
-      label: 'Similarity',
+      label: 'Relevance',
       value: 8,
       max: 10,
       description: 'Measures how relevant and appropriate the response is to the topic.',
@@ -33,7 +33,7 @@ test('circle score display exposes current and original topic sections with fall
     total: 14,
     currentConnection: {
       semanticDistance: 7,
-      similarity: 8,
+      relevance: 8,
       subtotal: 15,
     },
   }), [
@@ -48,7 +48,7 @@ test('circle score display exposes current and original topic sections with fall
           description: 'Connection quality to the current topic.',
         },
         {
-          label: 'Similarity',
+          label: 'Relevance',
           value: 8,
           max: 10,
           description: 'Relevance to the current topic.',
@@ -66,7 +66,7 @@ test('circle score display exposes current and original topic sections with fall
           description: 'Connection quality to the original topic.',
         },
         {
-          label: 'Similarity',
+          label: 'Relevance',
           value: 0,
           max: 10,
           description: 'Relevance to the original topic.',

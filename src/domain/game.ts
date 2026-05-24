@@ -7,12 +7,14 @@ export type Score = {
   originalTopicConnection?: number;
   currentConnection?: {
     semanticDistance: number;
-    similarity: number;
+    relevance?: number;
+    similarity?: number;
     subtotal: number;
   };
   originalConnection?: {
     semanticDistance: number;
-    similarity: number;
+    relevance?: number;
+    similarity?: number;
     subtotal: number;
   };
 };
@@ -74,6 +76,7 @@ export type Turn = {
   finalEvaluation?: string;
   totalScore?: number;
   legacyScores?: Score;
+  edgeEvaluations?: TurnEdgeEvaluation[];
 };
 
 export type GameStatus =
@@ -131,6 +134,7 @@ export type TurnHistoryRow = {
   player: Player;
   sourceNodes: TopicNode[];
   destinationNode: TopicNode;
+  edgeScores: CurrentEvaluationEdgeScore[];
 };
 
 export type CurrentEvaluationView = {
@@ -138,10 +142,19 @@ export type CurrentEvaluationView = {
   response: string;
   evaluation: string;
   scores: Score;
+  edgeScores: CurrentEvaluationEdgeScore[];
   playerId: string;
   playerKind: PlayerKind;
   playerName: string;
   finalEvaluation?: string;
+};
+
+export type CurrentEvaluationEdgeScore = {
+  sourceNodeId: string;
+  sourceTopic: string;
+  evaluation?: string;
+  finalEvaluation?: string;
+  scores: Score;
 };
 
 export type PlayerScoreRow = {
@@ -316,6 +329,7 @@ export function addTurnToGameState(
     finalEvaluation: params.finalEvaluation,
     totalScore: params.totalScore,
     legacyScores: params.legacyScores,
+    edgeEvaluations: params.edgeEvaluations,
   };
 
   return {
@@ -518,14 +532,45 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
   };
 }
 
+function selectEdgeScoresForTurn(
+  state: GameState,
+  turn: Turn,
+  sourceNodes: TopicNode[]
+): CurrentEvaluationEdgeScore[] {
+  const edgeEvaluationBySourceId = new Map(
+    turn.edgeEvaluations?.map(edgeEvaluation => [edgeEvaluation.sourceNodeId, edgeEvaluation])
+  );
+
+  return sourceNodes.map(sourceNode => {
+    const edgeEvaluation = edgeEvaluationBySourceId.get(sourceNode.id);
+    const edge = turn.edgeIds
+      .map(edgeId => state.edgesById[edgeId])
+      .find(candidateEdge => candidateEdge?.sourceNodeId === sourceNode.id);
+
+    return {
+      sourceNodeId: sourceNode.id,
+      sourceTopic: sourceNode.topic,
+      evaluation: edgeEvaluation?.evaluation || edge?.scoringDescription,
+      finalEvaluation: edgeEvaluation?.finalEvaluation,
+      scores: edgeEvaluation?.scores || {
+        semanticDistance: edge?.semanticDistanceScore || 0,
+        relevanceQuality: edge?.strengthScore || 0,
+        total: edge?.totalScore || 0,
+      },
+    };
+  });
+}
+
 export function selectTurnHistoryRows(state: GameState): TurnHistoryRow[] {
   return state.turnOrder.map(turnId => {
     const turn = state.turnsById[turnId];
+    const sourceNodes = turn.sourceNodeIds.map(nodeId => state.nodesById[nodeId]).filter(Boolean);
     return {
       turn,
       player: state.playersById[turn.playerId],
-      sourceNodes: turn.sourceNodeIds.map(nodeId => state.nodesById[nodeId]).filter(Boolean),
+      sourceNodes,
       destinationNode: state.nodesById[turn.destinationNodeId],
+      edgeScores: selectEdgeScoresForTurn(state, turn, sourceNodes),
     };
   });
 }
@@ -616,6 +661,7 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     .map(nodeId => state.nodesById[nodeId])
     .filter(Boolean);
   const player = state.playersById[turn.playerId];
+  const edgeScores = selectEdgeScoresForTurn(state, turn, sourceNodes);
 
   return {
     topic: sourceNodes.map(node => node.topic).join(' + '),
@@ -627,6 +673,7 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
       relevanceQuality: 0,
       total: turn.totalScore || 0,
     },
+    edgeScores,
     playerId: turn.playerId,
     playerKind: player?.kind || 'local',
     playerName: player?.name || 'Player',

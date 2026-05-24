@@ -38,12 +38,12 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
         relevanceQuality: 5,
         currentConnection: {
           semanticDistance: 5,
-          similarity: 5,
+          relevance: 5,
           subtotal: 25,
         },
         originalConnection: {
           semanticDistance: 5,
-          similarity: 5,
+          relevance: 5,
           subtotal: 25,
         },
         total: 25,

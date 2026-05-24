@@ -206,13 +206,13 @@ export function buildEvaluationPrompt(params: {
         
         First, evaluate the connection between the response and the CURRENT topic. Consider:
         - How semantically remote yet meaningfully connected is the response to the current topic? (1-10)
-        - How well do the ideas map onto each other in terms of similarity of structure or function? (1-10)
+        - How relevant is the response as a meaningful connection, beyond simple word association? (1-10)
         
         Then, evaluate the connection between the response and the ORIGINAL topic. Consider:
         - How semantically remote yet meaningfully connected is the response to the original topic? (1-10)
-        - How well do the ideas map onto each other in terms of similarity of structure or function? (1-10)
+        - How relevant is the response as a meaningful connection, beyond simple word association? (1-10)
         
-        Each connection subtotal is semantic distance multiplied by similarity. The final score will be
+        Each connection subtotal is semantic distance multiplied by relevance. The final score will be
         the average of these two connection subtotals.
         
         IMPORTANT: Your response MUST be valid JSON with the following structure:
@@ -222,12 +222,12 @@ export function buildEvaluationPrompt(params: {
           "scores": {
             "currentConnection": {
               "semanticDistance": X, // 1-10 score for semantic distance to current topic
-              "similarity": Y, // 1-10 score for similarity to current topic
+              "relevance": Y, // 1-10 score for relevance to current topic
               "subtotal": X*Y // Product of the two scores (max 100)
             },
             "originalConnection": {
               "semanticDistance": X, // 1-10 score for semantic distance to original topic
-              "similarity": Y, // 1-10 score for similarity to original topic
+              "relevance": Y, // 1-10 score for relevance to original topic
               "subtotal": X*Y // Product of the two scores (max 100)
             },
             "total": Z // Average of the two subtotals (max 100)
@@ -258,7 +258,7 @@ export function buildEvaluationPrompt(params: {
            - Higher scores for connections that span different domains of knowledge
            - Lower scores for obvious associations or closely related concepts
         
-        2. Similarity (1-10): How well do the ideas map onto each other in terms of similarity of structure or function?
+        2. Relevance (1-10): How relevant is the response as a meaningful connection, beyond simple word association?
            - Higher scores for responses that reveal structural parallels between seemingly unrelated concepts
            - Lower scores for connections that are superficial or rely only on word association
         

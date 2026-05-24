@@ -24,7 +24,12 @@ type TurnHistoryTableProps = {
   getTopicGraphNodeId: (topicValue: string, beforeHistoryIndex?: number) => string | null;
   onCurrentTopicClick: () => void;
   onHistoryTopicClick: (topicValue: string, beforeHistoryIndex?: number) => void;
-  onScoreMouseEnter: (event: React.MouseEvent, score: Score, isCircleRound: boolean) => void;
+  onScoreMouseEnter: (
+    event: React.MouseEvent,
+    score: Score,
+    isCircleRound: boolean,
+    edgeScores?: TurnHistoryRow['edgeScores']
+  ) => void;
   onScoreMouseLeave: () => void;
   onSelectHistoryItem: (historyItem: TurnHistoryRow) => void;
 };
@@ -114,7 +119,7 @@ export default function TurnHistoryTable({
                     <td className="py-2 px-4">
                       <span
                         className="cursor-help underline decoration-dotted"
-                        onMouseEnter={(event) => onScoreMouseEnter(event, score, isCircleRound)}
+                        onMouseEnter={(event) => onScoreMouseEnter(event, score, isCircleRound, round.edgeScores)}
                         onMouseLeave={onScoreMouseLeave}
                       >
                         {score.total}
