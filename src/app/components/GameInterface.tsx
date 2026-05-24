@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from 'react';
-import CurrentTopicPanel from './CurrentTopicPanel';
 import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import GameSetupPanel from './GameSetupPanel';
 import ScoreTooltip from './ScoreTooltip';
-import SelectedNodePanel from './SelectedNodePanel';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
@@ -16,16 +14,11 @@ import {
   TurnHistoryRow,
   addActiveSourceNode,
   removeActiveSourceNode,
-  selectActiveSourceNodeStatus,
   selectActiveSourceRows,
   selectHasBranchedSourceSelection,
-  selectRootDefinitionTarget,
-  selectSelectedGraphNodeView,
   selectSetupPlayerNames,
-  selectShouldShowSelectedGraphNodePanel,
-  selectSingleActiveSourceDefinitionTarget,
   selectTopicNodeIdByTopic,
-  setSelectedNodeIds,
+  setSingleActiveSourceNode,
 } from '@/domain/game';
 import { DifficultyLevel, useGameController } from '@/app/hooks/useGameController';
 import { useDefinitions } from '@/app/hooks/useDefinitions';
@@ -92,9 +85,7 @@ export default function GameInterface() {
 
   const {
     fetchDefinition,
-    hideDefinition,
     isDefinitionLoading,
-    showDefinition,
   } = useDefinitions({
     gameState,
     setGameState,
@@ -118,10 +109,7 @@ export default function GameInterface() {
 
     setSelectedGraphNodeId(sourceNodeId);
     if (sourceNodeId) {
-      setGameState(prev => ({
-        ...setSelectedNodeIds(prev, [sourceNodeId]),
-        activeSourceNodeIds: [sourceNodeId],
-      }));
+      setGameState(prev => setSingleActiveSourceNode(prev, sourceNodeId));
     }
     
     console.log(`Selected previous topic: "${historyItem.destinationNode.topic}" from round ${historyItem.turn.round}`);
@@ -139,92 +127,12 @@ export default function GameInterface() {
   };
 
   const handleGraphNodeClick = (nodeId: string) => {
+    if (isEvaluating || isAiThinking || gameCompleted) {
+      return;
+    }
+
     setSelectedGraphNodeId(nodeId);
-
-    if (nodeId === gameState.rootNodeId) {
-      return;
-    }
-
-    return;
-  };
-
-  const currentTopicDefinitionTarget = selectSingleActiveSourceDefinitionTarget(gameState);
-  const currentTopicNode = currentTopicDefinitionTarget
-    ? gameState.nodesById[currentTopicDefinitionTarget.nodeId]
-    : null;
-  const currentTopicDefinition = currentTopicNode?.definition || null;
-  const currentTopicDefinitionVisible = Boolean(
-    currentTopicDefinition && currentTopicNode?.definitionVisible
-  );
-  const isLoadingCurrentTopicDefinition = currentTopicDefinitionTarget
-    ? isDefinitionLoading(currentTopicDefinitionTarget.nodeId)
-    : false;
-
-  const originalTopicDefinitionTarget = selectRootDefinitionTarget(gameState);
-  const originalTopicNode = originalTopicDefinitionTarget
-    ? gameState.nodesById[originalTopicDefinitionTarget.nodeId]
-    : null;
-  const originalTopicDefinition = originalTopicNode?.definition || null;
-  const originalTopicDefinitionVisible = Boolean(
-    originalTopicDefinition && originalTopicNode?.definitionVisible
-  );
-  const isLoadingOriginalTopicDefinition = originalTopicDefinitionTarget
-    ? isDefinitionLoading(originalTopicDefinitionTarget.nodeId)
-    : false;
-
-  const handleCurrentTopicDefinitionClick = async () => {
-    if (!currentTopicDefinitionTarget || isGeneratingTopic) return;
-
-    if (currentTopicDefinitionVisible) {
-      hideDefinition(currentTopicDefinitionTarget.nodeId);
-      return;
-    }
-
-    await fetchDefinition(currentTopicDefinitionTarget);
-  };
-
-  const handleOriginalTopicDefinitionClick = async () => {
-    if (!originalTopicDefinitionTarget) return;
-
-    if (originalTopicDefinitionVisible) {
-      hideDefinition(originalTopicDefinitionTarget.nodeId);
-      return;
-    }
-
-    await fetchDefinition(originalTopicDefinitionTarget);
-  };
-
-  const selectedGraphNode = selectSelectedGraphNodeView(gameState, selectedGraphNodeId);
-
-  const selectedGraphTopicNode = selectedGraphNode ? gameState.nodesById[selectedGraphNode.id] : null;
-  const selectedGraphNodeDefinition = selectedGraphTopicNode?.definition || null;
-  const selectedGraphSourceStatus = selectedGraphNode
-    ? selectActiveSourceNodeStatus(gameState, selectedGraphNode.id)
-    : null;
-  const selectedGraphNodeIsActiveSource = Boolean(selectedGraphSourceStatus?.isActiveSource);
-  const shouldShowSelectedGraphNodePanel = selectShouldShowSelectedGraphNodePanel(gameState, selectedGraphNodeId);
-
-  const fetchSelectedGraphNodeDefinition = async () => {
-    if (!selectedGraphNode) return;
-    await fetchDefinition({
-      nodeId: selectedGraphNode.id,
-      topic: selectedGraphNode.topicForDefinition,
-    });
-  };
-  const isLoadingSelectedGraphNodeDefinition = selectedGraphNode
-    ? isDefinitionLoading(selectedGraphNode.id)
-    : false;
-
-  const handleToggleSelectedGraphNodeSource = () => {
-    if (!selectedGraphNode || showingResults || isEvaluating || isAiThinking || gameCompleted) return;
-
-    setGameState(prev => {
-      if (prev.activeSourceNodeIds.includes(selectedGraphNode.id)) {
-        return removeActiveSourceNode(prev, selectedGraphNode.id);
-      }
-
-      return addActiveSourceNode(prev, selectedGraphNode.id);
-    });
+    setGameState(prev => setSingleActiveSourceNode(prev, nodeId));
   };
 
   // Function to handle showing the tooltip
@@ -291,46 +199,14 @@ export default function GameInterface() {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Main game area - left side */}
           <div className="flex-1">
-            <CurrentTopicPanel
-              currentRound={currentRound}
-              maxRounds={maxRounds}
-              circleEnabled={circleEnabled}
-              originalTopic={originalTopic}
-              currentSourceTopicText={currentSourceTopicText}
-              hasBranchedSourceSelection={hasBranchedSourceSelection}
-              playerScoreRows={playerScoreRows}
-              isGeneratingTopic={isGeneratingTopic}
-              currentTopicDefinition={currentTopicDefinition}
-              currentTopicDefinitionVisible={currentTopicDefinitionVisible}
-              currentTopicDefinitionAvailable={Boolean(currentTopicDefinitionTarget)}
-              isLoadingCurrentTopicDefinition={isLoadingCurrentTopicDefinition}
-              originalTopicDefinition={originalTopicDefinition}
-              originalTopicDefinitionVisible={originalTopicDefinitionVisible}
-              originalTopicDefinitionAvailable={Boolean(originalTopicDefinitionTarget)}
-              isLoadingOriginalTopicDefinition={isLoadingOriginalTopicDefinition}
-              onCurrentTopicDefinitionClick={handleCurrentTopicDefinitionClick}
-              onOriginalTopicDefinitionClick={handleOriginalTopicDefinitionClick}
-            />
-
-            {shouldShowSelectedGraphNodePanel && selectedGraphNode && (
-              <SelectedNodePanel
-                selectedGraphNode={selectedGraphNode}
-                selectedGraphNodeDefinition={selectedGraphNodeDefinition}
-                definitionVisible={Boolean(selectedGraphTopicNode?.definitionVisible)}
-                isLoadingDefinition={isLoadingSelectedGraphNodeDefinition}
-                canToggleSource={!showingResults && !isEvaluating && !isAiThinking && !gameCompleted}
-                isActiveSource={selectedGraphNodeIsActiveSource}
-                canRemoveActiveSource={Boolean(selectedGraphSourceStatus?.canRemoveSource)}
-                onClear={() => setSelectedGraphNodeId(null)}
-                onFetchDefinition={fetchSelectedGraphNodeDefinition}
-                onHideDefinition={() => hideDefinition(selectedGraphNode.id)}
-                onShowDefinition={() => showDefinition(selectedGraphNode.id)}
-                onToggleSource={handleToggleSelectedGraphNodeSource}
-              />
-            )}
-
             <CurrentTurnSourcesPanel
               activeSourceRows={activeSourceRows}
+              currentRound={currentRound}
+              maxRounds={maxRounds}
+              playerScoreRows={playerScoreRows}
+              isGeneratingTopic={isGeneratingTopic}
+              isDefinitionLoading={isDefinitionLoading}
+              onFetchDefinition={(nodeId, topic) => fetchDefinition({ nodeId, topic })}
               onRemoveSource={(nodeId) => setGameState(prev => removeActiveSourceNode(prev, nodeId))}
             />
 

@@ -1,9 +1,9 @@
 # Glass Bead Game
 
 A casual, LLM-powered concept association game inspired by Hermann Hesse's
-_The Glass Bead Game_. The player and an AI opponent take turns making short
-conceptual moves. Each move is scored for how interestingly it connects to the
-current topic, and then that response becomes the next topic.
+_The Glass Bead Game_. Players take turns adding short conceptual moves to a
+shared graph. Each move creates a new topic node, connects it to one or more
+existing topic nodes, and is scored for how interestingly those concepts relate.
 
 This repo is a Next.js prototype. It is playable locally and has a focused
 domain test suite for game logic.
@@ -11,12 +11,15 @@ domain test suite for game logic.
 ## How the Game Works
 
 1. The app asks an LLM to generate a starting topic.
-2. The human player and the AI take alternating turns.
-3. On each turn, the active player responds to the current topic with a short
-   word or phrase, ideally 1-5 words.
-4. The response is evaluated by an LLM and given a score out of 20.
-5. That response becomes the topic for the next turn.
-6. After the configured number of rounds, the player with the highest total
+2. The local player and the AI take alternating turns.
+3. On each turn, the active player responds with a short word or phrase,
+   ideally 1-5 words.
+4. The response becomes a new topic node in the graph.
+5. By default the new node connects to the current topic, but players can
+   branch from an older topic or select multiple source topics for a
+   multi-source turn.
+6. The response is evaluated by an LLM and given a score out of 20.
+7. After the configured number of rounds, the player with the highest total
    score wins.
 
 Scores are based on:
@@ -24,22 +27,23 @@ Scores are based on:
 - **Semantic distance**: how non-obvious the connection is while still being
   meaningful.
 - **Relevance / similarity / quality**: how well the new concept maps back to
-  the current topic.
+  the selected source topic or topics.
 
-The UI also shows a D3 concept graph so the chain of ideas can be inspected as
-the game develops.
+The UI also shows a D3 concept graph so the branching shape of the game can be
+inspected as it develops.
 
 ## Current Features
 
 - AI-generated starting topics across philosophy, science, math, art, history,
   psychology, sociology, technology, religion, and economics.
-- Human vs AI turn-based play.
+- Local human vs local AI turn-based play.
 - Configurable round count.
 - Human-first or AI-first game start.
 - Difficulty levels: secondary, undergrad, grad, and unlimited.
 - LLM scoring and written evaluations after each turn.
-- Definition lookup for the current and original topics.
-- Concept graph visualization using D3.
+- Cached definition lookup for selected topics.
+- Branching concept graph visualization using D3.
+- Multi-source turns where a new topic can connect to several existing topics.
 - Development model selector for Anthropic Claude and DeepSeek models.
 - Production mode that locks the app to the configured Gemini model.
 
@@ -58,11 +62,17 @@ the game develops.
 
 ```text
 src/app/page.tsx                         Main app entry
-src/app/components/GameInterface.tsx     Core game state and UI
+src/app/components/GameInterface.tsx     Top-level game UI wiring
+src/app/components/GameSetupPanel.tsx    Setup screen and rules
 src/app/components/SimpleConceptGraph.tsx D3 concept graph
 src/app/components/ModelSelector.tsx     Development model selector
 src/app/api/*/route.ts                   Server-side API endpoints
-src/services/llm.ts                      LLM provider calls and prompts
+src/domain/game.ts                       Graph-oriented game state and selectors
+src/domain/gameFlow.ts                   Turn flow orchestration helpers
+src/domain/graphLayout.ts                Renderer-neutral graph layout helpers
+src/domain/llmPrompts.ts                 LLM prompt construction
+src/domain/llmParsing.ts                 LLM response parsing and fallbacks
+src/services/llm.ts                      LLM provider call orchestration
 src/config/llm.ts                        Model configuration
 ```
 
@@ -121,12 +131,16 @@ Use this smoke test after starting the dev server:
 1. Open `http://localhost:4321`.
 2. Choose a round count, first player, difficulty, and model.
 3. Start a game and confirm a starting topic is generated.
-4. Submit a short response and confirm an evaluation and score appear.
+4. Submit a short response and confirm a new node, evaluation, and score
+   appear.
 5. Click through to the next turn and confirm the AI responds.
 6. Check that the score totals update.
 7. Use the definition button and confirm a definition appears.
-8. Confirm the concept graph updates as rounds are added.
-9. Finish the configured number of rounds and confirm a winner is shown.
+8. Select an older topic in the graph or history and confirm the next response
+   branches from that topic.
+9. Add multiple source topics and confirm the next response creates multiple
+   edges.
+10. Finish the configured number of rounds and confirm a winner is shown.
 
 Useful development checks:
 
@@ -179,6 +193,25 @@ Near-term implementation steps:
    multi-source edge creation, and the combined scoring formula.
 12. Add a rated benchmark mode for model and agent leaderboards. See
    "Leaderboards, Hosting, and Partnerships" below.
+
+## Remaining Refactor Work
+
+The main state model has been moved toward topics, edges, turns, players, and
+selectors, and the LLM prompt/parsing code has been separated from provider
+calls. The remaining cleanup is intentionally smaller and should happen only
+when it supports the next feature pass.
+
+1. Define a renderer-neutral graph view model that is independent of D3. D3 can
+   keep owning layout for now, but rendering should consume a stable view model
+   so a future WebGL or glass-bead renderer can be swapped in without changing
+   game logic.
+2. Split provider-specific LLM clients out of `src/services/llm.ts` if that
+   file starts growing again. Prompt construction and response parsing are
+   already separate.
+3. Continue moving UI-only copy and formatting into small display helpers when
+   components start duplicating rules, labels, or score text.
+4. Keep README feature and architecture sections current as the app moves from
+   a local two-player prototype toward networked multi-player sessions.
 
 ## Scoring Pass Notes
 

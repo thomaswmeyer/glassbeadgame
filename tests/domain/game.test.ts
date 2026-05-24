@@ -19,16 +19,14 @@ import {
   selectHasBranchedSourceSelection,
   selectPlayerScoreRows,
   selectRootDefinitionTarget,
-  selectSelectedGraphNodeView,
-  selectSelectedNodePanels,
   selectSetupPlayerNames,
-  selectShouldShowSelectedGraphNodePanel,
   selectSingleActiveSourceDefinitionTarget,
   selectTopicNodeIdByTopic,
   selectTurnHistoryRows,
   setGameStatus,
   setNodeDefinitionVisibility,
   setSelectedNodeIds,
+  setSingleActiveSourceNode,
   startGameState,
   updateNodeDefinition,
   type Player,
@@ -121,7 +119,7 @@ test('definition targets are selected from nodes rather than rebuilt by UI calle
   assert.equal(selectSingleActiveSourceDefinitionTarget(multiSource), null);
 });
 
-test('selection filters unknown nodes and selected node panels include player and turn metadata', () => {
+test('selection filters unknown nodes', () => {
   const state = addTurnToGameState(startedState(), {
     destinationTopic: 'Flying buttresses',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
@@ -134,42 +132,6 @@ test('selection filters unknown nodes and selected node panels include player an
   const selected = setSelectedNodeIds(state, [turn.destinationNodeId, 'missing-node']);
 
   assert.deepEqual(selected.selectedNodeIds, [turn.destinationNodeId]);
-
-  const panels = selectSelectedNodePanels(selected);
-  assert.equal(panels.length, 1);
-  assert.equal(panels[0].node.topic, 'Flying buttresses');
-  assert.equal(panels[0].player?.id, DEFAULT_HUMAN_PLAYER_ID);
-  assert.equal(panels[0].createdTurn?.id, turn.id);
-});
-
-test('selected graph node view resolves root nodes and created topic history', () => {
-  const state = addTurnToGameState(startedState(), {
-    destinationTopic: 'Flying buttresses',
-    playerId: DEFAULT_HUMAN_PLAYER_ID,
-    sourceNodeIds: [],
-    evaluation: 'Strong connection.',
-    totalScore: score.total,
-    legacyScores: score,
-  });
-  const turn = state.turnsById[state.turnOrder[0]];
-
-  assert.deepEqual(selectSelectedGraphNodeView(state, state.rootNodeId), {
-    id: state.rootNodeId,
-    title: 'Cathedrals',
-    subtitle: 'Original topic',
-    topicForDefinition: 'Cathedrals',
-    historyItem: null,
-  });
-
-  const selectedTurnView = selectSelectedGraphNodeView(state, turn.destinationNodeId);
-  assert.equal(selectedTurnView?.id, turn.destinationNodeId);
-  assert.equal(selectedTurnView?.title, 'Flying buttresses');
-  assert.equal(selectedTurnView?.subtitle, 'You topic');
-  assert.equal(selectedTurnView?.topicForDefinition, 'Flying buttresses');
-  assert.equal(selectedTurnView?.historyItem?.turn.id, turn.id);
-
-  assert.equal(selectSelectedGraphNodeView(state, 'missing-node'), null);
-  assert.equal(selectSelectedGraphNodeView(state, null), null);
 });
 
 test('active source mutations ignore duplicate and unknown nodes and preserve at least one source', () => {
@@ -190,6 +152,26 @@ test('active source mutations ignore duplicate and unknown nodes and preserve at
 
   const afterRemoval = removeActiveSourceNode(withSecondSource, turn.destinationNodeId);
   assert.deepEqual(afterRemoval.activeSourceNodeIds, [state.rootNodeId]);
+});
+
+test('single active source selection replaces multi-source selections and selected node ids', () => {
+  const state = startedState();
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
+  const multiSource = addActiveSourceNode(withTurn, state.rootNodeId);
+
+  const selectedRoot = setSingleActiveSourceNode(multiSource, state.rootNodeId);
+  assert.deepEqual(selectedRoot.activeSourceNodeIds, [state.rootNodeId]);
+  assert.deepEqual(selectedRoot.selectedNodeIds, [state.rootNodeId]);
+
+  assert.equal(setSingleActiveSourceNode(multiSource, 'missing-node'), multiSource);
+  assert.deepEqual(setSingleActiveSourceNode(multiSource, turn.destinationNodeId).activeSourceNodeIds, [
+    turn.destinationNodeId,
+  ]);
 });
 
 test('active source status exposes add and remove affordances without UI state peeking into arrays', () => {
@@ -277,24 +259,6 @@ test('branched source selection compares active sources to the default latest to
   assert.equal(selectHasBranchedSourceSelection(withTurn), false);
   assert.equal(selectHasBranchedSourceSelection(withRootSource), true);
   assert.equal(selectHasBranchedSourceSelection(addActiveSourceNode(withTurn, state.rootNodeId)), true);
-});
-
-test('selected node panel visibility hides the sole active source but shows selected branches and multi-source selections', () => {
-  const state = startedState();
-  const withTurn = addTurnToGameState(state, {
-    destinationTopic: 'Flying buttresses',
-    playerId: DEFAULT_HUMAN_PLAYER_ID,
-    sourceNodeIds: [state.rootNodeId],
-  });
-  const turn = withTurn.turnsById[withTurn.turnOrder[0]];
-
-  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, turn.destinationNodeId), false);
-  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, state.rootNodeId), true);
-  assert.equal(
-    selectShouldShowSelectedGraphNodePanel(addActiveSourceNode(withTurn, state.rootNodeId), turn.destinationNodeId),
-    true
-  );
-  assert.equal(selectShouldShowSelectedGraphNodePanel(withTurn, 'missing-node'), false);
 });
 
 test('topic node lookup resolves roots and duplicate destination topics by history position', () => {

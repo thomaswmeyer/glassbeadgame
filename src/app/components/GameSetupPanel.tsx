@@ -44,7 +44,7 @@ export default function GameSetupPanel({
   return (
     <div className="text-center">
       <p className="mb-6 text-lg">
-        Welcome to the Glass Bead Game, a turn-based journey of connected concepts.
+        Welcome to the Glass Bead Game, a turn-based graph of connected concepts.
       </p>
 
       <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -138,17 +138,18 @@ export default function GameSetupPanel({
       <div className="mb-6 text-left max-w-md mx-auto">
         <h3 className="font-bold mb-2">Rules:</h3>
         <ol className="list-decimal pl-5 space-y-2">
-          <li>The game starts with a randomly generated topic.</li>
-          <li>Players take turns responding to the current topic with a brief answer.</li>
+          <li>The game starts with a randomly generated topic node.</li>
+          <li>Players take turns adding a new topic connected to the selected source topic.</li>
           <li><strong>Responses should be brief</strong> - ideally a single word or short phrase (1-5 words). The quality of the conceptual connection is what matters, not the length of your response.</li>
-          <li>Each response becomes the topic for the next round.</li>
+          <li>Select an older topic in the graph or history to branch from it.</li>
+          <li>Use the + controls to connect a new topic to multiple source topics.</li>
           <li>The game lasts for {maxRounds} rounds ({getTurnsEachLabel(maxRounds)}).</li>
           {circleEnabled && (
             <li>In the final round, the response must connect back to the original starting topic.</li>
           )}
           <li>Responses are evaluated based on:
             <ul className="list-disc pl-5 mt-1">
-              <li><strong>Semantic Distance (1-10):</strong> How semantically remote yet meaningfully connected is the overall topic from the prompt? Higher scores for connections that are not obvious.</li>
+              <li><strong>Semantic Distance (1-10):</strong> How semantically remote yet meaningfully connected is the new topic from the selected source topic or topics? Higher scores for connections that are not obvious.</li>
               <li><strong>Similarity (1-10):</strong> How well do the ideas map onto each other? For example, stock market crash and flocking behavior.</li>
             </ul>
           </li>

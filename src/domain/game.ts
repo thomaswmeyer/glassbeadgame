@@ -114,20 +114,6 @@ export type GraphRenderEdge = {
   strengthDescription?: string;
 };
 
-export type SelectedNodePanel = {
-  node: TopicNode;
-  player?: Player;
-  createdTurn?: Turn;
-};
-
-export type SelectedGraphNodeView = {
-  id: string;
-  title: string;
-  subtitle: string;
-  topicForDefinition: string;
-  historyItem: TurnHistoryRow | null;
-};
-
 export type TurnHistoryRow = {
   turn: Turn;
   player: Player;
@@ -365,6 +351,16 @@ export function setSelectedNodeIds(state: GameState, selectedNodeIds: string[]):
   };
 }
 
+export function setSingleActiveSourceNode(state: GameState, nodeId: string): GameState {
+  if (!state.nodesById[nodeId]) return state;
+
+  return {
+    ...state,
+    activeSourceNodeIds: [nodeId],
+    selectedNodeIds: [nodeId],
+  };
+}
+
 export function addActiveSourceNode(state: GameState, nodeId: string): GameState {
   if (!state.nodesById[nodeId] || state.activeSourceNodeIds.includes(nodeId)) return state;
 
@@ -494,17 +490,6 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
   };
 }
 
-export function selectSelectedNodePanels(state: GameState): SelectedNodePanel[] {
-  return state.selectedNodeIds
-    .map(nodeId => state.nodesById[nodeId])
-    .filter((node): node is TopicNode => Boolean(node))
-    .map(node => ({
-      node,
-      player: node.createdByPlayerId ? state.playersById[node.createdByPlayerId] : undefined,
-      createdTurn: node.createdTurnId ? state.turnsById[node.createdTurnId] : undefined,
-    }));
-}
-
 export function selectTurnHistoryRows(state: GameState): TurnHistoryRow[] {
   return state.turnOrder.map(turnId => {
     const turn = state.turnsById[turnId];
@@ -515,51 +500,6 @@ export function selectTurnHistoryRows(state: GameState): TurnHistoryRow[] {
       destinationNode: state.nodesById[turn.destinationNodeId],
     };
   });
-}
-
-export function selectSelectedGraphNodeView(
-  state: GameState,
-  selectedGraphNodeId: string | null
-): SelectedGraphNodeView | null {
-  if (!selectedGraphNodeId) return null;
-
-  const node = state.nodesById[selectedGraphNodeId];
-  if (!node) return null;
-
-  if (node.isRoot) {
-    return {
-      id: node.id,
-      title: node.topic,
-      subtitle: 'Original topic',
-      topicForDefinition: node.topic,
-      historyItem: null,
-    };
-  }
-
-  const player = node.createdByPlayerId ? state.playersById[node.createdByPlayerId] : undefined;
-  const historyItem = selectTurnHistoryRows(state)
-    .find(row => row.destinationNode.id === selectedGraphNodeId) || null;
-
-  return {
-    id: node.id,
-    title: node.topic,
-    subtitle: player ? `${player.name} topic` : 'Topic',
-    topicForDefinition: node.topic,
-    historyItem,
-  };
-}
-
-export function selectShouldShowSelectedGraphNodePanel(
-  state: GameState,
-  selectedGraphNodeId: string | null
-) {
-  if (!selectSelectedGraphNodeView(state, selectedGraphNodeId)) return false;
-
-  const isActiveSource = Boolean(
-    selectedGraphNodeId && state.activeSourceNodeIds.includes(selectedGraphNodeId)
-  );
-
-  return !isActiveSource || state.activeSourceNodeIds.length > 1;
 }
 
 export function selectTopicNodeIdByTopic(

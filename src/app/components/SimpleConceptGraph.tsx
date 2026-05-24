@@ -237,8 +237,12 @@ export default function SimpleConceptGraph({
             .attr('stroke-width', 4)
             .attr('stroke-linejoin', 'round')
             .attr('fill', '#111827')
+            .style('pointer-events', 'none')
             .text(node => node.label),
-        update => update.text(node => node.label).attr('dy', node => node.radius + 15),
+        update => update
+          .text(node => node.label)
+          .attr('dy', node => node.radius + 15)
+          .style('pointer-events', 'none'),
         exit => exit.remove()
       );
 
@@ -257,11 +261,7 @@ export default function SimpleConceptGraph({
           return 1.5;
         });
 
-      labels.style('display', node =>
-        node.isSelected || node.isActiveSource || node.id === hoveredNodeIdRef.current || node.isRoot
-          ? 'block'
-          : 'none'
-      );
+      labels.style('display', 'block');
     }
 
     updateNodeStyles();
@@ -317,7 +317,7 @@ export default function SimpleConceptGraph({
 
       actions.attr(
         'transform',
-        node => `translate(${(node.x || dimensions.width / 2) + node.radius + 8},${(node.y || dimensions.height / 2) - node.radius - 8})`
+        node => `translate(${(node.x || dimensions.width / 2) + node.radius},${(node.y || dimensions.height / 2) - node.radius})`
       );
 
       labels.attr(
