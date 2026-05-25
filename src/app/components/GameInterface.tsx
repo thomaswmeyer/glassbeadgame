@@ -263,6 +263,7 @@ export default function GameInterface() {
               <TurnHistoryTable
                 activeSourceNodeIds={gameState.activeSourceNodeIds}
                 canSelectHistoryRows={!sourceSelectionLocked}
+                showCurrentTurnRow={!showingResults}
                 circleEnabled={circleEnabled}
                 currentRound={currentRound}
                 currentPlayerKind={currentPlayerModel?.kind}

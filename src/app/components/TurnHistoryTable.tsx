@@ -14,6 +14,7 @@ export function getPlayerBadgeClass(playerKind?: string) {
 type TurnHistoryTableProps = {
   activeSourceNodeIds: string[];
   canSelectHistoryRows: boolean;
+  showCurrentTurnRow: boolean;
   circleEnabled: boolean;
   currentRound: number;
   currentPlayerKind?: string;
@@ -39,6 +40,7 @@ type TurnHistoryTableProps = {
 export default function TurnHistoryTable({
   activeSourceNodeIds,
   canSelectHistoryRows,
+  showCurrentTurnRow,
   circleEnabled,
   currentRound,
   currentPlayerKind,
@@ -76,24 +78,26 @@ export default function TurnHistoryTable({
             </tr>
           </thead>
           <tbody>
-            <tr
-              key="current-topic"
-              onClick={() => {
-                if (canSelectHistoryRows) onCurrentTopicClick();
-              }}
-              className={`border-t ${canSelectHistoryRows ? 'cursor-pointer' : 'cursor-default'} ${isCurrentTopicSelected ? 'bg-purple-50' : 'bg-green-50 hover:bg-green-100'}`}
-            >
-              <td className="py-2 px-4">{currentRound}</td>
-              <td className="py-2 px-4 font-medium">{currentSourceTopicText}</td>
-              <td className="py-2 px-4">
-                <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(currentPlayerKind)}`}>
-                  {currentPlayerName || 'Player'}
-                </span>
-              </td>
-              <td className="py-2 px-4 text-gray-400">-</td>
-              <td className="py-2 px-4 text-gray-400">-</td>
-              <td className="py-2 px-4 text-xs text-gray-500">Topic</td>
-            </tr>
+            {showCurrentTurnRow && (
+              <tr
+                key="current-topic"
+                onClick={() => {
+                  if (canSelectHistoryRows) onCurrentTopicClick();
+                }}
+                className={`border-t ${canSelectHistoryRows ? 'cursor-pointer' : 'cursor-default'} ${isCurrentTopicSelected ? 'bg-purple-50' : 'bg-green-50 hover:bg-green-100'}`}
+              >
+                <td className="py-2 px-4">{currentRound}</td>
+                <td className="py-2 px-4 font-medium">{currentSourceTopicText}</td>
+                <td className="py-2 px-4">
+                  <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(currentPlayerKind)}`}>
+                    {currentPlayerName || 'Player'}
+                  </span>
+                </td>
+                <td className="py-2 px-4 text-gray-400">-</td>
+                <td className="py-2 px-4 text-gray-400">-</td>
+                <td className="py-2 px-4 text-xs text-gray-500">Topic</td>
+              </tr>
+            )}
             {turnHistoryRows
               .slice()
               .reverse()

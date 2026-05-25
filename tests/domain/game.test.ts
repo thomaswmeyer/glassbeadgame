@@ -96,6 +96,8 @@ test('opening topic turn creates the root node as a zero-point turn', () => {
   assert.equal(state.nodesById[state.rootNodeId].topic, 'Counterpoint');
   assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, 'player-local');
   assert.equal(state.nodesById[state.rootNodeId].subjectCategory, 'arts');
+  assert.equal(state.currentRound, 1);
+  assert.equal(turn.round, 0);
   assert.equal(turn.destinationNodeId, state.rootNodeId);
   assert.deepEqual(turn.sourceNodeIds, []);
   assert.deepEqual(turn.edgeIds, []);
@@ -424,6 +426,20 @@ test('next player cycles through the configured player order', () => {
   assert.equal(getNextPlayerId({ ...state, currentPlayerId: 'player-openclaw' }), 'player-remote-ai');
   assert.equal(getNextPlayerId({ ...state, currentPlayerId: 'player-remote-ai' }), 'player-local');
   assert.equal(getNextPlayerId({ ...state, currentPlayerId: 'missing-player' }), 'player-local');
+});
+
+test('advancing from the opening topic can preserve the first scored round', () => {
+  const state = addOpeningTopicTurnToGameState(createEmptyGameState(6, 'player-local', players), {
+    topic: 'Counterpoint',
+    playerId: 'player-local',
+  });
+
+  const next = advanceGameTurn(state, 'player-openclaw', { incrementRound: false });
+
+  assert.equal(state.turnsById[state.turnOrder[0]].round, 0);
+  assert.equal(next.currentRound, 1);
+  assert.equal(next.currentPlayerId, 'player-openclaw');
+  assert.equal(next.gameStatus, 'awaitingResponse');
 });
 
 test('current evaluation is derived only for result states and includes latest player metadata', () => {

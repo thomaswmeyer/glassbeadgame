@@ -289,7 +289,7 @@ export function addOpeningTopicTurnToGameState(
   };
   const turn: Turn = {
     id: turnId,
-    round: state.currentRound,
+    round: 0,
     playerId: params.playerId,
     sourceNodeIds: [],
     edgeIds: [],
@@ -542,10 +542,16 @@ export function selectRootDefinitionTarget(state: GameState): DefinitionTarget |
   return selectNodeDefinitionTarget(state, state.rootNodeId);
 }
 
-export function advanceGameTurn(state: GameState, nextPlayerId: string): GameState {
+export function advanceGameTurn(
+  state: GameState,
+  nextPlayerId: string,
+  options: { incrementRound?: boolean } = {}
+): GameState {
+  const incrementRound = options.incrementRound ?? true;
+
   return {
     ...state,
-    currentRound: state.currentRound + 1,
+    currentRound: incrementRound ? state.currentRound + 1 : state.currentRound,
     currentPlayerId: nextPlayerId,
     gameStatus: 'awaitingResponse',
   };

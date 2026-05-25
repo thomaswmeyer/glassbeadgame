@@ -56,6 +56,8 @@ test('starts a generated game by recording the generated root as a zero-point op
   assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, DEFAULT_HUMAN_PLAYER_ID);
   assert.equal(state.turnOrder.length, 1);
   assert.equal(state.turnsById[state.turnOrder[0]].totalScore, 0);
+  assert.equal(state.turnsById[state.turnOrder[0]].round, 0);
+  assert.equal(state.currentRound, 1);
 });
 
 test('applies a turn by evaluating the active source topic with mocked LLM services', async () => {

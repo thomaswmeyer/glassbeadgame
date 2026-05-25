@@ -376,7 +376,9 @@ export function useGameController({
       }
     }
 
-    setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev)));
+    setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev), {
+      incrementRound: !currentEvaluation?.isOpeningTurn,
+    }));
     setResponse('');
   };
 
