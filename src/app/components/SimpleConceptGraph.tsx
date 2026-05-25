@@ -73,9 +73,11 @@ export default function SimpleConceptGraph({
   const actionGroupRef = useRef<SVGGElement>(null);
   const labelGroupRef = useRef<SVGGElement>(null);
   const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const positionsRef = useRef<Map<string, GraphPosition>>(new Map());
   const hoveredNodeIdRef = useRef<string | null>(null);
   const isDraggingNodeRef = useRef(false);
+  const isAutoFittingRef = useRef(false);
   const draggedNodeIdRef = useRef<string | null>(null);
   const didDragNodeRef = useRef(false);
   const interactionsDisabledRef = useRef(interactionsDisabled);
@@ -123,8 +125,9 @@ export default function SimpleConceptGraph({
   const activeSourceCount = nodes.filter(node => node.isActiveSource).length;
 
   const fitGraphToViewport = useCallback((duration = 450) => {
+    const svg = svgRef.current;
     const viewport = viewportRef.current;
-    if (!viewport || graphData.nodes.length === 0 || isDraggingNodeRef.current) return;
+    if (!svg || !viewport || graphData.nodes.length === 0 || isDraggingNodeRef.current) return;
 
     const transform = calculateGraphViewportTransform({
       nodes: graphData.nodes,
@@ -133,13 +136,63 @@ export default function SimpleConceptGraph({
     });
     if (!transform) return;
 
-    d3.select(viewport)
+    const zoomTransform = d3.zoomIdentity
+      .translate(transform.translateX, transform.translateY)
+      .scale(transform.scale);
+    const zoomBehavior = zoomBehaviorRef.current;
+    if (!zoomBehavior) {
+      d3.select(viewport)
+        .interrupt()
+        .transition()
+        .duration(duration)
+        .ease(d3.easeCubicOut)
+        .attr('transform', zoomTransform.toString());
+      return;
+    }
+
+    isAutoFittingRef.current = true;
+    d3.select(svg)
       .interrupt()
       .transition()
       .duration(duration)
       .ease(d3.easeCubicOut)
-      .attr('transform', `translate(${transform.translateX},${transform.translateY}) scale(${transform.scale})`);
+      .call(zoomBehavior.transform, zoomTransform)
+      .on('end interrupt', () => {
+        isAutoFittingRef.current = false;
+      });
   }, [dimensions.height, dimensions.width, graphData.nodes]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    const viewport = viewportRef.current;
+    if (!svg || !viewport) return;
+
+    const zoomBehavior = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.25, 3])
+      .filter(event => event.type !== 'dblclick')
+      .on('start', () => {
+        d3.select(viewport).interrupt();
+      })
+      .on('zoom', (event) => {
+        d3.select(viewport).attr('transform', event.transform.toString());
+      })
+      .on('end', () => {
+        if (isDraggingNodeRef.current || isAutoFittingRef.current) return;
+
+        window.setTimeout(() => fitGraphToViewport(450), 120);
+      });
+
+    zoomBehaviorRef.current = zoomBehavior;
+    d3.select(svg).call(zoomBehavior);
+
+    return () => {
+      d3.select(svg).on('.zoom', null);
+      if (zoomBehaviorRef.current === zoomBehavior) {
+        zoomBehaviorRef.current = null;
+      }
+    };
+  }, [fitGraphToViewport]);
 
   useEffect(() => {
     const linkGroupElement = linkGroupRef.current;
@@ -182,7 +235,7 @@ export default function SimpleConceptGraph({
             .append('circle')
             .attr('r', 0)
             .attr('fill', node => node.color)
-            .style('cursor', interactionsDisabled ? 'default' : 'grab')
+            .style('cursor', 'grab')
             .on('mouseenter', (_event, node) => {
               hoveredNodeIdRef.current = node.id;
               updateNodeStyles();
@@ -201,7 +254,7 @@ export default function SimpleConceptGraph({
             ),
         update => update
           .attr('fill', node => node.color)
-          .style('cursor', interactionsDisabled ? 'default' : 'grab'),
+          .style('cursor', 'grab'),
         exit => exit.transition().duration(120).attr('r', 0).remove()
       );
 
@@ -273,7 +326,7 @@ export default function SimpleConceptGraph({
       .drag<SVGCircleElement, SimulationNode>()
       .clickDistance(4)
       .on('start', (event, node) => {
-        if (interactionsDisabledRef.current) return;
+        event.sourceEvent?.stopPropagation();
 
         isDraggingNodeRef.current = true;
         didDragNodeRef.current = false;
@@ -288,7 +341,7 @@ export default function SimpleConceptGraph({
         node.fy = node.y ?? dimensions.height / 2;
       })
       .on('drag', (event, node) => {
-        if (interactionsDisabledRef.current) return;
+        event.sourceEvent?.stopPropagation();
 
         didDragNodeRef.current = true;
         node.fx = event.x;
@@ -299,7 +352,7 @@ export default function SimpleConceptGraph({
         });
       })
       .on('end', (event, node) => {
-        if (interactionsDisabledRef.current) return;
+        event.sourceEvent?.stopPropagation();
 
         isDraggingNodeRef.current = false;
         node.fx = null;

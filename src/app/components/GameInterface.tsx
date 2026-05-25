@@ -98,6 +98,7 @@ export default function GameInterface() {
   const { localPlayerName, aiPlayerName } = selectSetupPlayerNames(playerScoreRows);
   const activeSourceRows = selectActiveSourceRows(gameState);
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
+  const isOpeningTurn = gameStarted && !gameState.rootNodeId;
   const productionModelName = LLM_CONFIG.models[
     LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models
   ].displayName;
@@ -233,6 +234,7 @@ export default function GameInterface() {
             {!showingResults ? (
               <TurnResponsePanel
                 isCurrentPlayerManual={isCurrentPlayerManual}
+                isOpeningTurn={isOpeningTurn}
                 playerName={currentPlayerModel?.name}
                 response={response}
                 isEvaluating={isEvaluating}
@@ -257,12 +259,14 @@ export default function GameInterface() {
               />
             )}
             
-            {gameStarted && (
+            {gameStarted && gameState.rootNodeId && (
               <TurnHistoryTable
                 activeSourceNodeIds={gameState.activeSourceNodeIds}
                 canSelectHistoryRows={!sourceSelectionLocked}
                 circleEnabled={circleEnabled}
                 currentRound={currentRound}
+                currentPlayerKind={currentPlayerModel?.kind}
+                currentPlayerName={currentPlayerModel?.name}
                 currentSourceTopicText={currentSourceTopicText}
                 currentTopicNodeId={gameState.activeSourceNodeIds.length === 1 ? gameState.activeSourceNodeIds[0] : null}
                 maxRounds={maxRounds}

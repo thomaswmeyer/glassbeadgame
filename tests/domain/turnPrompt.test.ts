@@ -20,6 +20,18 @@ test('turn response title switches between manual and automatic player labels', 
   assert.equal(getTurnResponsePanelTitle({
     isCurrentPlayerManual: false,
   }), 'Player is thinking...');
+
+  assert.equal(getTurnResponsePanelTitle({
+    isCurrentPlayerManual: true,
+    isOpeningTurn: true,
+    playerName: 'OpenClaw',
+  }), 'Choose Opening Topic:');
+
+  assert.equal(getTurnResponsePanelTitle({
+    isCurrentPlayerManual: false,
+    isOpeningTurn: true,
+    playerName: 'OpenClaw',
+  }), 'OpenClaw is choosing the opening topic...');
 });
 
 test('turn response placeholder includes circle-round context only for final circle rounds', () => {
@@ -28,6 +40,13 @@ test('turn response placeholder includes circle-round context only for final cir
     currentSourceTopicText: 'Cathedrals',
     originalTopic: 'Fugue',
   }), 'Type a brief response (1-5 words) and press Enter...');
+
+  assert.equal(getTurnResponsePlaceholder({
+    isOpeningTurn: true,
+    isFinalCircleRound: false,
+    currentSourceTopicText: '',
+    originalTopic: '',
+  }), 'Choose the opening topic for this game and press Enter...');
 
   assert.equal(getTurnResponsePlaceholder({
     isFinalCircleRound: true,
@@ -41,4 +60,3 @@ test('turn response submit state requires non-empty text and no active evaluatio
   assert.equal(canSubmitTurnResponse({ response: 'Fugue', isEvaluating: true }), false);
   assert.equal(canSubmitTurnResponse({ response: 'Fugue', isEvaluating: false }), true);
 });
-

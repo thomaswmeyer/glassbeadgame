@@ -7,6 +7,7 @@ import {
 
 type TurnResponsePanelProps = {
   isCurrentPlayerManual: boolean;
+  isOpeningTurn: boolean;
   playerName?: string | null;
   response: string;
   isEvaluating: boolean;
@@ -20,6 +21,7 @@ type TurnResponsePanelProps = {
 
 export default function TurnResponsePanel({
   isCurrentPlayerManual,
+  isOpeningTurn,
   playerName,
   response,
   isEvaluating,
@@ -42,7 +44,7 @@ export default function TurnResponsePanel({
   return (
     <div className="mb-6">
       <h2 className="text-xl font-semibold mb-2">
-        {getTurnResponsePanelTitle({ isCurrentPlayerManual, playerName })}
+        {getTurnResponsePanelTitle({ isCurrentPlayerManual, isOpeningTurn, playerName })}
       </h2>
 
       {isCurrentPlayerManual ? (
@@ -54,6 +56,7 @@ export default function TurnResponsePanel({
             onKeyDown={handleKeyDown}
             className="w-full p-4 border border-gray-300 rounded-lg"
             placeholder={getTurnResponsePlaceholder({
+              isOpeningTurn,
               isFinalCircleRound,
               currentSourceTopicText,
               originalTopic,
@@ -62,8 +65,10 @@ export default function TurnResponsePanel({
             autoFocus
           />
           <p className="text-sm text-gray-500 mt-1">
-            Keep your response concise (1-5 words) for best results. The quality of the conceptual connection is what matters.
-            {hasBranchedSourceSelection && (
+            {isOpeningTurn
+              ? 'Pick a concise concept to seed the board. No points are awarded for the opening topic.'
+              : 'Keep your response concise (1-5 words) for best results. The quality of the conceptual connection is what matters.'}
+            {!isOpeningTurn && hasBranchedSourceSelection && (
               <span className="text-purple-600 ml-1">
                 You&apos;re responding to selected graph sources.
               </span>
@@ -87,11 +92,14 @@ export default function TurnResponsePanel({
               <div className="h-3 w-3 bg-red-300 rounded-full"></div>
               <div className="h-3 w-3 bg-red-300 rounded-full"></div>
             </div>
-            <span className="ml-3 text-gray-600">{playerName || 'Player'} is formulating a response...</span>
+            <span className="ml-3 text-gray-600">
+              {isOpeningTurn
+                ? `${playerName || 'Player'} is choosing the opening topic...`
+                : `${playerName || 'Player'} is formulating a response...`}
+            </span>
           </div>
         </div>
       )}
     </div>
   );
 }
-

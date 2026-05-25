@@ -4,6 +4,7 @@ import {
   DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
   addActiveSourceNode,
+  addOpeningTopicTurnToGameState,
   addTurnToGameState,
   advanceGameTurn,
   createEmptyGameState,
@@ -80,6 +81,63 @@ test('started game state preserves custom player ownership for generated roots',
   assert.equal(state.playersById['player-remote-ai'].name, 'Remote AI');
   assert.deepEqual(state.activeSourceNodeIds, [state.rootNodeId]);
   assert.deepEqual(state.selectedNodeIds, [state.rootNodeId]);
+});
+
+test('opening topic turn creates the root node as a zero-point turn', () => {
+  const empty = createEmptyGameState(6, 'player-local', players);
+  const state = addOpeningTopicTurnToGameState(empty, {
+    topic: 'Counterpoint',
+    playerId: 'player-local',
+    subjectCategory: 'arts',
+  });
+  const turn = state.turnsById[state.turnOrder[0]];
+
+  assert.equal(state.rootNodeId, 'root');
+  assert.equal(state.nodesById[state.rootNodeId].topic, 'Counterpoint');
+  assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, 'player-local');
+  assert.equal(state.nodesById[state.rootNodeId].subjectCategory, 'arts');
+  assert.equal(turn.destinationNodeId, state.rootNodeId);
+  assert.deepEqual(turn.sourceNodeIds, []);
+  assert.deepEqual(turn.edgeIds, []);
+  assert.equal(turn.totalScore, 0);
+  assert.deepEqual(state.activeSourceNodeIds, [state.rootNodeId]);
+  assert.deepEqual(selectPlayerScoreRows(state).map(row => row.totalScore), [0, 0, 0]);
+});
+
+test('opening topic turn is exposed in history and current evaluation without edge scores', () => {
+  const state = setGameStatus(addOpeningTopicTurnToGameState(
+    createEmptyGameState(6, 'player-local', players),
+    {
+      topic: 'Counterpoint',
+      playerId: 'player-local',
+    }
+  ), 'showingResults');
+  const rows = selectTurnHistoryRows(state);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].destinationNode.topic, 'Counterpoint');
+  assert.deepEqual(rows[0].sourceNodes, []);
+  assert.equal(getTurnHistoryRowSourceTopicText(rows[0]), 'Opening topic');
+  assert.deepEqual(getTurnHistoryRowScore(rows[0]), {
+    semanticDistance: 0,
+    relevanceQuality: 0,
+    total: 0,
+  });
+  assert.deepEqual(selectCurrentEvaluation(state), {
+    topic: 'Opening topic',
+    response: 'Counterpoint',
+    evaluation: 'Opening topic. No points are awarded for the first topic.',
+    scores: {
+      semanticDistance: 0,
+      relevanceQuality: 0,
+      total: 0,
+    },
+    edgeScores: [],
+    playerId: 'player-local',
+    playerKind: 'local',
+    playerName: 'Local',
+    isOpeningTurn: true,
+  });
 });
 
 test('definition updates are node-scoped and visibility can be toggled independently', () => {

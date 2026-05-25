@@ -6,6 +6,7 @@ import {
   DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
   Score,
+  addOpeningTopicTurnToGameState,
   addTurnToGameState,
   advanceGameTurn,
   createEmptyGameState,
@@ -17,7 +18,6 @@ import {
   selectTurnHistoryRows,
   setGameStatus,
   setSelectedNodeIds,
-  startGameState,
 } from '@/domain/game';
 import {
   DifficultyLevel,
@@ -82,6 +82,18 @@ export function useGameController({
     playerId: DEFAULT_AI_PLAYER_ID,
     mode: 'automatic',
     async submitTurn(context) {
+      if (context.availableNodes.length === 0) {
+        const generatedTopic = resolveGeneratedTopic(await services.generateTopic({
+          difficulty: context.difficulty,
+        }));
+
+        return {
+          responseText: generatedTopic.topic,
+          destinationSubjectCategory: generatedTopic.subjectCategory,
+          fallbackOnEvaluationFailure: true,
+        };
+      }
+
       const aiResponse = await services.generateAiResponse({
         topic: context.topic,
         availableNodes: context.availableNodes.map(node => ({
@@ -139,39 +151,23 @@ export function useGameController({
   const isAiThinking = gameState.gameStatus === 'aiThinking';
   const showingResults = gameState.gameStatus === 'showingResults' || gameState.gameStatus === 'completed';
   const gameCompleted = gameState.gameStatus === 'completed';
+  const isOpeningTurn = !gameState.rootNodeId;
 
   const setSelectedGraphNodeId = (nodeId: string | null) => {
     setGameState(prev => setSelectedNodeIds(prev, nodeId ? [nodeId] : []));
   };
 
   const generateFirstTopic = async () => {
-    console.log('=== GENERATING FIRST TOPIC ===');
+    console.log('=== STARTING GAME ===');
     console.log('aiGoesFirst setting:', aiGoesFirst);
 
     const initialPlayer = aiGoesFirst ? 'ai' : 'human';
+    startedAutomaticTurnKeyRef.current = null;
+    setResponse('');
     setGameState(setGameStatus(
       createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
-      'generatingTopic'
+      'awaitingResponse'
     ));
-
-    try {
-      const newTopic = resolveGeneratedTopic(await services.generateTopic({
-        difficulty,
-      }));
-      setResponse('');
-
-      setGameState(startGameState({
-        rootTopic: newTopic.topic,
-        maxRounds,
-        currentPlayerId: getPlayerIdForTurn(initialPlayer),
-        rootCreatedByPlayerId: DEFAULT_AI_PLAYER_ID,
-        rootSubjectCategory: newTopic.subjectCategory,
-      }));
-    } catch (error) {
-      console.error('Error generating topic:', error);
-      setGameState(createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)));
-      alert('Failed to generate topic. Please try again.');
-    }
   };
 
   const completeEvaluatedTurn = useCallback((params: {
@@ -204,10 +200,33 @@ export function useGameController({
   const evaluateTurnResponse = useCallback(async (params: {
     playerId: string;
     responseText: string;
+    destinationSubjectCategory?: GeneratedTopic['subjectCategory'];
     selectedSourceNodeIds?: string[];
     fallbackOnFailure?: boolean;
     clearResponseOnSuccess?: boolean;
   }) => {
+    if (isOpeningTurn) {
+      if (!params.responseText.trim()) return;
+
+      setGameState(prev => {
+        const withOpeningTopic = addOpeningTopicTurnToGameState(prev, {
+          topic: params.responseText.trim(),
+          playerId: params.playerId,
+          subjectCategory: params.destinationSubjectCategory,
+        });
+
+        return setGameStatus(
+          withOpeningTopic,
+          currentRound === maxRounds ? 'completed' : 'showingResults'
+        );
+      });
+
+      if (params.clearResponseOnSuccess) {
+        setResponse('');
+      }
+      return;
+    }
+
     const selectedSourceNodeIds = resolveSubmittedSourceNodeIds(
       {
         nodesById: gameState.nodesById,
@@ -326,6 +345,7 @@ export function useGameController({
     difficulty,
     gameState.activeSourceNodeIds,
     gameState.nodesById,
+    isOpeningTurn,
     maxRounds,
     originalTopic,
     services,
@@ -362,6 +382,7 @@ export function useGameController({
 
   const resetCurrentGame = (currentPlayerId: string) => {
     setResponse('');
+    startedAutomaticTurnKeyRef.current = null;
     setSelectedGraphNodeId(null);
     setGameState(createEmptyGameState(maxRounds, currentPlayerId));
   };
@@ -411,6 +432,7 @@ export function useGameController({
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText,
+          destinationSubjectCategory: submission.destinationSubjectCategory,
           selectedSourceNodeIds: submission.selectedSourceNodeIds,
           fallbackOnFailure: submission.fallbackOnEvaluationFailure,
           clearResponseOnSuccess: submission.clearResponseOnSuccess,

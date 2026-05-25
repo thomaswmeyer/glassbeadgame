@@ -16,6 +16,8 @@ type TurnHistoryTableProps = {
   canSelectHistoryRows: boolean;
   circleEnabled: boolean;
   currentRound: number;
+  currentPlayerKind?: string;
+  currentPlayerName?: string;
   currentSourceTopicText: string;
   currentTopicNodeId: string | null;
   maxRounds: number;
@@ -39,6 +41,8 @@ export default function TurnHistoryTable({
   canSelectHistoryRows,
   circleEnabled,
   currentRound,
+  currentPlayerKind,
+  currentPlayerName,
   currentSourceTopicText,
   currentTopicNodeId,
   maxRounds,
@@ -82,8 +86,8 @@ export default function TurnHistoryTable({
               <td className="py-2 px-4">{currentRound}</td>
               <td className="py-2 px-4 font-medium">{currentSourceTopicText}</td>
               <td className="py-2 px-4">
-                <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                  Current
+                <span className={`px-2 py-1 rounded-full text-xs ${getPlayerBadgeClass(currentPlayerKind)}`}>
+                  {currentPlayerName || 'Player'}
                 </span>
               </td>
               <td className="py-2 px-4 text-gray-400">-</td>

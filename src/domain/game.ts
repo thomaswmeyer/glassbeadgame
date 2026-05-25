@@ -152,6 +152,7 @@ export type CurrentEvaluationView = {
   playerKind: PlayerKind;
   playerName: string;
   finalEvaluation?: string;
+  isOpeningTurn?: boolean;
 };
 
 export type CurrentEvaluationEdgeScore = {
@@ -259,6 +260,60 @@ export function startGameState(params: {
     activeSourceNodeIds: [rootNode.id],
     selectedNodeIds: [rootNode.id],
     gameStatus: 'awaitingResponse',
+  };
+}
+
+export function addOpeningTopicTurnToGameState(
+  state: GameState,
+  params: {
+    topic: string;
+    playerId: string;
+    subjectCategory?: SubjectCategoryId;
+  }
+): GameState {
+  const turnIndex = state.turnOrder.length;
+  const turnId = `turn-${turnIndex}`;
+  const rootNode: TopicNode = {
+    id: state.rootNodeId || DEFAULT_ROOT_NODE_ID,
+    topic: params.topic,
+    definitionVisible: false,
+    createdByPlayerId: params.playerId,
+    createdTurnId: turnId,
+    subjectCategory: params.subjectCategory,
+    isRoot: true,
+  };
+  const zeroScore: Score = {
+    semanticDistance: 0,
+    relevanceQuality: 0,
+    total: 0,
+  };
+  const turn: Turn = {
+    id: turnId,
+    round: state.currentRound,
+    playerId: params.playerId,
+    sourceNodeIds: [],
+    edgeIds: [],
+    destinationNodeId: rootNode.id,
+    evaluation: 'Opening topic. No points are awarded for the first topic.',
+    totalScore: 0,
+    legacyScores: zeroScore,
+    edgeEvaluations: [],
+  };
+
+  return {
+    ...state,
+    nodesById: {
+      ...state.nodesById,
+      [rootNode.id]: rootNode,
+    },
+    rootNodeId: rootNode.id,
+    turnsById: {
+      ...state.turnsById,
+      [turn.id]: turn,
+    },
+    turnOrder: [...state.turnOrder, turn.id],
+    activeSourceNodeIds: [rootNode.id],
+    selectedNodeIds: [rootNode.id],
   };
 }
 
@@ -613,6 +668,8 @@ export function selectTopicNodeIdByTopic(
 }
 
 export function getTurnHistoryRowSourceTopicText(row: TurnHistoryRow) {
+  if (row.sourceNodes.length === 0) return 'Opening topic';
+
   return row.sourceNodes.map(node => node.topic).join(' + ');
 }
 
@@ -676,12 +733,13 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     .filter(Boolean);
   const player = state.playersById[turn.playerId];
   const edgeScores = selectEdgeScoresForTurn(state, turn, sourceNodes);
+  const isOpeningTurn = turn.sourceNodeIds.length === 0 && turn.edgeIds.length === 0;
 
   return {
-    topic: sourceNodes.map(node => node.topic).join(' + '),
+    topic: isOpeningTurn ? 'Opening topic' : sourceNodes.map(node => node.topic).join(' + '),
     response: destinationNode?.topic || '',
     evaluation: turn.evaluation || '',
-    finalEvaluation: turn.finalEvaluation,
+    ...(turn.finalEvaluation ? { finalEvaluation: turn.finalEvaluation } : {}),
     scores: turn.legacyScores || {
       semanticDistance: 0,
       relevanceQuality: 0,
@@ -691,6 +749,7 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     playerId: turn.playerId,
     playerKind: player?.kind || 'local',
     playerName: player?.name || 'Player',
+    ...(isOpeningTurn ? { isOpeningTurn } : {}),
   };
 }
 

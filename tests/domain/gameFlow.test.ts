@@ -30,7 +30,7 @@ const normalizedDefaultScore = {
   total: 56,
 };
 
-test('starts a generated game with an AI-created root topic', async () => {
+test('starts a generated game by recording the generated root as a zero-point opening turn', async () => {
   const calls: unknown[] = [];
   const services = {
     async generateTopic(request) {
@@ -48,12 +48,14 @@ test('starts a generated game with an AI-created root topic', async () => {
   });
 
   assert.deepEqual(calls, [{ difficulty: 'undergrad' }]);
-  assert.equal(state.gameStatus, 'awaitingResponse');
+  assert.equal(state.gameStatus, 'showingResults');
   assert.equal(state.currentPlayerId, DEFAULT_HUMAN_PLAYER_ID);
   assert.equal(selectRootTopic(state), 'Cathedrals');
   assert.deepEqual(state.activeSourceNodeIds, [state.rootNodeId]);
   assert.deepEqual(state.selectedNodeIds, [state.rootNodeId]);
-  assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, DEFAULT_AI_PLAYER_ID);
+  assert.equal(state.nodesById[state.rootNodeId].createdByPlayerId, DEFAULT_HUMAN_PLAYER_ID);
+  assert.equal(state.turnOrder.length, 1);
+  assert.equal(state.turnsById[state.turnOrder[0]].totalScore, 0);
 });
 
 test('applies a turn by evaluating the active source topic with mocked LLM services', async () => {

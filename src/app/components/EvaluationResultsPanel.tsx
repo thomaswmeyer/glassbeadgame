@@ -44,14 +44,20 @@ export default function EvaluationResultsPanel({
 
       <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
         <p className="font-medium text-gray-700">
-          {currentEvaluation.playerName} Response to &quot;{currentEvaluation.topic}&quot;:
+          {currentEvaluation.isOpeningTurn
+            ? `${currentEvaluation.playerName} chose the opening topic:`
+            : `${currentEvaluation.playerName} Response to "${currentEvaluation.topic}":`}
         </p>
         <p className="mt-1 text-lg">{currentEvaluation.response}</p>
       </div>
 
       <div className="whitespace-pre-wrap">{currentEvaluation.evaluation}</div>
 
-      {!isFinalCircleRound && (
+      {currentEvaluation.isOpeningTurn ? (
+        <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200 text-sm text-blue-900">
+          Opening topic turns create the root node and award 0 points.
+        </div>
+      ) : !isFinalCircleRound && (
         <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
           <h4 className="font-medium text-blue-800 text-sm">Score Breakdown:</h4>
           {hasMultipleScoreEdges ? (
@@ -74,7 +80,7 @@ export default function EvaluationResultsPanel({
         </div>
       )}
 
-      {isFinalCircleRound && currentEvaluation.finalEvaluation && (
+      {!currentEvaluation.isOpeningTurn && isFinalCircleRound && currentEvaluation.finalEvaluation && (
         <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
           <h4 className="font-medium text-blue-800">Connection to Original Topic</h4>
           <p>{currentEvaluation.finalEvaluation}</p>

@@ -1,11 +1,11 @@
 import {
-  DEFAULT_AI_PLAYER_ID,
   GameState,
   Score,
+  addOpeningTopicTurnToGameState,
   addTurnToGameState,
+  createEmptyGameState,
   selectTurnHistoryRows,
   setGameStatus,
-  startGameState,
 } from './game';
 import {
   SourceTurnEvaluation,
@@ -133,13 +133,14 @@ export async function startGeneratedGame(params: {
     difficulty: params.difficulty,
   }));
 
-  return startGameState({
-    rootTopic: rootTopicResult.topic,
-    maxRounds: params.maxRounds,
-    currentPlayerId: params.currentPlayerId,
-    rootCreatedByPlayerId: params.rootCreatedByPlayerId || DEFAULT_AI_PLAYER_ID,
-    rootSubjectCategory: rootTopicResult.subjectCategory,
-  });
+  return setGameStatus(addOpeningTopicTurnToGameState(createEmptyGameState(
+    params.maxRounds,
+    params.currentPlayerId
+  ), {
+    topic: rootTopicResult.topic,
+    playerId: params.currentPlayerId,
+    subjectCategory: rootTopicResult.subjectCategory,
+  }), 'showingResults');
 }
 
 export async function evaluateAndApplyTurn(params: {

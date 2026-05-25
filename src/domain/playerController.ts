@@ -4,6 +4,7 @@ import {
   TopicNode,
 } from './game';
 import { DifficultyLevel, TurnContextHistoryItem } from './gameFlow';
+import { SubjectCategoryId } from './subjectCategories';
 
 export type PlayerControllerMode = 'manual' | 'automatic';
 
@@ -22,6 +23,7 @@ export type PlayerTurnContext = {
 
 export type PlayerTurnSubmission = {
   responseText: string;
+  destinationSubjectCategory?: SubjectCategoryId;
   selectedSourceNodeIds?: string[];
   fallbackOnEvaluationFailure?: boolean;
   clearResponseOnSuccess?: boolean;
