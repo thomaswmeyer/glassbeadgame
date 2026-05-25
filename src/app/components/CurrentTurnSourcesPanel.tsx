@@ -8,6 +8,7 @@ type CurrentTurnSourcesPanelProps = {
   maxRounds: number;
   playerScoreRows: PlayerScoreRow[];
   isGeneratingTopic: boolean;
+  isSourceSelectionLocked: boolean;
   isDefinitionLoading: (nodeId: string) => boolean;
   onFetchDefinition: (nodeId: string, topic: string) => void | Promise<unknown>;
   onRemoveSource: (nodeId: string) => void;
@@ -28,6 +29,7 @@ export default function CurrentTurnSourcesPanel({
   maxRounds,
   playerScoreRows,
   isGeneratingTopic,
+  isSourceSelectionLocked,
   isDefinitionLoading,
   onFetchDefinition,
   onRemoveSource,
@@ -91,7 +93,8 @@ export default function CurrentTurnSourcesPanel({
                   {canRemoveSource && (
                     <button
                       onClick={() => onRemoveSource(node.id)}
-                      className="h-6 w-6 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 leading-none"
+                      disabled={isSourceSelectionLocked}
+                      className="h-6 w-6 rounded-full bg-gray-100 hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 text-gray-700 leading-none"
                       title="Remove source"
                     >
                       -

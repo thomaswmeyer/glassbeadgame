@@ -97,12 +97,13 @@ export default function GameInterface() {
   const hasBranchedSourceSelection = selectHasBranchedSourceSelection(gameState);
   const { localPlayerName, aiPlayerName } = selectSetupPlayerNames(playerScoreRows);
   const activeSourceRows = selectActiveSourceRows(gameState);
+  const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const productionModelName = LLM_CONFIG.models[
     LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models
   ].displayName;
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
-    if (showingResults || isEvaluating || isAiThinking || gameCompleted) {
+    if (sourceSelectionLocked) {
       // Don't allow selection during evaluation or when showing results
       return;
     }
@@ -129,12 +130,22 @@ export default function GameInterface() {
   };
 
   const handleGraphNodeClick = (nodeId: string) => {
-    if (isEvaluating || isAiThinking || gameCompleted) {
+    if (sourceSelectionLocked) {
       return;
     }
 
     setSelectedGraphNodeId(nodeId);
     setGameState(prev => setSingleActiveSourceNode(prev, nodeId));
+  };
+
+  const handleAddSourceNode = (nodeId: string) => {
+    if (sourceSelectionLocked) return;
+    setGameState(prev => addActiveSourceNode(prev, nodeId));
+  };
+
+  const handleRemoveSourceNode = (nodeId: string) => {
+    if (sourceSelectionLocked) return;
+    setGameState(prev => removeActiveSourceNode(prev, nodeId));
   };
 
   // Function to handle showing the tooltip
@@ -213,9 +224,10 @@ export default function GameInterface() {
               maxRounds={maxRounds}
               playerScoreRows={playerScoreRows}
               isGeneratingTopic={isGeneratingTopic}
+              isSourceSelectionLocked={sourceSelectionLocked}
               isDefinitionLoading={isDefinitionLoading}
               onFetchDefinition={(nodeId, topic) => fetchDefinition({ nodeId, topic })}
-              onRemoveSource={(nodeId) => setGameState(prev => removeActiveSourceNode(prev, nodeId))}
+              onRemoveSource={handleRemoveSourceNode}
             />
 
             {!showingResults ? (
@@ -248,7 +260,7 @@ export default function GameInterface() {
             {gameStarted && (
               <TurnHistoryTable
                 activeSourceNodeIds={gameState.activeSourceNodeIds}
-                canSelectHistoryRows={!showingResults && !isEvaluating && !isAiThinking && !gameCompleted}
+                canSelectHistoryRows={!sourceSelectionLocked}
                 circleEnabled={circleEnabled}
                 currentRound={currentRound}
                 currentSourceTopicText={currentSourceTopicText}
@@ -278,9 +290,10 @@ export default function GameInterface() {
               edges={graphRenderData.edges}
               width={450}
               height={500}
+              interactionsDisabled={sourceSelectionLocked}
               onNodeClick={handleGraphNodeClick}
-              onAddSourceNode={(nodeId) => setGameState(prev => addActiveSourceNode(prev, nodeId))}
-              onRemoveSourceNode={(nodeId) => setGameState(prev => removeActiveSourceNode(prev, nodeId))}
+              onAddSourceNode={handleAddSourceNode}
+              onRemoveSourceNode={handleRemoveSourceNode}
             />
           </div>
         </div>

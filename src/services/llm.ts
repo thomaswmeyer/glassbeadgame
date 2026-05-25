@@ -7,6 +7,8 @@ import type {
 } from 'openai/resources/chat/completions';
 import { LLM_CONFIG, currentModelConfig } from '@/config/llm';
 import {
+  AiSourceSelectionMode,
+  AiResponsePromptNode,
   LegacyAiGameHistoryItem,
   buildAiResponsePrompt,
   buildDefinitionPrompt,
@@ -275,13 +277,19 @@ export async function getAiResponse(
   gameHistory: LegacyAiGameHistoryItem[],
   difficulty: string,
   circleEnabled: boolean,
-  isFinalRound: boolean
+  isFinalRound: boolean,
+  availableNodes: AiResponsePromptNode[] = [],
+  selectedSourceNodeIds: string[] = [],
+  sourceSelectionMode: AiSourceSelectionMode = 'suggested'
 ): Promise<string> {
   console.log('=== GET AI RESPONSE API CALL ===');
   console.log('Current model config:', JSON.stringify(currentModelConfig));
 
   const { systemPrompt, userMessage } = buildAiResponsePrompt({
     topic,
+    availableNodes,
+    selectedSourceNodeIds,
+    sourceSelectionMode,
     originalTopic,
     gameHistory: gameHistory || [],
     difficulty,
@@ -297,6 +305,7 @@ export async function getAiResponse(
       maxTokens: LLM_CONFIG.maxTokens.response,
       temperature: LLM_CONFIG.temperature.creative,
       fallbackText: 'Connection not found',
+      responseJson: true,
     });
   } catch (error) {
     console.error('Error getting AI response:', error);

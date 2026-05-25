@@ -25,11 +25,16 @@ interface GraphData {
   edges: SimulationEdge[];
 }
 
+const BACKGROUND_ALPHA_TARGET = 0.018;
+const DATA_CHANGE_ALPHA_TARGET = 0.06;
+const INTERACTION_ALPHA_TARGET = 0.12;
+
 interface SimpleConceptGraphProps {
   nodes: GraphRenderNode[];
   edges: GraphRenderEdge[];
   width?: number;
   height?: number;
+  interactionsDisabled?: boolean;
   onNodeClick: (nodeId: string) => void;
   onAddSourceNode: (nodeId: string) => void;
   onRemoveSourceNode: (nodeId: string) => void;
@@ -56,6 +61,7 @@ export default function SimpleConceptGraph({
   edges,
   width = 800,
   height = 600,
+  interactionsDisabled = false,
   onNodeClick,
   onAddSourceNode,
   onRemoveSourceNode,
@@ -69,16 +75,21 @@ export default function SimpleConceptGraph({
   const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
   const positionsRef = useRef<Map<string, GraphPosition>>(new Map());
   const hoveredNodeIdRef = useRef<string | null>(null);
+  const isDraggingNodeRef = useRef(false);
+  const draggedNodeIdRef = useRef<string | null>(null);
+  const didDragNodeRef = useRef(false);
+  const interactionsDisabledRef = useRef(interactionsDisabled);
   const onNodeClickRef = useRef(onNodeClick);
   const onAddSourceNodeRef = useRef(onAddSourceNode);
   const onRemoveSourceNodeRef = useRef(onRemoveSourceNode);
   const [dimensions, setDimensions] = useState({ width, height });
 
   useEffect(() => {
+    interactionsDisabledRef.current = interactionsDisabled;
     onNodeClickRef.current = onNodeClick;
     onAddSourceNodeRef.current = onAddSourceNode;
     onRemoveSourceNodeRef.current = onRemoveSourceNode;
-  }, [onAddSourceNode, onNodeClick, onRemoveSourceNode]);
+  }, [interactionsDisabled, onAddSourceNode, onNodeClick, onRemoveSourceNode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -113,7 +124,7 @@ export default function SimpleConceptGraph({
 
   const fitGraphToViewport = useCallback((duration = 450) => {
     const viewport = viewportRef.current;
-    if (!viewport || graphData.nodes.length === 0) return;
+    if (!viewport || graphData.nodes.length === 0 || isDraggingNodeRef.current) return;
 
     const transform = calculateGraphViewportTransform({
       nodes: graphData.nodes,
@@ -123,6 +134,7 @@ export default function SimpleConceptGraph({
     if (!transform) return;
 
     d3.select(viewport)
+      .interrupt()
       .transition()
       .duration(duration)
       .ease(d3.easeCubicOut)
@@ -170,7 +182,7 @@ export default function SimpleConceptGraph({
             .append('circle')
             .attr('r', 0)
             .attr('fill', node => node.color)
-            .style('cursor', 'pointer')
+            .style('cursor', interactionsDisabled ? 'default' : 'grab')
             .on('mouseenter', (_event, node) => {
               hoveredNodeIdRef.current = node.id;
               updateNodeStyles();
@@ -180,12 +192,16 @@ export default function SimpleConceptGraph({
               updateNodeStyles();
             })
             .on('click', (_event, node) => {
+              if (draggedNodeIdRef.current === node.id) return;
+              if (interactionsDisabledRef.current) return;
               onNodeClickRef.current(node.id);
             })
             .call(enterSelection =>
               enterSelection.transition().duration(180).attr('r', node => node.radius)
             ),
-        update => update.attr('fill', node => node.color),
+        update => update
+          .attr('fill', node => node.color)
+          .style('cursor', interactionsDisabled ? 'default' : 'grab'),
         exit => exit.transition().duration(120).attr('r', 0).remove()
       );
 
@@ -216,13 +232,16 @@ export default function SimpleConceptGraph({
     actions
       .on('click', (event, node) => {
         event.stopPropagation();
+        if (interactionsDisabledRef.current) return;
         if (node.isActiveSource && activeSourceCount > 1) {
           onRemoveSourceNodeRef.current(node.id);
         } else if (!node.isActiveSource) {
           onAddSourceNodeRef.current(node.id);
         }
       })
-      .style('display', node => (node.isActiveSource && activeSourceCount <= 1 ? 'none' : 'block'))
+      .style('display', node => (
+        interactionsDisabled || (node.isActiveSource && activeSourceCount <= 1) ? 'none' : 'block'
+      ))
       .select('text')
       .text(node => (node.isActiveSource ? '-' : '+'));
 
@@ -249,6 +268,59 @@ export default function SimpleConceptGraph({
           .style('pointer-events', 'none'),
         exit => exit.remove()
       );
+
+    const nodeDrag = d3
+      .drag<SVGCircleElement, SimulationNode>()
+      .clickDistance(4)
+      .on('start', (event, node) => {
+        if (interactionsDisabledRef.current) return;
+
+        isDraggingNodeRef.current = true;
+        didDragNodeRef.current = false;
+        draggedNodeIdRef.current = null;
+        d3.select(viewportRef.current).interrupt();
+
+        if (!event.active) {
+          simulationRef.current?.alphaTarget(INTERACTION_ALPHA_TARGET).restart();
+        }
+
+        node.fx = node.x ?? dimensions.width / 2;
+        node.fy = node.y ?? dimensions.height / 2;
+      })
+      .on('drag', (event, node) => {
+        if (interactionsDisabledRef.current) return;
+
+        didDragNodeRef.current = true;
+        node.fx = event.x;
+        node.fy = event.y;
+        positionsRef.current.set(node.id, {
+          x: event.x,
+          y: event.y,
+        });
+      })
+      .on('end', (event, node) => {
+        if (interactionsDisabledRef.current) return;
+
+        isDraggingNodeRef.current = false;
+        node.fx = null;
+        node.fy = null;
+
+        if (!event.active) {
+          simulationRef.current?.alphaTarget(BACKGROUND_ALPHA_TARGET).restart();
+        }
+
+        if (didDragNodeRef.current) {
+          draggedNodeIdRef.current = node.id;
+          window.setTimeout(() => {
+            if (draggedNodeIdRef.current === node.id) {
+              draggedNodeIdRef.current = null;
+            }
+          }, 0);
+          window.setTimeout(() => fitGraphToViewport(450), 80);
+        }
+      });
+
+    renderedNodes.call(nodeDrag);
 
     function updateNodeStyles() {
       renderedNodes
@@ -330,9 +402,9 @@ export default function SimpleConceptGraph({
       );
     });
 
-    simulation.alphaTarget(0.08).restart();
+    simulation.alphaTarget(DATA_CHANGE_ALPHA_TARGET).restart();
     const coolTimer = window.setTimeout(() => {
-      simulation?.alphaTarget(0);
+      simulation?.alphaTarget(BACKGROUND_ALPHA_TARGET).restart();
     }, 450);
     const fitTimer = window.setTimeout(() => fitGraphToViewport(500), 120);
 
@@ -340,7 +412,7 @@ export default function SimpleConceptGraph({
       window.clearTimeout(coolTimer);
       window.clearTimeout(fitTimer);
     };
-  }, [activeSourceCount, dimensions.height, dimensions.width, fitGraphToViewport, graphData]);
+  }, [activeSourceCount, dimensions.height, dimensions.width, fitGraphToViewport, graphData, interactionsDisabled]);
 
   useEffect(() => {
     return () => {

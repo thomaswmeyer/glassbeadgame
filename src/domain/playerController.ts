@@ -1,6 +1,7 @@
 import {
   GameState,
   Player,
+  TopicNode,
 } from './game';
 import { DifficultyLevel, TurnContextHistoryItem } from './gameFlow';
 
@@ -10,6 +11,8 @@ export type PlayerTurnContext = {
   state: GameState;
   player: Player;
   topic: string;
+  availableNodes: TopicNode[];
+  selectedSourceNodeIds: string[];
   originalTopic: string;
   difficulty: DifficultyLevel;
   circleEnabled: boolean;
@@ -19,6 +22,7 @@ export type PlayerTurnContext = {
 
 export type PlayerTurnSubmission = {
   responseText: string;
+  selectedSourceNodeIds?: string[];
   fallbackOnEvaluationFailure?: boolean;
   clearResponseOnSuccess?: boolean;
 };
@@ -55,6 +59,16 @@ export function shouldAutoSubmitTurn(
     controller.mode === 'automatic' &&
     typeof controller.submitTurn === 'function'
   );
+}
+
+export function resolveSubmittedSourceNodeIds(
+  state: Pick<GameState, 'nodesById' | 'activeSourceNodeIds'>,
+  submission: Pick<PlayerTurnSubmission, 'selectedSourceNodeIds'>
+) {
+  const validNodeIds = (submission.selectedSourceNodeIds || [])
+    .filter((nodeId, index, nodeIds) => Boolean(state.nodesById[nodeId]) && nodeIds.indexOf(nodeId) === index);
+
+  return validNodeIds.length > 0 ? validNodeIds : state.activeSourceNodeIds;
 }
 
 export function createTurnExecutionKey(state: GameState) {

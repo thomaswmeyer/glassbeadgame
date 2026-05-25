@@ -11,6 +11,7 @@ import {
   createDefaultPlayerController,
   createTurnExecutionKey,
   resolvePlayerController,
+  resolveSubmittedSourceNodeIds,
   shouldAutoSubmitTurn,
   type PlayerTurnController,
 } from '../../src/domain/playerController';
@@ -62,11 +63,14 @@ test('explicit player controllers override the default controller for that playe
   };
 
   const resolved = resolvePlayerController(aiPlayer, [controller]);
+  const state = stateFor(aiPlayer);
   assert.equal(resolved, controller);
   assert.deepEqual(await resolved.submitTurn?.({
-    state: stateFor(aiPlayer),
+    state,
     player: aiPlayer,
     topic: 'Cathedrals',
+    availableNodes: Object.values(state.nodesById),
+    selectedSourceNodeIds: [state.rootNodeId],
     originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
     circleEnabled: false,
@@ -93,6 +97,24 @@ test('automatic turn submission requires awaiting response, matching player, aut
   assert.equal(shouldAutoSubmitTurn(state, aiPlayer, { ...controller, playerId: DEFAULT_HUMAN_PLAYER_ID }), false);
   assert.equal(shouldAutoSubmitTurn(state, aiPlayer, { ...controller, mode: 'manual' }), false);
   assert.equal(shouldAutoSubmitTurn(state, aiPlayer, { playerId: aiPlayer.id, mode: 'automatic' }), false);
+});
+
+test('automatic player source selections are validated against the current graph', () => {
+  const state = stateFor(aiPlayer);
+  const withTurn = addTurnToGameState(state, {
+    destinationTopic: 'Flying buttresses',
+    playerId: localPlayer.id,
+    sourceNodeIds: [state.rootNodeId],
+  });
+  const firstTurn = withTurn.turnsById[withTurn.turnOrder[0]];
+
+  assert.deepEqual(resolveSubmittedSourceNodeIds(withTurn, {
+    selectedSourceNodeIds: [firstTurn.destinationNodeId, state.rootNodeId, firstTurn.destinationNodeId, 'missing'],
+  }), [firstTurn.destinationNodeId, state.rootNodeId]);
+  assert.deepEqual(resolveSubmittedSourceNodeIds(withTurn, {
+    selectedSourceNodeIds: ['missing'],
+  }), withTurn.activeSourceNodeIds);
+  assert.deepEqual(resolveSubmittedSourceNodeIds(withTurn, {}), withTurn.activeSourceNodeIds);
 });
 
 test('turn execution keys change when round, current player, or turn count changes', () => {

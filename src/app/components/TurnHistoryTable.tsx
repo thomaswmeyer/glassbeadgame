@@ -74,8 +74,10 @@ export default function TurnHistoryTable({
           <tbody>
             <tr
               key="current-topic"
-              onClick={onCurrentTopicClick}
-              className={`border-t cursor-pointer ${isCurrentTopicSelected ? 'bg-purple-50' : 'bg-green-50 hover:bg-green-100'}`}
+              onClick={() => {
+                if (canSelectHistoryRows) onCurrentTopicClick();
+              }}
+              className={`border-t ${canSelectHistoryRows ? 'cursor-pointer' : 'cursor-default'} ${isCurrentTopicSelected ? 'bg-purple-50' : 'bg-green-50 hover:bg-green-100'}`}
             >
               <td className="py-2 px-4">{currentRound}</td>
               <td className="py-2 px-4 font-medium">{currentSourceTopicText}</td>
@@ -105,8 +107,10 @@ export default function TurnHistoryTable({
                 return (
                   <tr
                     key={round.turn.id}
-                    onClick={() => onHistoryTopicClick(topicText, historyIndex)}
-                    className={`border-t cursor-pointer ${isTopicSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => {
+                      if (canSelectHistoryRows) onHistoryTopicClick(topicText, historyIndex);
+                    }}
+                    className={`border-t ${canSelectHistoryRows ? 'cursor-pointer' : 'cursor-default'} ${isTopicSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
                   >
                     <td className="py-2 px-4">{round.turn.round}</td>
                     <td className="py-2 px-4">{topicText}</td>

@@ -51,6 +51,11 @@ test('definition prompt asks for concise complete definitions only', () => {
 test('ai response prompt switches to final-round circle instructions when needed', () => {
   const prompt = buildAiResponsePrompt({
     topic: 'Fugue',
+    availableNodes: [
+      { id: 'root', topic: 'Cathedral', isCurrentSource: false },
+      { id: 'node-1', topic: 'Fugue', isCurrentSource: true },
+    ],
+    selectedSourceNodeIds: ['node-1'],
     originalTopic: 'Cathedral',
     gameHistory: [{ topic: 'Root', response: 'Echo', player: 'ai' }],
     difficulty: 'undergrad',
@@ -60,9 +65,34 @@ test('ai response prompt switches to final-round circle instructions when needed
   });
 
   assert.match(prompt.systemPrompt, /FINAL ROUND/);
+  assert.match(prompt.systemPrompt, /selectedSourceNodeIds/);
+  assert.match(prompt.systemPrompt, /sum\(edgeScores\) \/ sqrt\(N\)/);
   assert.match(prompt.systemPrompt, /Cathedral/);
   assert.match(prompt.systemPrompt, /Avoid these previously used responses: Echo/);
+  assert.match(prompt.userMessage, /id: node-1; topic: "Fugue"; currently selected/);
   assert.match(prompt.userMessage, /connects to BOTH/);
+});
+
+test('free ai source selection prompt does not suggest the current UI selection', () => {
+  const prompt = buildAiResponsePrompt({
+    topic: 'Fugue',
+    availableNodes: [
+      { id: 'root', topic: 'Cathedral', isCurrentSource: false },
+      { id: 'node-1', topic: 'Fugue', isCurrentSource: true },
+    ],
+    selectedSourceNodeIds: ['node-1'],
+    sourceSelectionMode: 'free',
+    originalTopic: 'Cathedral',
+    gameHistory: [],
+    difficulty: 'undergrad',
+    circleEnabled: false,
+    isFinalRound: false,
+    timestamp: 'seed',
+  });
+
+  assert.match(prompt.userMessage, /There is no required current topic/);
+  assert.match(prompt.userMessage, /No source node is preselected for you/);
+  assert.doesNotMatch(prompt.userMessage, /currently selected/);
 });
 
 test('evaluation prompt uses final-round JSON schema only when original topic is present', () => {

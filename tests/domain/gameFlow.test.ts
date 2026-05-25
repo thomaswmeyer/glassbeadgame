@@ -319,6 +319,15 @@ test('AI response generation uses graph context and falls back for empty respons
   assert.equal(response, 'Response to Cathedrals');
   assert.deepEqual(calls, [{
     topic: 'Cathedrals',
+    availableNodes: [{
+      id: state.rootNodeId,
+      topic: 'Cathedrals',
+      definition: undefined,
+      subjectCategory: undefined,
+      isCurrentSource: false,
+    }],
+    selectedSourceNodeIds: [],
+    sourceSelectionMode: 'free',
     originalTopic: 'Cathedrals',
     difficulty: 'secondary',
     circleEnabled: true,
@@ -374,6 +383,24 @@ test('AI response generation sends player-neutral turn context with multi-source
   assert.equal(response, 'Sacred geometry');
   assert.deepEqual(calls, [{
     topic: 'Cathedrals + Flying buttresses',
+    availableNodes: [
+      {
+        id: rootState.rootNodeId,
+        topic: 'Cathedrals',
+        definition: undefined,
+        subjectCategory: undefined,
+        isCurrentSource: false,
+      },
+      {
+        id: firstTurn.destinationNodeId,
+        topic: 'Flying buttresses',
+        definition: undefined,
+        subjectCategory: undefined,
+        isCurrentSource: false,
+      },
+    ],
+    selectedSourceNodeIds: [],
+    sourceSelectionMode: 'free',
     originalTopic: 'Cathedrals',
     difficulty: 'grad',
     circleEnabled: false,

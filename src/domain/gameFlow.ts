@@ -15,6 +15,7 @@ import {
   normalizeScore,
 } from './turnScoring';
 import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategories';
+import type { AiSourceSelectionMode } from './llmPrompts';
 
 export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
@@ -66,6 +67,15 @@ export type TurnContextHistoryItem = {
 
 export type GenerateAiResponseRequest = {
   topic: string;
+  availableNodes: {
+    id: string;
+    topic: string;
+    definition?: string;
+    subjectCategory?: string;
+    isCurrentSource: boolean;
+  }[];
+  selectedSourceNodeIds: string[];
+  sourceSelectionMode: AiSourceSelectionMode;
   originalTopic: string;
   difficulty: DifficultyLevel;
   circleEnabled: boolean;
@@ -216,6 +226,15 @@ export async function generateAiResponseForCurrentTurn(params: {
   const topic = selectCurrentSourceTopicText(params.state);
   const response = await params.services.generateAiResponse({
     topic,
+    availableNodes: Object.values(params.state.nodesById).map(node => ({
+      id: node.id,
+      topic: node.topic,
+      definition: node.definition,
+      subjectCategory: node.subjectCategory,
+      isCurrentSource: false,
+    })),
+    selectedSourceNodeIds: [],
+    sourceSelectionMode: 'free',
     originalTopic: params.originalTopic,
     difficulty: params.difficulty,
     circleEnabled: params.circleEnabled,

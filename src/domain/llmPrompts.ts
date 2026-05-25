@@ -7,6 +7,16 @@ export type LegacyAiGameHistoryItem = {
   player: 'human' | 'ai';
 };
 
+export type AiResponsePromptNode = {
+  id: string;
+  topic: string;
+  definition?: string;
+  subjectCategory?: string;
+  isCurrentSource?: boolean;
+};
+
+export type AiSourceSelectionMode = 'suggested' | 'free';
+
 export const difficultyPrompts = {
   secondary: 'Use familiar high school level concepts and vocabulary. Prefer concepts commonly taught in secondary school or widely understood from everyday life. Do not use named theorems, conjectures, graduate mathematics, specialized academic terminology, obscure references, or research-level ideas. If the category is mathematics, use topics like symmetry, fractions, probability, triangles, graphs, prime numbers, or ratios rather than advanced named results.',
   undergrad: 'Use concepts appropriate for a broadly educated undergraduate student. Favor recognizable survey-course ideas, canonical works, and standard concepts. Avoid niche graduate-level mathematics, highly specialized technical terms, and obscure research terminology.',
@@ -84,6 +94,9 @@ export function buildDefinitionPrompt(topic: string): LlmPrompt {
 
 export function buildAiResponsePrompt(params: {
   topic: string;
+  availableNodes?: AiResponsePromptNode[];
+  selectedSourceNodeIds?: string[];
+  sourceSelectionMode?: AiSourceSelectionMode;
   originalTopic: string;
   gameHistory: LegacyAiGameHistoryItem[];
   difficulty: string;
@@ -93,19 +106,36 @@ export function buildAiResponsePrompt(params: {
 }): LlmPrompt {
   const { historyContext, responsesToAvoid } = getAiHistoryContext(params.gameHistory);
   const difficultyPrompt = difficultyPrompts[params.difficulty as keyof typeof difficultyPrompts];
+  const sourceSelectionPrompt = getAiSourceSelectionPrompt(
+    params.availableNodes || [],
+    params.selectedSourceNodeIds || [],
+    params.sourceSelectionMode || 'suggested'
+  );
+  const hasFreeSourceSelection = (params.sourceSelectionMode || 'suggested') === 'free';
+  const sourceTaskDescription = hasFreeSourceSelection
+    ? 'choose one or more source nodes from the board'
+    : 'respond to the current topic';
+  const sourceContextDescription = hasFreeSourceSelection
+    ? 'There is no required current topic. You have complete freedom to choose any one or more source nodes from the available list.'
+    : `Current topic: "${params.topic}"`;
 
   if (params.isFinalRound && params.circleEnabled) {
     return {
       systemPrompt: `You are playing the Glass Bead Game, a game of conceptual connections. 
         
-        This is the FINAL ROUND of the game. Your task is to respond to the current topic with a brief, thoughtful response 
+        This is the FINAL ROUND of the game. Your task is to ${sourceTaskDescription} and give a brief, thoughtful response
         that connects to BOTH:
-        1. The current topic: "${params.topic}"
+        1. Your selected source topic or topics
         2. The original starting topic: "${params.originalTopic}"
         
         Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
         This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
         
+        You must choose one or more source nodes for this move. Each selected source creates a separate edge
+        to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,
+        the turn score is round(sum(edgeScores) / sqrt(N)), so multiple sources can help only when each connection
+        is meaningful.
+
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
         - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
@@ -129,25 +159,37 @@ export function buildAiResponsePrompt(params: {
         - Natural world
         - Abstract concepts
         
-        DO NOT explain your reasoning. ONLY provide the brief response itself - a single word or short phrase.`,
+        IMPORTANT: Your response MUST be valid JSON with this structure:
+        {
+          "selectedSourceNodeIds": ["one or more node ids from the available list"],
+          "responseText": "your brief new topic"
+        }
+
+        Do not include any text before or after the JSON. Only return the JSON object.`,
       userMessage: `${historyContext}
         
-        Current topic: "${params.topic}"
+        ${sourceContextDescription}
         Original starting topic: "${params.originalTopic}"
+        ${sourceSelectionPrompt}
         
-        This is the FINAL ROUND. Please provide your brief response (1-5 words maximum) that connects to BOTH the current topic AND the original starting topic at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
+        This is the FINAL ROUND. Please choose source nodes and provide your brief response (1-5 words maximum) that connects to BOTH the selected source topic or topics AND the original starting topic at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
     };
   }
 
   return {
     systemPrompt: `You are playing the Glass Bead Game, a game of conceptual connections. 
         
-        Your task is to respond to the current topic with a brief, thoughtful response that creates 
+        Your task is to ${sourceTaskDescription} and give a brief, thoughtful response that creates
         an interesting conceptual connection. Your response will become the next topic in the game.
         
         Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
         This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
         
+        You must choose one or more source nodes for this move. Each selected source creates a separate edge
+        to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,
+        the turn score is round(sum(edgeScores) / sqrt(N)), so multiple sources can help only when each connection
+        is meaningful.
+
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
         - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
@@ -171,13 +213,52 @@ export function buildAiResponsePrompt(params: {
         - Natural world
         - Abstract concepts
         
-        DO NOT explain your reasoning. ONLY provide the brief response itself - a single word or short phrase.`,
+        IMPORTANT: Your response MUST be valid JSON with this structure:
+        {
+          "selectedSourceNodeIds": ["one or more node ids from the available list"],
+          "responseText": "your brief new topic"
+        }
+
+        Do not include any text before or after the JSON. Only return the JSON object.`,
     userMessage: `${historyContext}
         
-        Current topic: "${params.topic}"
+        ${sourceContextDescription}
+        ${sourceSelectionPrompt}
         
-        Please provide your brief response (1-5 words maximum) to this topic at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
+        Please choose source nodes and provide your brief response (1-5 words maximum) at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
   };
+}
+
+function getAiSourceSelectionPrompt(
+  availableNodes: AiResponsePromptNode[],
+  selectedSourceNodeIds: string[],
+  sourceSelectionMode: AiSourceSelectionMode
+) {
+  if (availableNodes.length === 0) return '';
+
+  const selectedNodeIds = new Set(selectedSourceNodeIds);
+  const shouldMarkCurrentSources = sourceSelectionMode === 'suggested';
+  const nodeList = availableNodes.map(node => {
+    const details = [
+      `id: ${node.id}`,
+      `topic: "${node.topic}"`,
+      node.subjectCategory ? `subject: ${node.subjectCategory}` : '',
+      shouldMarkCurrentSources && (selectedNodeIds.has(node.id) || node.isCurrentSource) ? 'currently selected' : '',
+      node.definition ? `definition: ${node.definition}` : '',
+    ].filter(Boolean);
+
+    return `- ${details.join('; ')}`;
+  }).join('\n');
+  const selectionInstruction = sourceSelectionMode === 'free'
+    ? 'No source node is preselected for you. Choose freely from the full list based on the strongest move you can make, not recency or UI selection.'
+    : 'You may keep the currently selected source, replace it with another node, or select multiple nodes.';
+
+  return `
+        Available source nodes:
+${nodeList}
+
+        ${selectionInstruction}
+        Only choose node ids from this list.`;
 }
 
 export function buildEvaluationPrompt(params: {

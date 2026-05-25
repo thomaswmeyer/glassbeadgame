@@ -6,7 +6,16 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const { topic, originalTopic, gameHistory, difficulty, circleEnabled } = body;
+    const {
+      topic,
+      originalTopic,
+      gameHistory,
+      difficulty,
+      circleEnabled,
+      availableNodes,
+      selectedSourceNodeIds,
+      sourceSelectionMode,
+    } = body;
     
     console.log('Request body received:', {
       topic,
@@ -34,7 +43,10 @@ export async function POST(request: Request) {
         gameHistory || [],
         difficulty,
         circleEnabled || false,
-        true // Is final round
+        true, // Is final round
+        availableNodes || [],
+        selectedSourceNodeIds || [],
+        sourceSelectionMode || 'suggested'
       );
       
       console.log('AI final response generated successfully');
@@ -51,4 +63,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

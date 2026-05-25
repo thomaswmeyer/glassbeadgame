@@ -8,6 +8,11 @@ export type LlmEvaluationResponse = {
   scores: Score;
 };
 
+export type LlmAiMoveResponse = {
+  selectedSourceNodeIds: string[];
+  responseText: string;
+};
+
 type ParseEvaluationOptions = {
   isFinalRound?: boolean;
 };
@@ -89,11 +94,51 @@ export function parseEvaluationResponse(
   }
 }
 
+export function parseAiMoveResponse(responseText: string): LlmAiMoveResponse | null {
+  try {
+    return normalizeAiMoveResponse(JSON.parse(responseText));
+  } catch {
+    const jsonString = extractLongestJsonObject(responseText);
+    if (!jsonString) return null;
+
+    try {
+      return normalizeAiMoveResponse(JSON.parse(jsonString));
+    } catch {
+      try {
+        return normalizeAiMoveResponse(JSON.parse(repairCommonJsonIssues(jsonString)));
+      } catch {
+        return null;
+      }
+    }
+  }
+}
+
 function parseJsonObject(text: string): LlmEvaluationResponse {
   const parsed = JSON.parse(text) as LlmEvaluationResponse;
   return {
     ...parsed,
     destinationSubjectCategory: normalizeSubjectCategoryId(parsed.destinationSubjectCategory),
+  };
+}
+
+function normalizeAiMoveResponse(value: unknown): LlmAiMoveResponse | null {
+  if (typeof value !== 'object' || value === null) return null;
+
+  const record = value as Record<string, unknown>;
+  const selectedSourceNodeIds = Array.isArray(record.selectedSourceNodeIds)
+    ? record.selectedSourceNodeIds.filter((nodeId): nodeId is string => typeof nodeId === 'string')
+    : [];
+  const responseText = typeof record.responseText === 'string'
+    ? record.responseText
+    : typeof record.destinationTopic === 'string'
+      ? record.destinationTopic
+      : '';
+
+  if (!responseText.trim()) return null;
+
+  return {
+    selectedSourceNodeIds,
+    responseText,
   };
 }
 

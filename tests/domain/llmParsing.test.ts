@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   fallbackEvaluationResponse,
+  parseAiMoveResponse,
   parseEvaluationResponse,
   trimIncompleteTrailingSentence,
 } from '../../src/domain/llmParsing';
@@ -65,4 +66,21 @@ test('evaluation parser returns final-round fallback shape on invalid final JSON
   assert.deepEqual(parsed, fallback);
   assert.equal(parsed.finalEvaluation, 'Error parsing the evaluation.');
   assert.equal(parsed.scores.currentConnection?.subtotal, 25);
+});
+
+test('ai move parser accepts selected sources and response topic JSON', () => {
+  assert.deepEqual(parseAiMoveResponse(JSON.stringify({
+    selectedSourceNodeIds: ['root', 'node-1'],
+    responseText: 'Rosetta Stone',
+  })), {
+    selectedSourceNodeIds: ['root', 'node-1'],
+    responseText: 'Rosetta Stone',
+  });
+
+  assert.deepEqual(parseAiMoveResponse(`Move:
+  { "selectedSourceNodeIds": ["root"], "destinationTopic": "Chorus" }
+  `), {
+    selectedSourceNodeIds: ['root'],
+    responseText: 'Chorus',
+  });
 });

@@ -32,6 +32,7 @@ import {
   PlayerTurnController,
   createTurnExecutionKey,
   resolvePlayerController,
+  resolveSubmittedSourceNodeIds,
   shouldAutoSubmitTurn,
 } from '@/domain/playerController';
 import { normalizeSubjectCategoryId } from '@/domain/subjectCategories';
@@ -42,6 +43,7 @@ import {
   formatCombinedFinalEvaluation,
   normalizeScore,
 } from '@/domain/turnScoring';
+import { parseAiMoveResponse } from '@/domain/llmParsing';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
 
@@ -82,15 +84,26 @@ export function useGameController({
     async submitTurn(context) {
       const aiResponse = await services.generateAiResponse({
         topic: context.topic,
+        availableNodes: context.availableNodes.map(node => ({
+          id: node.id,
+          topic: node.topic,
+          definition: node.definition,
+          subjectCategory: node.subjectCategory,
+          isCurrentSource: false,
+        })),
+        selectedSourceNodeIds: [],
+        sourceSelectionMode: 'free',
         originalTopic: context.originalTopic,
         gameHistory: context.gameHistory,
         difficulty: context.difficulty,
         circleEnabled: context.circleEnabled,
         isFinalCircleRound: context.isFinalCircleRound,
       });
+      const parsedMove = parseAiMoveResponse(aiResponse);
 
       return {
-        responseText: aiResponse.trim() || `Response to ${context.topic}`,
+        selectedSourceNodeIds: parsedMove?.selectedSourceNodeIds,
+        responseText: parsedMove?.responseText.trim() || aiResponse.trim() || `Response to ${context.topic}`,
         fallbackOnEvaluationFailure: true,
       };
     },
@@ -191,14 +204,28 @@ export function useGameController({
   const evaluateTurnResponse = useCallback(async (params: {
     playerId: string;
     responseText: string;
+    selectedSourceNodeIds?: string[];
     fallbackOnFailure?: boolean;
     clearResponseOnSuccess?: boolean;
   }) => {
-    const evaluationTopic = currentSourceTopicText;
-    const evaluationTargets = activeSourceNodes;
+    const selectedSourceNodeIds = resolveSubmittedSourceNodeIds(
+      {
+        nodesById: gameState.nodesById,
+        activeSourceNodeIds: gameState.activeSourceNodeIds,
+      },
+      { selectedSourceNodeIds: params.selectedSourceNodeIds }
+    );
+    const evaluationTargets = selectedSourceNodeIds
+      .map(nodeId => gameState.nodesById[nodeId])
+      .filter(Boolean);
+    const evaluationTopic = evaluationTargets.map(node => node.topic).join(' + ');
     if (!evaluationTopic || !params.responseText) return;
 
-    setGameState(prev => setGameStatus(prev, 'evaluating'));
+    setGameState(prev => setGameStatus({
+      ...prev,
+      activeSourceNodeIds: selectedSourceNodeIds,
+      selectedNodeIds: selectedSourceNodeIds,
+    }, 'evaluating'));
 
     let retries = 0;
     const maxRetries = 3;
@@ -293,12 +320,12 @@ export function useGameController({
       }
     }
   }, [
-    activeSourceNodes,
     circleEnabled,
     completeEvaluatedTurn,
     currentRound,
-    currentSourceTopicText,
     difficulty,
+    gameState.activeSourceNodeIds,
+    gameState.nodesById,
     maxRounds,
     originalTopic,
     services,
@@ -370,6 +397,8 @@ export function useGameController({
           state: gameState,
           player: currentPlayerModel,
           topic: promptTopic,
+          availableNodes: Object.values(gameState.nodesById),
+          selectedSourceNodeIds: [],
           originalTopic,
           gameHistory,
           difficulty,
@@ -382,6 +411,7 @@ export function useGameController({
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText,
+          selectedSourceNodeIds: submission.selectedSourceNodeIds,
           fallbackOnFailure: submission.fallbackOnEvaluationFailure,
           clearResponseOnSuccess: submission.clearResponseOnSuccess,
         });
@@ -392,6 +422,7 @@ export function useGameController({
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText: fallbackResponse,
+          selectedSourceNodeIds: gameState.activeSourceNodeIds,
           fallbackOnFailure: true,
         });
       }

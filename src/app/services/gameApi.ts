@@ -70,6 +70,9 @@ export const gameApi: GameFlowServices & {
     const endpoint = request.isFinalCircleRound ? '/api/ai-final-response' : '/api/ai-response';
     const result = await axios.post(endpoint, {
       topic: request.topic,
+      availableNodes: request.availableNodes,
+      selectedSourceNodeIds: request.selectedSourceNodeIds,
+      sourceSelectionMode: request.sourceSelectionMode,
       originalTopic: request.originalTopic,
       gameHistory: toLegacyAiGameHistory(request.gameHistory),
       difficulty: request.difficulty,
