@@ -11,7 +11,6 @@ import {
   SourceTurnEvaluation,
   combineSourceScores,
   formatCombinedEvaluation,
-  formatCombinedFinalEvaluation,
   normalizeScore,
 } from './turnScoring';
 import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategories';
@@ -21,7 +20,6 @@ export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
 export type TurnEvaluation = {
   evaluation: string;
-  finalEvaluation?: string;
   destinationSubjectCategory?: SubjectCategoryId;
   scores: Score;
   edgeEvaluations?: SourceTurnEvaluation[];
@@ -34,7 +32,6 @@ export type CurrentEvaluation = {
   scores: Score;
   playerId: string;
   destinationSubjectCategory?: SubjectCategoryId;
-  finalEvaluation?: string;
 };
 
 export type GenerateTopicRequest = {
@@ -48,10 +45,8 @@ export type GeneratedTopic = {
 
 export type EvaluateTurnRequest = {
   topic: string;
-  originalTopic: string;
   response: string;
   difficulty: DifficultyLevel;
-  isFinalCircleRound: boolean;
 };
 
 export type TurnContextHistoryItem = {
@@ -76,10 +71,7 @@ export type GenerateAiResponseRequest = {
   }[];
   selectedSourceNodeIds: string[];
   sourceSelectionMode: AiSourceSelectionMode;
-  originalTopic: string;
   difficulty: DifficultyLevel;
-  circleEnabled: boolean;
-  isFinalCircleRound: boolean;
   gameHistory: TurnContextHistoryItem[];
 };
 
@@ -147,31 +139,25 @@ export async function evaluateAndApplyTurn(params: {
   state: GameState;
   response: string;
   playerId: string;
-  originalTopic: string;
   difficulty: DifficultyLevel;
-  circleEnabled: boolean;
   services: Pick<GameFlowServices, 'evaluateTurn'>;
 }) {
   const sourceNodes = params.state.activeSourceNodeIds
     .map(nodeId => params.state.nodesById[nodeId])
     .filter(Boolean);
   const topic = sourceNodes.map(node => node.topic).join(' + ');
-  const isFinalCircleRound = params.state.currentRound === params.state.maxRounds && params.circleEnabled;
   const edgeEvaluations = await Promise.all(
     sourceNodes.map(async sourceNode => {
       const evaluation = await params.services.evaluateTurn({
         topic: sourceNode.topic,
-        originalTopic: params.originalTopic,
         response: params.response,
         difficulty: params.difficulty,
-        isFinalCircleRound,
       });
 
       return {
         sourceNodeId: sourceNode.id,
         sourceTopic: sourceNode.topic,
         evaluation: evaluation.evaluation,
-        finalEvaluation: evaluation.finalEvaluation,
         destinationSubjectCategory: normalizeSubjectCategoryId(evaluation.destinationSubjectCategory),
         scores: normalizeScore(evaluation.scores),
       } satisfies SourceTurnEvaluation;
@@ -179,7 +165,6 @@ export async function evaluateAndApplyTurn(params: {
   );
   const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
   const combinedEvaluation = formatCombinedEvaluation(edgeEvaluations);
-  const combinedFinalEvaluation = formatCombinedFinalEvaluation(edgeEvaluations);
   const destinationSubjectCategory = normalizeSubjectCategoryId(
     edgeEvaluations
       .map(edgeEvaluation => edgeEvaluation.destinationSubjectCategory)
@@ -191,7 +176,6 @@ export async function evaluateAndApplyTurn(params: {
     playerId: params.playerId,
     sourceNodeIds: params.state.activeSourceNodeIds,
     evaluation: combinedEvaluation,
-    finalEvaluation: combinedFinalEvaluation,
     totalScore: combinedScores.total,
     legacyScores: combinedScores,
     edgeEvaluations,
@@ -210,7 +194,6 @@ export async function evaluateAndApplyTurn(params: {
       response: params.response,
       playerId: params.playerId,
       evaluation: combinedEvaluation,
-      finalEvaluation: combinedFinalEvaluation,
       destinationSubjectCategory,
       scores: combinedScores,
     } satisfies CurrentEvaluation,
@@ -219,9 +202,7 @@ export async function evaluateAndApplyTurn(params: {
 
 export async function generateAiResponseForCurrentTurn(params: {
   state: GameState;
-  originalTopic: string;
   difficulty: DifficultyLevel;
-  circleEnabled: boolean;
   services: Pick<GameFlowServices, 'generateAiResponse'>;
 }) {
   const topic = selectCurrentSourceTopicText(params.state);
@@ -236,10 +217,7 @@ export async function generateAiResponseForCurrentTurn(params: {
     })),
     selectedSourceNodeIds: [],
     sourceSelectionMode: 'free',
-    originalTopic: params.originalTopic,
     difficulty: params.difficulty,
-    circleEnabled: params.circleEnabled,
-    isFinalCircleRound: params.state.currentRound === params.state.maxRounds && params.circleEnabled,
     gameHistory: selectTurnContextHistory(params.state),
   });
 

@@ -48,7 +48,7 @@ test('definition prompt asks for concise complete definitions only', () => {
   assert.equal(prompt.userMessage, 'Please provide a concise definition for: "Counterpoint"');
 });
 
-test('ai response prompt switches to final-round circle instructions when needed', () => {
+test('ai response prompt describes source selection and multi-source scoring', () => {
   const prompt = buildAiResponsePrompt({
     topic: 'Fugue',
     availableNodes: [
@@ -56,21 +56,17 @@ test('ai response prompt switches to final-round circle instructions when needed
       { id: 'node-1', topic: 'Fugue', isCurrentSource: true },
     ],
     selectedSourceNodeIds: ['node-1'],
-    originalTopic: 'Cathedral',
     gameHistory: [{ topic: 'Root', response: 'Echo', player: 'ai' }],
     difficulty: 'undergrad',
-    circleEnabled: true,
-    isFinalRound: true,
     timestamp: 'seed',
   });
 
-  assert.match(prompt.systemPrompt, /FINAL ROUND/);
+  assert.doesNotMatch(prompt.systemPrompt, /FINAL ROUND/);
   assert.match(prompt.systemPrompt, /selectedSourceNodeIds/);
   assert.match(prompt.systemPrompt, /sum\(edgeScores\) \/ sqrt\(N\)/);
-  assert.match(prompt.systemPrompt, /Cathedral/);
   assert.match(prompt.systemPrompt, /Avoid these previously used responses: Echo/);
   assert.match(prompt.userMessage, /id: node-1; topic: "Fugue"; currently selected/);
-  assert.match(prompt.userMessage, /connects to BOTH/);
+  assert.match(prompt.userMessage, /choose source nodes and provide your brief response/);
 });
 
 test('free ai source selection prompt does not suggest the current UI selection', () => {
@@ -82,11 +78,8 @@ test('free ai source selection prompt does not suggest the current UI selection'
     ],
     selectedSourceNodeIds: ['node-1'],
     sourceSelectionMode: 'free',
-    originalTopic: 'Cathedral',
     gameHistory: [],
     difficulty: 'undergrad',
-    circleEnabled: false,
-    isFinalRound: false,
     timestamp: 'seed',
   });
 
@@ -95,26 +88,18 @@ test('free ai source selection prompt does not suggest the current UI selection'
   assert.doesNotMatch(prompt.userMessage, /currently selected/);
 });
 
-test('evaluation prompt uses final-round JSON schema only when original topic is present', () => {
-  const regular = buildEvaluationPrompt({
+test('evaluation prompt uses the regular graph-edge JSON schema', () => {
+  const prompt = buildEvaluationPrompt({
     topic: 'Fugue',
     response: 'Lattice',
     difficulty: 'undergrad',
-  });
-  const final = buildEvaluationPrompt({
-    topic: 'Fugue',
-    response: 'Lattice',
-    difficulty: 'undergrad',
-    originalTopic: 'Cathedral',
-    isFinalRound: true,
   });
 
-  assert.doesNotMatch(regular.systemPrompt, /finalEvaluation/);
-  assert.match(regular.systemPrompt, /destinationSubjectCategory/);
-  assert.match(regular.systemPrompt, /mathematics \(Mathematics\)/);
-  assert.match(final.systemPrompt, /finalEvaluation/);
-  assert.match(final.systemPrompt, /destinationSubjectCategory/);
-  assert.match(final.userMessage, /Cathedral/);
+  assert.doesNotMatch(prompt.systemPrompt, /finalEvaluation/);
+  assert.match(prompt.systemPrompt, /destinationSubjectCategory/);
+  assert.match(prompt.systemPrompt, /mathematics \(Mathematics\)/);
+  assert.match(prompt.systemPrompt, /"semanticDistance": X/);
+  assert.match(prompt.systemPrompt, /"relevanceQuality": Y/);
 });
 
 test('evaluation prompt includes calibration anchors for scoring dynamic range', () => {

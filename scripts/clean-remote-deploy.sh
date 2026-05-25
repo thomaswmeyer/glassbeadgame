@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_USER="phoam"
-REMOTE_HOST="tom.to"
-REMOTE_PATH="/home/phoam/tom.to/glassbeadgame"
+REMOTE_USER="tomto"
+REMOTE_HOST="gbg.tom.to"
+REMOTE_PATH="/home/tomto/gbg.tom.to"
 
 case "$REMOTE_PATH" in
-  /home/phoam/tom.to/glassbeadgame|/home/phoam/tom.to/glassbeadgame/) ;;
+  /home/tomto/gbg.tom.to|/home/tomto/gbg.tom.to/) ;;
   *)
     echo "Refusing to clean unexpected remote path: ${REMOTE_PATH}" >&2
     exit 1
@@ -19,7 +19,7 @@ ssh "${REMOTE_USER}@${REMOTE_HOST}" "bash -lc '
   set -euo pipefail
   target=\"${REMOTE_PATH}\"
   case \"\$target\" in
-    /home/phoam/tom.to/glassbeadgame|/home/phoam/tom.to/glassbeadgame/) ;;
+    /home/tomto/gbg.tom.to|/home/tomto/gbg.tom.to/) ;;
     *)
       echo \"Refusing to clean unexpected remote path: \$target\" >&2
       exit 1

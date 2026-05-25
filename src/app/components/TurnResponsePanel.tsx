@@ -11,9 +11,6 @@ type TurnResponsePanelProps = {
   playerName?: string | null;
   response: string;
   isEvaluating: boolean;
-  isFinalCircleRound: boolean;
-  currentSourceTopicText: string;
-  originalTopic: string;
   hasBranchedSourceSelection: boolean;
   onResponseChange: (response: string) => void;
   onSubmit: () => void;
@@ -25,9 +22,6 @@ export default function TurnResponsePanel({
   playerName,
   response,
   isEvaluating,
-  isFinalCircleRound,
-  currentSourceTopicText,
-  originalTopic,
   hasBranchedSourceSelection,
   onResponseChange,
   onSubmit,
@@ -57,9 +51,6 @@ export default function TurnResponsePanel({
             className="w-full p-4 border border-gray-300 rounded-lg"
             placeholder={getTurnResponsePlaceholder({
               isOpeningTurn,
-              isFinalCircleRound,
-              currentSourceTopicText,
-              originalTopic,
             })}
             disabled={isEvaluating}
             autoFocus

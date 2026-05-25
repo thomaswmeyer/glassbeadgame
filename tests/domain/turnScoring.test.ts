@@ -27,38 +27,6 @@ test('normalizes regular LLM scores to multiplicative totals', () => {
   });
 });
 
-test('normalizes final-round connection subtotals to multiplicative totals', () => {
-  assert.deepEqual(normalizeScore({
-    semanticDistance: 0,
-    relevanceQuality: 0,
-    total: 15,
-    currentConnection: {
-      semanticDistance: 7,
-      relevance: 8,
-      subtotal: 15,
-    },
-    originalConnection: {
-      semanticDistance: 6,
-      relevance: 8,
-      subtotal: 14,
-    },
-  }), {
-    semanticDistance: 0,
-    relevanceQuality: 0,
-    total: 52,
-    currentConnection: {
-      semanticDistance: 7,
-      relevance: 8,
-      subtotal: 56,
-    },
-    originalConnection: {
-      semanticDistance: 6,
-      relevance: 8,
-      subtotal: 48,
-    },
-  });
-});
-
 test('combines multi-source scores with square-root diminishing returns', () => {
   assert.deepEqual(combineSourceScores([
     { semanticDistance: 7, relevanceQuality: 8, total: 15 },

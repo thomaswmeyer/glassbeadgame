@@ -44,8 +44,7 @@ inspected as it develops.
 - Cached definition lookup for selected topics.
 - Branching concept graph visualization using D3.
 - Multi-source turns where a new topic can connect to several existing topics.
-- Development model selector for Anthropic Claude and DeepSeek models.
-- Production mode that locks the app to the configured Gemini model.
+- Gemini-powered topic generation, definitions, AI moves, and scoring.
 
 ## Tech Stack
 
@@ -55,8 +54,6 @@ inspected as it develops.
 - Tailwind CSS
 - D3
 - Google Gemini API
-- Anthropic API
-- DeepSeek API via the OpenAI SDK
 
 ## Project Structure
 
@@ -65,7 +62,6 @@ src/app/page.tsx                         Main app entry
 src/app/components/GameInterface.tsx     Top-level game UI wiring
 src/app/components/GameSetupPanel.tsx    Setup screen and rules
 src/app/components/SimpleConceptGraph.tsx D3 concept graph
-src/app/components/ModelSelector.tsx     Development model selector
 src/app/api/*/route.ts                   Server-side API endpoints
 src/domain/game.ts                       Graph-oriented game state and selectors
 src/domain/gameFlow.ts                   Turn flow orchestration helpers
@@ -93,17 +89,13 @@ npm install
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local` and add the keys you want to use:
+Edit `.env.local` and add your Gemini key:
 
 ```bash
 GEMINI_API_KEY=your_gemini_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-NEXT_PUBLIC_PRODUCTION_MODE=false
 ```
 
-Only the key for the active provider is required. If you leave production mode
-off, the development model selector is shown on the start screen.
+Gemini is the only configured LLM provider.
 
 ## Run Locally
 
@@ -115,6 +107,36 @@ Then open:
 
 ```text
 http://localhost:4321
+```
+
+## Deploy
+
+`npm run upload` builds the app, stages the standalone Next.js runtime with
+static assets and `public/`, then syncs one complete bundle to
+`tomto@gbg.tom.to:/home/tomto/gbg.tom.to/`.
+
+Keep API keys out of the deployed web directory. On the server, store runtime
+secrets in a private file:
+
+```bash
+cat > /home/tomto/.gbg.env <<'EOF'
+GEMINI_API_KEY=your_gemini_api_key_here
+EOF
+chmod 600 /home/tomto/.gbg.env
+```
+
+Start the standalone server with those variables loaded:
+
+```bash
+cd /home/tomto/gbg.tom.to
+./start.sh
+```
+
+On DreamHost shared hosting, use the panel's cron tool to add an `@reboot`
+job if the app needs to restart after server maintenance:
+
+```bash
+@reboot /home/tomto/gbg.tom.to/start.sh >> /home/tomto/gbg.tom.to/server.log 2>&1
 ```
 
 To run a production build locally:
@@ -357,9 +379,6 @@ shared evolving graph state.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | For Gemini | Topic generation, AI responses, definitions, and scoring with Gemini |
-| `ANTHROPIC_API_KEY` | For Claude | Optional Claude model support |
-| `DEEPSEEK_API_KEY` | For DeepSeek | Optional DeepSeek model support |
-| `NEXT_PUBLIC_PRODUCTION_MODE` | No | Set to `true` to hide model selection and force the production default model |
 
 ## License
 

@@ -8,10 +8,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       topic,
-      originalTopic,
       gameHistory,
       difficulty,
-      circleEnabled,
       availableNodes,
       selectedSourceNodeIds,
       sourceSelectionMode,
@@ -19,10 +17,8 @@ export async function POST(request: Request) {
     
     console.log('Request body received:', {
       topic,
-      originalTopicProvided: !!originalTopic,
       gameHistoryCount: gameHistory?.length || 0,
       difficulty,
-      circleEnabled
     });
     
     if (!topic) {
@@ -38,11 +34,8 @@ export async function POST(request: Request) {
       // Get AI response using our LLM service
       const response = await getAiResponse(
         topic,
-        originalTopic || '',
         gameHistory || [],
         difficulty,
-        circleEnabled || false,
-        false, // Not final round
         availableNodes || [],
         selectedSourceNodeIds || [],
         sourceSelectionMode || 'suggested'

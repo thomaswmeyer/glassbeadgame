@@ -1,40 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_USER="phoam"
-REMOTE_HOST="tom.to"
-REMOTE_PATH="/home/phoam/tom.to/glassbeadgame/"
+REMOTE_USER="tomto"
+REMOTE_HOST="gbg.tom.to"
+REMOTE_PATH="/home/tomto/gbg.tom.to/"
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-RSYNC_OPTS="-avz --no-perms --chmod=Do+rx,Fo+r --force --modify-window=2"
-
-SOCKET="/tmp/deploy-glassbeadgame-$$"
-trap 'ssh -O exit -o ControlPath="$SOCKET" "${REMOTE_USER}@${REMOTE_HOST}" 2>/dev/null; rm -f "$SOCKET"' EXIT
+RSYNC_OPTS="-avz --partial --exclude=.env* --no-perms --chmod=Do+rx,Fo+r --force --modify-window=2"
+RSYNC_SSH="ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=4"
+STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/glassbeadgame-deploy.XXXXXX")"
+trap 'rm -rf "$STAGING_DIR"' EXIT
 
 if [ ! -d ".next/standalone" ]; then
   echo "Missing .next/standalone. Run npm run build first."
   exit 1
 fi
 
-echo "Opening SSH connection..."
-ssh -fNM -o ControlMaster=yes -o ControlPath="$SOCKET" "${REMOTE_USER}@${REMOTE_HOST}"
+echo "Staging deploy bundle..."
 
-RSYNC_SSH="ssh -o ControlPath=$SOCKET"
-
-echo "Deploying to ${REMOTE} ..."
-
-rsync $RSYNC_OPTS --delete --size-only \
-  -e "$RSYNC_SSH" \
+rsync $RSYNC_OPTS --delete \
   .next/standalone/ \
-  "${REMOTE}/"
+  "$STAGING_DIR/"
 
-rsync $RSYNC_OPTS --delete --size-only \
-  -e "$RSYNC_SSH" \
+mkdir -p "$STAGING_DIR/.next/static" "$STAGING_DIR/public"
+
+rsync $RSYNC_OPTS --delete \
   .next/static/ \
-  "${REMOTE}/.next/static/"
+  "$STAGING_DIR/.next/static/"
+
+rsync $RSYNC_OPTS --delete \
+  public/ \
+  "$STAGING_DIR/public/"
+
+install -m 755 scripts/start-dreamhost.sh "$STAGING_DIR/start.sh"
+
+echo "Deploying staged bundle to ${REMOTE} ..."
 
 rsync $RSYNC_OPTS --delete \
   -e "$RSYNC_SSH" \
-  public/ \
-  "${REMOTE}/public/"
+  "$STAGING_DIR/" \
+  "${REMOTE}/"
 
 echo "Done."

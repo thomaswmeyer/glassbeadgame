@@ -33,7 +33,6 @@ import {
 export default function GameInterface() {
   const [maxRounds, setMaxRounds] = useState<number>(10);
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
-  const circleEnabled = false;
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
 
   const [tooltipData, setTooltipData] = useState<{
@@ -42,19 +41,16 @@ export default function GameInterface() {
     y: number;
     score: Score | null;
     edgeScores?: CurrentEvaluationEdgeScore[];
-    isCircleMode: boolean;
   }>({
     visible: false,
     x: 0,
     y: 0,
     score: null,
-    isCircleMode: false
   });
 
   const {
     gameState,
     setGameState,
-    originalTopic,
     response,
     setResponse,
     currentEvaluation,
@@ -81,7 +77,6 @@ export default function GameInterface() {
   } = useGameController({
     maxRounds,
     aiGoesFirst,
-    circleEnabled,
     difficulty,
   });
 
@@ -99,9 +94,7 @@ export default function GameInterface() {
   const activeSourceRows = selectActiveSourceRows(gameState);
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
-  const productionModelName = LLM_CONFIG.models[
-    LLM_CONFIG.production.defaultModel as keyof typeof LLM_CONFIG.models
-  ].displayName;
+  const productionModelName = LLM_CONFIG.model.displayName;
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
@@ -153,7 +146,6 @@ export default function GameInterface() {
   const handleScoreMouseEnter = (
     e: React.MouseEvent,
     score: Score,
-    isCircleRound: boolean,
     edgeScores?: CurrentEvaluationEdgeScore[]
   ) => {
     // Calculate tooltip position to ensure it stays within viewport
@@ -165,8 +157,8 @@ export default function GameInterface() {
     let yPos = e.clientY + 10;
     
     // Estimate tooltip dimensions (we'll adjust these based on content)
-    const estimatedWidth = isCircleRound ? 300 : 250;
-    const estimatedHeight = isCircleRound ? 350 : 200;
+    const estimatedWidth = 250;
+    const estimatedHeight = 200;
     
     // Adjust position if tooltip would go off-screen
     if (xPos + estimatedWidth > viewportWidth - 20) {
@@ -183,7 +175,6 @@ export default function GameInterface() {
       y: yPos,
       score,
       edgeScores,
-      isCircleMode: isCircleRound
     });
   };
   
@@ -201,14 +192,12 @@ export default function GameInterface() {
           maxRounds={maxRounds}
           roundOptions={DEFAULT_ROUND_OPTIONS}
           aiGoesFirst={aiGoesFirst}
-          circleEnabled={circleEnabled}
           difficulty={difficulty}
           difficultyLevels={DEFAULT_DIFFICULTY_LEVELS}
           difficultyDescriptions={difficultyDescriptions}
           localPlayerName={localPlayerName}
           aiPlayerName={aiPlayerName}
           isGeneratingTopic={isGeneratingTopic}
-          productionMode={LLM_CONFIG.production.isProduction}
           productionModelName={productionModelName}
           onMaxRoundsChange={setMaxRounds}
           onAiGoesFirstChange={setAiGoesFirst}
@@ -238,9 +227,6 @@ export default function GameInterface() {
                 playerName={currentPlayerModel?.name}
                 response={response}
                 isEvaluating={isEvaluating}
-                isFinalCircleRound={currentRound === maxRounds && circleEnabled}
-                currentSourceTopicText={currentSourceTopicText}
-                originalTopic={originalTopic}
                 hasBranchedSourceSelection={hasBranchedSourceSelection}
                 onResponseChange={setResponse}
                 onSubmit={evaluateResponse}
@@ -248,9 +234,6 @@ export default function GameInterface() {
             ) : currentEvaluation && (
               <EvaluationResultsPanel
                 currentEvaluation={currentEvaluation}
-                circleEnabled={circleEnabled}
-                currentRound={currentRound}
-                maxRounds={maxRounds}
                 gameCompleted={gameCompleted}
                 playerScoreRows={playerScoreRows}
                 onNextTurn={advanceTurn}
@@ -264,13 +247,11 @@ export default function GameInterface() {
                 activeSourceNodeIds={gameState.activeSourceNodeIds}
                 canSelectHistoryRows={!sourceSelectionLocked}
                 showCurrentTurnRow={!showingResults}
-                circleEnabled={circleEnabled}
                 currentRound={currentRound}
                 currentPlayerKind={currentPlayerModel?.kind}
                 currentPlayerName={currentPlayerModel?.name}
                 currentSourceTopicText={currentSourceTopicText}
                 currentTopicNodeId={gameState.activeSourceNodeIds.length === 1 ? gameState.activeSourceNodeIds[0] : null}
-                maxRounds={maxRounds}
                 selectedGraphNodeId={selectedGraphNodeId}
                 turnHistoryRows={turnHistoryRows}
                 getTopicGraphNodeId={getTopicGraphNodeId}

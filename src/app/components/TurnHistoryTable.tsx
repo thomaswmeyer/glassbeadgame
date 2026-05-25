@@ -15,13 +15,11 @@ type TurnHistoryTableProps = {
   activeSourceNodeIds: string[];
   canSelectHistoryRows: boolean;
   showCurrentTurnRow: boolean;
-  circleEnabled: boolean;
   currentRound: number;
   currentPlayerKind?: string;
   currentPlayerName?: string;
   currentSourceTopicText: string;
   currentTopicNodeId: string | null;
-  maxRounds: number;
   selectedGraphNodeId: string | null;
   turnHistoryRows: TurnHistoryRow[];
   getTopicGraphNodeId: (topicValue: string, beforeHistoryIndex?: number) => string | null;
@@ -30,7 +28,6 @@ type TurnHistoryTableProps = {
   onScoreMouseEnter: (
     event: React.MouseEvent,
     score: Score,
-    isCircleRound: boolean,
     edgeScores?: TurnHistoryRow['edgeScores']
   ) => void;
   onScoreMouseLeave: () => void;
@@ -41,13 +38,11 @@ export default function TurnHistoryTable({
   activeSourceNodeIds,
   canSelectHistoryRows,
   showCurrentTurnRow,
-  circleEnabled,
   currentRound,
   currentPlayerKind,
   currentPlayerName,
   currentSourceTopicText,
   currentTopicNodeId,
-  maxRounds,
   selectedGraphNodeId,
   turnHistoryRows,
   getTopicGraphNodeId,
@@ -105,7 +100,6 @@ export default function TurnHistoryTable({
                 const historyIndex = turnHistoryRows.length - index - 1;
                 const topicText = getTurnHistoryRowSourceTopicText(round);
                 const score = getTurnHistoryRowScore(round);
-                const isCircleRound = circleEnabled && round.turn.round === maxRounds;
                 const topicNodeId = getTopicGraphNodeId(topicText, historyIndex);
                 const isTopicSelected = selectedGraphNodeId === topicNodeId;
                 const destinationNodeId = round.destinationNode.id;
@@ -131,7 +125,7 @@ export default function TurnHistoryTable({
                     <td className="py-2 px-4">
                       <span
                         className="cursor-help underline decoration-dotted"
-                        onMouseEnter={(event) => onScoreMouseEnter(event, score, isCircleRound, round.edgeScores)}
+                        onMouseEnter={(event) => onScoreMouseEnter(event, score, round.edgeScores)}
                         onMouseLeave={onScoreMouseLeave}
                       >
                         {score.total}

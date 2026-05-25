@@ -25,7 +25,6 @@ import {
   GeneratedTopic,
   TurnEvaluation,
   selectCurrentSourceTopicText,
-  selectRootTopic,
   selectTurnContextHistory,
 } from '@/domain/gameFlow';
 import {
@@ -40,7 +39,6 @@ import {
   SourceTurnEvaluation,
   combineSourceScores,
   formatCombinedEvaluation,
-  formatCombinedFinalEvaluation,
   normalizeScore,
 } from '@/domain/turnScoring';
 import { parseAiMoveResponse } from '@/domain/llmParsing';
@@ -50,7 +48,6 @@ export type { DifficultyLevel } from '@/domain/gameFlow';
 type UseGameControllerParams = {
   maxRounds: number;
   aiGoesFirst: boolean;
-  circleEnabled: boolean;
   difficulty: DifficultyLevel;
   services?: GameFlowServices;
   playerControllers?: PlayerTurnController[];
@@ -69,7 +66,6 @@ function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic 
 export function useGameController({
   maxRounds,
   aiGoesFirst,
-  circleEnabled,
   difficulty,
   services = gameApi,
   playerControllers = EMPTY_PLAYER_CONTROLLERS,
@@ -105,11 +101,8 @@ export function useGameController({
         })),
         selectedSourceNodeIds: [],
         sourceSelectionMode: 'free',
-        originalTopic: context.originalTopic,
         gameHistory: context.gameHistory,
         difficulty: context.difficulty,
-        circleEnabled: context.circleEnabled,
-        isFinalCircleRound: context.isFinalCircleRound,
       });
       const parsedMove = parseAiMoveResponse(aiResponse);
 
@@ -145,7 +138,6 @@ export function useGameController({
   );
   const gameStarted = gameState.gameStatus !== 'setup';
   const isGeneratingTopic = gameState.gameStatus === 'generatingTopic';
-  const originalTopic = selectRootTopic(gameState);
   const currentSourceTopicText = selectCurrentSourceTopicText(gameState);
   const isEvaluating = gameState.gameStatus === 'evaluating';
   const isAiThinking = gameState.gameStatus === 'aiThinking';
@@ -182,7 +174,6 @@ export function useGameController({
         playerId: params.playerId,
         sourceNodeIds: prev.activeSourceNodeIds,
         evaluation: params.result.evaluation,
-        finalEvaluation: params.result.finalEvaluation,
         totalScore: params.result.scores.total,
         legacyScores: params.result.scores,
         edgeEvaluations: params.result.edgeEvaluations,
@@ -251,22 +242,18 @@ export function useGameController({
 
     while (retries < maxRetries) {
       try {
-        const isFinalCircleRound = currentRound === maxRounds && circleEnabled;
         const edgeEvaluations = await Promise.all(
           evaluationTargets.map(async sourceNode => {
             const result = await services.evaluateTurn({
               topic: sourceNode.topic,
-              originalTopic,
               response: params.responseText,
               difficulty,
-              isFinalCircleRound,
             });
 
             return {
               sourceNodeId: sourceNode.id,
               sourceTopic: sourceNode.topic,
               evaluation: result.evaluation,
-              finalEvaluation: result.finalEvaluation,
               destinationSubjectCategory: normalizeSubjectCategoryId(result.destinationSubjectCategory),
               scores: normalizeScore(result.scores),
             } satisfies SourceTurnEvaluation;
@@ -280,7 +267,6 @@ export function useGameController({
         );
         const result: TurnEvaluation = {
           evaluation: formatCombinedEvaluation(edgeEvaluations),
-          finalEvaluation: formatCombinedFinalEvaluation(edgeEvaluations),
           destinationSubjectCategory,
           scores: combinedScores,
           edgeEvaluations,
@@ -339,7 +325,6 @@ export function useGameController({
       }
     }
   }, [
-    circleEnabled,
     completeEvaluatedTurn,
     currentRound,
     difficulty,
@@ -347,7 +332,6 @@ export function useGameController({
     gameState.nodesById,
     isOpeningTurn,
     maxRounds,
-    originalTopic,
     services,
   ]);
 
@@ -422,11 +406,8 @@ export function useGameController({
           topic: promptTopic,
           availableNodes: Object.values(gameState.nodesById),
           selectedSourceNodeIds: [],
-          originalTopic,
           gameHistory,
           difficulty,
-          circleEnabled,
-          isFinalCircleRound: currentRound === maxRounds && circleEnabled,
         });
         const responseText = submission.responseText.trim() || `Response to ${promptTopic}`;
 
@@ -464,18 +445,15 @@ export function useGameController({
     isCurrentPlayerManual,
     currentRound,
     currentSourceTopicText,
-    originalTopic,
     gameHistory,
     maxRounds,
     difficulty,
-    circleEnabled,
     evaluateTurnResponse,
   ]);
 
   return {
     gameState,
     setGameState,
-    originalTopic,
     response,
     setResponse,
     currentEvaluation,

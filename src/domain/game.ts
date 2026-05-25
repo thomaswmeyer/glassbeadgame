@@ -6,19 +6,6 @@ export type Score = {
   semanticDistance: number;
   relevanceQuality: number;
   total: number;
-  originalTopicConnection?: number;
-  currentConnection?: {
-    semanticDistance: number;
-    relevance?: number;
-    similarity?: number;
-    subtotal: number;
-  };
-  originalConnection?: {
-    semanticDistance: number;
-    relevance?: number;
-    similarity?: number;
-    subtotal: number;
-  };
 };
 
 export type Player = {
@@ -61,7 +48,6 @@ export type TopicEdge = {
 export type TurnEdgeEvaluation = {
   sourceNodeId: string;
   evaluation?: string;
-  finalEvaluation?: string;
   scores?: Score;
   scoringDescription?: string;
   semanticDistanceDescription?: string;
@@ -76,7 +62,6 @@ export type Turn = {
   edgeIds: string[];
   destinationNodeId: string;
   evaluation?: string;
-  finalEvaluation?: string;
   totalScore?: number;
   legacyScores?: Score;
   edgeEvaluations?: TurnEdgeEvaluation[];
@@ -151,7 +136,6 @@ export type CurrentEvaluationView = {
   playerId: string;
   playerKind: PlayerKind;
   playerName: string;
-  finalEvaluation?: string;
   isOpeningTurn?: boolean;
 };
 
@@ -159,7 +143,6 @@ export type CurrentEvaluationEdgeScore = {
   sourceNodeId: string;
   sourceTopic: string;
   evaluation?: string;
-  finalEvaluation?: string;
   scores: Score;
 };
 
@@ -324,7 +307,6 @@ export function addTurnToGameState(
     playerId: string;
     sourceNodeIds: string[];
     evaluation?: string;
-    finalEvaluation?: string;
     totalScore?: number;
     legacyScores?: Score;
     edgeEvaluations?: TurnEdgeEvaluation[];
@@ -390,7 +372,6 @@ export function addTurnToGameState(
     edgeIds,
     destinationNodeId,
     evaluation: params.evaluation,
-    finalEvaluation: params.finalEvaluation,
     totalScore: params.totalScore,
     legacyScores: params.legacyScores,
     edgeEvaluations: params.edgeEvaluations,
@@ -626,7 +607,6 @@ function selectEdgeScoresForTurn(
       sourceNodeId: sourceNode.id,
       sourceTopic: sourceNode.topic,
       evaluation: edgeEvaluation?.evaluation || edge?.scoringDescription,
-      finalEvaluation: edgeEvaluation?.finalEvaluation,
       scores: edgeEvaluation?.scores || {
         semanticDistance: edge?.semanticDistanceScore || 0,
         relevanceQuality: edge?.strengthScore || 0,
@@ -745,7 +725,6 @@ export function selectCurrentEvaluation(state: GameState): CurrentEvaluationView
     topic: isOpeningTurn ? 'Opening topic' : sourceNodes.map(node => node.topic).join(' + '),
     response: destinationNode?.topic || '',
     evaluation: turn.evaluation || '',
-    ...(turn.finalEvaluation ? { finalEvaluation: turn.finalEvaluation } : {}),
     scores: turn.legacyScores || {
       semanticDistance: 0,
       relevanceQuality: 0,

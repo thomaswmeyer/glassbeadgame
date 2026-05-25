@@ -34,25 +34,16 @@ test('turn response title switches between manual and automatic player labels', 
   }), 'OpenClaw is choosing the opening topic...');
 });
 
-test('turn response placeholder includes circle-round context only for final circle rounds', () => {
-  assert.equal(getTurnResponsePlaceholder({
-    isFinalCircleRound: false,
-    currentSourceTopicText: 'Cathedrals',
-    originalTopic: 'Fugue',
-  }), 'Type a brief response (1-5 words) and press Enter...');
+test('turn response placeholder switches for opening turns', () => {
+  assert.equal(
+    getTurnResponsePlaceholder({}),
+    'Type a brief response (1-5 words) and press Enter...'
+  );
 
-  assert.equal(getTurnResponsePlaceholder({
-    isOpeningTurn: true,
-    isFinalCircleRound: false,
-    currentSourceTopicText: '',
-    originalTopic: '',
-  }), 'Choose the opening topic for this game and press Enter...');
-
-  assert.equal(getTurnResponsePlaceholder({
-    isFinalCircleRound: true,
-    currentSourceTopicText: 'Cathedrals',
-    originalTopic: 'Fugue',
-  }), 'Type a brief response (1-5 words) that connects to both "Cathedrals" and "Fugue"...');
+  assert.equal(
+    getTurnResponsePlaceholder({ isOpeningTurn: true }),
+    'Choose the opening topic for this game and press Enter...'
+  );
 });
 
 test('turn response submit state requires non-empty text and no active evaluation', () => {

@@ -97,11 +97,8 @@ export function buildAiResponsePrompt(params: {
   availableNodes?: AiResponsePromptNode[];
   selectedSourceNodeIds?: string[];
   sourceSelectionMode?: AiSourceSelectionMode;
-  originalTopic: string;
   gameHistory: LegacyAiGameHistoryItem[];
   difficulty: string;
-  circleEnabled: boolean;
-  isFinalRound: boolean;
   timestamp: string;
 }): LlmPrompt {
   const { historyContext, responsesToAvoid } = getAiHistoryContext(params.gameHistory);
@@ -118,63 +115,6 @@ export function buildAiResponsePrompt(params: {
   const sourceContextDescription = hasFreeSourceSelection
     ? 'There is no required current topic. You have complete freedom to choose any one or more source nodes from the available list.'
     : `Current topic: "${params.topic}"`;
-
-  if (params.isFinalRound && params.circleEnabled) {
-    return {
-      systemPrompt: `You are playing the Glass Bead Game, a game of conceptual connections. 
-        
-        This is the FINAL ROUND of the game. Your task is to ${sourceTaskDescription} and give a brief, thoughtful response
-        that connects to BOTH:
-        1. Your selected source topic or topics
-        2. The original starting topic: "${params.originalTopic}"
-        
-        Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
-        This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
-        
-        You must choose one or more source nodes for this move. Each selected source creates a separate edge
-        to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,
-        the turn score is round(sum(edgeScores) / sqrt(N)), so multiple sources can help only when each connection
-        is meaningful.
-
-        IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
-        - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
-        - Avoid simply providing scientific names, taxonomic classifications, or technical terms for the same object
-        - Avoid providing specific subtypes, variants, or specialized versions of the same concept (e.g., don't respond with "chromesthesia" to "synesthesia")
-        - Avoid connections that rely solely on specialized knowledge that only experts in one field would recognize
-        - The best connections reveal surprising parallels between seemingly unrelated concepts
-        
-        ${difficultyPrompt}
-        
-        Be creative and varied in your responses. Avoid obvious associations and clichés. 
-        Try to surprise the player with unexpected but meaningful connections.
-        
-        ${responsesToAvoid}
-        
-        Current timestamp for seed variation: ${params.timestamp}
-        
-        Consider multiple domains of knowledge when forming your response:
-        - Arts and humanities
-        - Science and technology
-        - Social sciences
-        - Natural world
-        - Abstract concepts
-        
-        IMPORTANT: Your response MUST be valid JSON with this structure:
-        {
-          "selectedSourceNodeIds": ["one or more node ids from the available list"],
-          "responseText": "your brief new topic"
-        }
-
-        Do not include any text before or after the JSON. Only return the JSON object.`,
-      userMessage: `${historyContext}
-        
-        ${sourceContextDescription}
-        Original starting topic: "${params.originalTopic}"
-        ${sourceSelectionPrompt}
-        
-        This is the FINAL ROUND. Please choose source nodes and provide your brief response (1-5 words maximum) that connects to BOTH the selected source topic or topics AND the original starting topic at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
-    };
-  }
 
   return {
     systemPrompt: `You are playing the Glass Bead Game, a game of conceptual connections. 
@@ -265,8 +205,6 @@ export function buildEvaluationPrompt(params: {
   topic: string;
   response: string;
   difficulty: string;
-  originalTopic?: string;
-  isFinalRound?: boolean;
 }): LlmPrompt {
   const difficultyPrompt = evaluationDifficultyPrompts[
     params.difficulty as keyof typeof evaluationDifficultyPrompts
@@ -285,67 +223,6 @@ export function buildEvaluationPrompt(params: {
     '- A distant but weakly connected response should have high distance and low relevance.',
     '- An obvious but very apt response should have low distance and high relevance.',
   ].join('\n');
-
-  if (params.isFinalRound && params.originalTopic) {
-    return {
-      systemPrompt: `You are evaluating responses in the Glass Bead Game, a game of conceptual connections.
-        
-        This is the FINAL ROUND evaluation. You need to evaluate how well the player's response connects to BOTH:
-        1. The current topic
-        2. The original starting topic
-        
-        ${difficultyPrompt}
-        
-        IMPORTANT: The player's response is intentionally brief - often just a single word or short phrase. 
-        This is by design and should NOT be penalized. Brief responses are perfectly acceptable and should be 
-        evaluated solely on the quality of the conceptual connection they create, not on their length or elaboration.
-        
-        ${scoringCalibrationInstructions}
-
-        Provide your evaluation in the following format:
-        
-        First, evaluate the connection between the response and the CURRENT topic. Consider:
-        - How semantically remote yet meaningfully connected is the response to the current topic? (1-10)
-        - How relevant is the response as a meaningful connection, beyond simple word association? (1-10)
-        
-        Then, evaluate the connection between the response and the ORIGINAL topic. Consider:
-        - How semantically remote yet meaningfully connected is the response to the original topic? (1-10)
-        - How relevant is the response as a meaningful connection, beyond simple word association? (1-10)
-        
-        Each connection subtotal is semantic distance multiplied by relevance. The final score will be
-        the average of these two connection subtotals.
-        
-        Also classify the player's response into exactly one destination subject category.
-        Allowed destinationSubjectCategory values: ${subjectCategoryOptions}.
-
-        IMPORTANT: Your response MUST be valid JSON with the following structure:
-        {
-          "evaluation": "Your evaluation of the connection to the current topic",
-          "finalEvaluation": "Your evaluation of the connection to the original topic",
-          "destinationSubjectCategory": "one allowed category id",
-          "scores": {
-            "currentConnection": {
-              "semanticDistance": X, // 1-10 score for semantic distance to current topic
-              "relevance": Y, // 1-10 score for relevance to current topic
-              "subtotal": X*Y // Product of the two scores (max 100)
-            },
-            "originalConnection": {
-              "semanticDistance": X, // 1-10 score for semantic distance to original topic
-              "relevance": Y, // 1-10 score for relevance to original topic
-              "subtotal": X*Y // Product of the two scores (max 100)
-            },
-            "total": Z // Average of the two subtotals (max 100)
-          }
-        }
-        
-        Do not include any text before or after the JSON. Only return the JSON object.`,
-      userMessage: `Current topic: "${params.topic}"
-        Original starting topic: "${params.originalTopic}"
-        Player's response: "${params.response}"
-        
-        Please evaluate how well this response connects to BOTH the current topic AND the original starting topic.`,
-    };
-  }
 
   return {
     systemPrompt: `You are evaluating responses in the Glass Bead Game, a game of conceptual connections.

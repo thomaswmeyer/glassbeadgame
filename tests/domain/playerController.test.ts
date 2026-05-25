@@ -71,10 +71,7 @@ test('explicit player controllers override the default controller for that playe
     topic: 'Cathedrals',
     availableNodes: Object.values(state.nodesById),
     selectedSourceNodeIds: [state.rootNodeId],
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
-    isFinalCircleRound: false,
     gameHistory: [],
   }), {
     responseText: 'Sacred geometry',

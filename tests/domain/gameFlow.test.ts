@@ -82,18 +82,14 @@ test('applies a turn by evaluating the active source topic with mocked LLM servi
     state,
     response: 'Flying buttresses',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services,
   });
 
   assert.deepEqual(evaluateCalls, [{
     topic: 'Cathedrals',
-    originalTopic: 'Cathedrals',
     response: 'Flying buttresses',
     difficulty: 'undergrad',
-    isFinalCircleRound: false,
   }]);
   assert.equal(result.state.gameStatus, 'showingResults');
   assert.equal(result.state.turnOrder.length, 1);
@@ -134,9 +130,7 @@ test('branches from an older selected node instead of forcing a linear chain', a
     state: rootState,
     response: 'Flying buttresses',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services,
   });
   const nextState = advanceGameTurn(first.state, getNextPlayerId(first.state));
@@ -148,9 +142,7 @@ test('branches from an older selected node instead of forcing a linear chain', a
     state: branchedSourceState,
     response: 'Sacred geometry',
     playerId: DEFAULT_AI_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services,
   });
 
@@ -183,9 +175,7 @@ test('supports multi-source turns with one edge per active source', async () => 
     state: rootState,
     response: 'Flying buttresses',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services,
   });
   const firstTurn = first.state.turnsById[first.state.turnOrder[0]];
@@ -199,9 +189,7 @@ test('supports multi-source turns with one edge per active source', async () => 
     state: multiSourceState,
     response: 'Load-bearing symbols',
     playerId: DEFAULT_AI_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services,
   });
 
@@ -228,29 +216,23 @@ test('supports multi-source turns with one edge per active source', async () => 
   assert.deepEqual(evaluateCalls, [
     {
       topic: 'Cathedrals',
-      originalTopic: 'Cathedrals',
       response: 'Flying buttresses',
       difficulty: 'undergrad',
-      isFinalCircleRound: false,
     },
     {
       topic: 'Cathedrals',
-      originalTopic: 'Cathedrals',
       response: 'Load-bearing symbols',
       difficulty: 'undergrad',
-      isFinalCircleRound: false,
     },
     {
       topic: 'Flying buttresses',
-      originalTopic: 'Cathedrals',
       response: 'Load-bearing symbols',
       difficulty: 'undergrad',
-      isFinalCircleRound: false,
     },
   ]);
 });
 
-test('marks final circle-mode evaluation as completed and sends final-round context', async () => {
+test('marks the final turn as completed without special circle-mode scoring', async () => {
   const state = startGameState({
     rootTopic: 'Cathedrals',
     maxRounds: 1,
@@ -259,23 +241,14 @@ test('marks final circle-mode evaluation as completed and sends final-round cont
   });
   const services = {
     async evaluateTurn(request) {
-      assert.equal(request.isFinalCircleRound, true);
+      assert.deepEqual(request, {
+        topic: 'Cathedrals',
+        response: 'Pilgrimage routes',
+        difficulty: 'grad',
+      });
       return {
-        evaluation: 'Connects current topic.',
-        finalEvaluation: 'Connects back to root topic.',
-        scores: {
-          ...defaultScore,
-          currentConnection: {
-            semanticDistance: 7,
-            relevance: 8,
-            subtotal: 15,
-          },
-          originalConnection: {
-            semanticDistance: 6,
-            relevance: 8,
-            subtotal: 14,
-          },
-        },
+        evaluation: 'Connects the selected source topic.',
+        scores: defaultScore,
       };
     },
   } satisfies Pick<GameFlowServices, 'evaluateTurn'>;
@@ -284,17 +257,13 @@ test('marks final circle-mode evaluation as completed and sends final-round cont
     state,
     response: 'Pilgrimage routes',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'grad',
-    circleEnabled: true,
     services,
   });
 
   assert.equal(result.state.gameStatus, 'completed');
-  assert.equal(result.currentEvaluation.finalEvaluation, 'Connects back to root topic.');
-  assert.equal(result.currentEvaluation.scores.currentConnection?.subtotal, 56);
-  assert.equal(result.currentEvaluation.scores.originalConnection?.subtotal, 48);
-  assert.equal(result.currentEvaluation.scores.total, 52);
+  assert.equal(result.currentEvaluation.evaluation, 'Connects the selected source topic.');
+  assert.equal(result.currentEvaluation.scores.total, 56);
 });
 
 test('AI response generation uses graph context and falls back for empty responses', async () => {
@@ -314,9 +283,7 @@ test('AI response generation uses graph context and falls back for empty respons
 
   const response = await generateAiResponseForCurrentTurn({
     state,
-    originalTopic: 'Cathedrals',
     difficulty: 'secondary',
-    circleEnabled: true,
     services,
   });
 
@@ -332,10 +299,7 @@ test('AI response generation uses graph context and falls back for empty respons
     }],
     selectedSourceNodeIds: [],
     sourceSelectionMode: 'free',
-    originalTopic: 'Cathedrals',
     difficulty: 'secondary',
-    circleEnabled: true,
-    isFinalCircleRound: false,
     gameHistory: [],
   }]);
 });
@@ -351,9 +315,7 @@ test('AI response generation sends player-neutral turn context with multi-source
     state: rootState,
     response: 'Flying buttresses',
     playerId: DEFAULT_HUMAN_PLAYER_ID,
-    originalTopic: 'Cathedrals',
     difficulty: 'undergrad',
-    circleEnabled: false,
     services: {
       async evaluateTurn() {
         return {
@@ -378,9 +340,7 @@ test('AI response generation sends player-neutral turn context with multi-source
 
   const response = await generateAiResponseForCurrentTurn({
     state: multiSourceState,
-    originalTopic: 'Cathedrals',
     difficulty: 'grad',
-    circleEnabled: false,
     services,
   });
 
@@ -405,10 +365,7 @@ test('AI response generation sends player-neutral turn context with multi-source
     ],
     selectedSourceNodeIds: [],
     sourceSelectionMode: 'free',
-    originalTopic: 'Cathedrals',
     difficulty: 'grad',
-    circleEnabled: false,
-    isFinalCircleRound: false,
     gameHistory: [{
       round: 1,
       sourceTopics: ['Cathedrals'],

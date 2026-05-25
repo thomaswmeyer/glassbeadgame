@@ -59,13 +59,12 @@ test('evaluation parser repairs common loose JSON before falling back', () => {
   assert.equal(parsed.scores.total, 11);
 });
 
-test('evaluation parser returns final-round fallback shape on invalid final JSON', () => {
-  const parsed = parseEvaluationResponse('not json', { isFinalRound: true });
-  const fallback = fallbackEvaluationResponse(true);
+test('evaluation parser returns regular fallback shape on invalid JSON', () => {
+  const parsed = parseEvaluationResponse('not json');
+  const fallback = fallbackEvaluationResponse();
 
   assert.deepEqual(parsed, fallback);
-  assert.equal(parsed.finalEvaluation, 'Error parsing the evaluation.');
-  assert.equal(parsed.scores.currentConnection?.subtotal, 25);
+  assert.equal(parsed.scores.total, 25);
 });
 
 test('ai move parser accepts selected sources and response topic JSON', () => {

@@ -448,7 +448,6 @@ test('current evaluation is derived only for result states and includes latest p
     playerId: DEFAULT_HUMAN_PLAYER_ID,
     sourceNodeIds: [],
     evaluation: 'Strong connection.',
-    finalEvaluation: 'Back to the root.',
     totalScore: score.total,
     legacyScores: score,
   });
@@ -460,13 +459,11 @@ test('current evaluation is derived only for result states and includes latest p
     topic: 'Cathedrals',
     response: 'Flying buttresses',
     evaluation: 'Strong connection.',
-    finalEvaluation: 'Back to the root.',
     scores: score,
     edgeScores: [{
       sourceNodeId: state.rootNodeId,
       sourceTopic: 'Cathedrals',
       evaluation: 'Strong connection.',
-      finalEvaluation: undefined,
       scores: {
         semanticDistance: 6,
         relevanceQuality: 7,
@@ -501,7 +498,6 @@ test('turn history and graph render selectors expose edge scoring details', () =
     sourceNodeId: state.rootNodeId,
     sourceTopic: 'Cathedrals',
     evaluation: 'Overall scoring rationale.',
-    finalEvaluation: undefined,
     scores: score,
   }]);
 

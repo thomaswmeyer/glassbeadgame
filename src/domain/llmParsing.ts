@@ -3,7 +3,6 @@ import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategori
 
 export type LlmEvaluationResponse = {
   evaluation: string;
-  finalEvaluation?: string;
   destinationSubjectCategory?: SubjectCategoryId;
   scores: Score;
 };
@@ -11,10 +10,6 @@ export type LlmEvaluationResponse = {
 export type LlmAiMoveResponse = {
   selectedSourceNodeIds: string[];
   responseText: string;
-};
-
-type ParseEvaluationOptions = {
-  isFinalRound?: boolean;
 };
 
 export function trimIncompleteTrailingSentence(text: string): string {
@@ -35,30 +30,7 @@ export function trimIncompleteTrailingSentence(text: string): string {
   return `${definition}.`;
 }
 
-export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationResponse {
-  if (isFinalRound) {
-    return {
-      evaluation: 'Error parsing the evaluation. The response could not be properly evaluated.',
-      finalEvaluation: 'Error parsing the evaluation.',
-      destinationSubjectCategory: 'science',
-      scores: {
-        semanticDistance: 5,
-        relevanceQuality: 5,
-        currentConnection: {
-          semanticDistance: 5,
-          relevance: 5,
-          subtotal: 25,
-        },
-        originalConnection: {
-          semanticDistance: 5,
-          relevance: 5,
-          subtotal: 25,
-        },
-        total: 25,
-      },
-    };
-  }
-
+export function fallbackEvaluationResponse(): LlmEvaluationResponse {
   return {
     evaluation: 'Error parsing the evaluation. The response could not be properly evaluated.',
     destinationSubjectCategory: 'science',
@@ -70,16 +42,13 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
   };
 }
 
-export function parseEvaluationResponse(
-  evaluationText: string,
-  options: ParseEvaluationOptions = {}
-): LlmEvaluationResponse {
+export function parseEvaluationResponse(evaluationText: string): LlmEvaluationResponse {
   try {
     return parseJsonObject(evaluationText);
   } catch {
     const jsonString = extractLongestJsonObject(evaluationText);
     if (!jsonString) {
-      return fallbackEvaluationResponse(options.isFinalRound);
+      return fallbackEvaluationResponse();
     }
 
     try {
@@ -88,7 +57,7 @@ export function parseEvaluationResponse(
       try {
         return parseJsonObject(repairCommonJsonIssues(jsonString));
       } catch {
-        return fallbackEvaluationResponse(options.isFinalRound);
+        return fallbackEvaluationResponse();
       }
     }
   }

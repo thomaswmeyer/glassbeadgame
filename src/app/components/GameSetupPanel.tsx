@@ -1,6 +1,5 @@
 "use client";
 
-import ModelSelector from './ModelSelector';
 import { DifficultyLevel } from '@/domain/gameFlow';
 import { formatDifficultyLabel, getTurnsEachLabel } from '@/domain/setupDisplay';
 
@@ -8,14 +7,12 @@ type GameSetupPanelProps = {
   maxRounds: number;
   roundOptions: readonly number[];
   aiGoesFirst: boolean;
-  circleEnabled: boolean;
   difficulty: DifficultyLevel;
   difficultyLevels: readonly DifficultyLevel[];
   difficultyDescriptions: Record<DifficultyLevel, string>;
   localPlayerName: string;
   aiPlayerName: string;
   isGeneratingTopic: boolean;
-  productionMode: boolean;
   productionModelName: string;
   onMaxRoundsChange: (rounds: number) => void;
   onAiGoesFirstChange: (aiGoesFirst: boolean) => void;
@@ -27,14 +24,12 @@ export default function GameSetupPanel({
   maxRounds,
   roundOptions,
   aiGoesFirst,
-  circleEnabled,
   difficulty,
   difficultyLevels,
   difficultyDescriptions,
   localPlayerName,
   aiPlayerName,
   isGeneratingTopic,
-  productionMode,
   productionModelName,
   onMaxRoundsChange,
   onAiGoesFirstChange,
@@ -114,16 +109,12 @@ export default function GameSetupPanel({
         </div>
       </div>
 
-      {!productionMode && <ModelSelector />}
-
-      {productionMode && (
-        <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <h3 className="font-bold mb-2 text-left">AI Model:</h3>
-          <p className="text-sm">
-            This game uses {productionModelName} for all AI interactions.
-          </p>
-        </div>
-      )}
+      <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h3 className="font-bold mb-2 text-left">AI Model:</h3>
+        <p className="text-sm">
+          This game uses {productionModelName} for all AI interactions.
+        </p>
+      </div>
 
       <div className="mb-6 text-center">
         <button
@@ -138,25 +129,19 @@ export default function GameSetupPanel({
       <div className="mb-6 text-left max-w-md mx-auto">
         <h3 className="font-bold mb-2">Rules:</h3>
         <ol className="list-decimal pl-5 space-y-2">
-          <li>The game starts with a randomly generated topic node.</li>
+          <li>The first player chooses the opening topic as turn 0.</li>
           <li>Players take turns adding a new topic connected to the selected source topic.</li>
           <li><strong>Responses should be brief</strong> - ideally a single word or short phrase (1-5 words). The quality of the conceptual connection is what matters, not the length of your response.</li>
           <li>Select an older topic in the graph or history to branch from it.</li>
           <li>Use the + controls to connect a new topic to multiple source topics.</li>
           <li>The game lasts for {maxRounds} rounds ({getTurnsEachLabel(maxRounds)}).</li>
-          {circleEnabled && (
-            <li>In the final round, the response must connect back to the original starting topic.</li>
-          )}
           <li>Responses are evaluated based on:
             <ul className="list-disc pl-5 mt-1">
-              <li><strong>Semantic Distance (1-10):</strong> How semantically remote yet meaningfully connected is the new topic from the selected source topic or topics? Higher scores for connections that are not obvious.</li>
+              <li><strong>Semantic Distance (1-10):</strong> How semantically remote is the new topic from the selected source topic or topics? Higher scores for distant connections.</li>
               <li><strong>Relevance (1-10):</strong> How meaningful and appropriate is the connection? For example, stock market crash and flocking behavior.</li>
             </ul>
           </li>
           <li>Each source connection is scored by multiplying those two components; multi-source turns combine edge scores with diminishing returns.</li>
-          {circleEnabled && (
-            <li>The final round is scored based on both the connection to the previous topic and the connection back to the original topic.</li>
-          )}
           <li>The player with the highest total score at the end wins!</li>
         </ol>
       </div>

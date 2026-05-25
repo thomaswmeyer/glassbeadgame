@@ -1,11 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { OpenAI } from 'openai';
-import type {
-  ChatCompletionCreateParamsNonStreaming,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
-import { LLM_CONFIG, currentModelConfig } from '@/config/llm';
+import axios from 'axios';
+import { LLM_CONFIG, getCurrentModelConfig } from '@/config/llm';
 import {
   AiSourceSelectionMode,
   AiResponsePromptNode,
@@ -38,36 +32,6 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
-function getErrorStatus(error: unknown) {
-  return typeof error === 'object' && error !== null && 'status' in error
-    ? error.status
-    : undefined;
-}
-
-function getErrorResponseField(error: unknown, field: 'data' | 'headers') {
-  if (typeof error !== 'object' || error === null || !('response' in error)) {
-    return undefined;
-  }
-
-  const response = error.response;
-  if (typeof response !== 'object' || response === null || !(field in response)) {
-    return undefined;
-  }
-
-  return (response as Record<'data' | 'headers', unknown>)[field];
-}
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
-
-const deepseekClient = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY || '',
-  baseURL: LLM_CONFIG.endpoints.deepseek,
-});
-
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 async function callWithRetry<T>(
   apiCall: () => Promise<T>,
   maxRetries: number = 3
@@ -94,130 +58,58 @@ async function callWithRetry<T>(
   throw lastError;
 }
 
+async function callGeminiAPI(request: TextPromptRequest) {
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const modelConfig = getCurrentModelConfig();
+  const url = `${LLM_CONFIG.endpoints.gemini}/models/${modelConfig.model}:generateContent`;
+  const response = await axios.post(
+    url,
+    {
+      systemInstruction: {
+        parts: [{ text: request.systemPrompt }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: request.userMessage }],
+        },
+      ],
+      generationConfig: {
+        temperature: request.temperature,
+        maxOutputTokens: request.maxTokens,
+        ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
+      },
+    },
+    {
+      params: { key: apiKey },
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 60_000,
+    }
+  );
+
+  const parts = response.data?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((part: { text?: string }) => part.text || '').join('')
+    : '';
+
+  return text.trim() || request.fallbackText;
+}
+
 export function getModelConfig() {
   return {
-    model: currentModelConfig.model,
-    provider: currentModelConfig.provider,
+    ...getCurrentModelConfig(),
     temperature: LLM_CONFIG.temperature,
   };
 }
 
-function convertToOpenAIMessages(
-  systemPrompt: string,
-  userMessages: { role: string; content: string }[]
-) {
-  const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-  ];
-
-  userMessages.forEach(msg => {
-    messages.push({
-      role: msg.role === 'user' ? 'user' : 'assistant',
-      content: msg.content,
-    });
-  });
-
-  return messages;
-}
-
-async function callDeepSeekAPI(params: ChatCompletionCreateParamsNonStreaming) {
-  console.log('=== DEEPSEEK API REQUEST DETAILS ===');
-  console.log('Base URL:', LLM_CONFIG.endpoints.deepseek);
-  console.log(
-    'API Key (first 5 chars):',
-    process.env.DEEPSEEK_API_KEY
-      ? `${process.env.DEEPSEEK_API_KEY.substring(0, 5)}...`
-      : 'undefined'
-  );
-  console.log('Model:', params.model);
-  console.log('Request params:', JSON.stringify({
-    ...params,
-    messages: params.messages ? `[${params.messages.length} messages]` : undefined,
-  }, null, 2));
-
-  try {
-    const response = await deepseekClient.chat.completions.create(params);
-    console.log('DeepSeek API request successful');
-    return response;
-  } catch (error: unknown) {
-    console.error('=== DEEPSEEK API ERROR ===');
-    console.error('Error status:', getErrorStatus(error));
-    console.error('Error message:', getErrorMessage(error));
-    console.error('Error details:', getErrorResponseField(error, 'data') || 'No detailed error data');
-    console.error('Error headers:', getErrorResponseField(error, 'headers') || 'No headers');
-    throw error;
-  }
-}
-
 async function callTextPrompt(request: TextPromptRequest) {
-  if (currentModelConfig.provider === 'anthropic') {
-    console.log('Using Anthropic API with model:', currentModelConfig.model);
-    const response = await callWithRetry(() =>
-      anthropic.messages.create({
-        model: currentModelConfig.model,
-        max_tokens: request.maxTokens,
-        temperature: request.temperature,
-        system: request.systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: request.userMessage,
-          },
-        ],
-      })
-    );
-
-    return response.content[0].type === 'text'
-      ? response.content[0].text.trim()
-      : request.fallbackText;
-  }
-
-  if (currentModelConfig.provider === 'deepseek') {
-    console.log('Using DeepSeek API with model:', currentModelConfig.model);
-    const messages = convertToOpenAIMessages(request.systemPrompt, [
-      { role: 'user', content: request.userMessage },
-    ]);
-
-    const params: ChatCompletionCreateParamsNonStreaming = {
-      model: currentModelConfig.model,
-      messages,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      ...(request.responseJson ? { response_format: { type: 'json_object' as const } } : {}),
-    };
-
-    const response = await callWithRetry(() => callDeepSeekAPI(params));
-
-    return response.choices?.[0]?.message?.content?.trim() || request.fallbackText;
-  }
-
-  if (currentModelConfig.provider === 'gemini') {
-    console.log('Using Gemini API with model:', currentModelConfig.model);
-    const model = gemini.getGenerativeModel({
-      model: currentModelConfig.model,
-      systemInstruction: request.systemPrompt,
-      ...(request.responseJson ? {
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      } : {}),
-    });
-
-    const result = await callWithRetry(() =>
-      model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: request.userMessage }] }],
-        generationConfig: {
-          temperature: request.temperature,
-          maxOutputTokens: request.maxTokens,
-          ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
-        },
-      })
-    );
-
-    return result.response.text()?.trim() || request.fallbackText;
-  }
-
-  throw new Error(`Unsupported provider: ${currentModelConfig.provider}`);
+  const modelConfig = getCurrentModelConfig();
+  console.log('Using Gemini API with model:', modelConfig.model);
+  return callWithRetry(() => callGeminiAPI(request));
 }
 
 export async function generateTopic(
@@ -227,7 +119,7 @@ export async function generateTopic(
   recentTopics: string[] = []
 ): Promise<string> {
   console.log('=== GENERATE TOPIC API CALL ===');
-  console.log('Current model config:', JSON.stringify(currentModelConfig));
+  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
 
   const { systemPrompt, userMessage } = buildGenerateTopicPrompt({
     category,
@@ -251,7 +143,7 @@ export async function generateTopic(
 
 export async function getDefinition(topic: string): Promise<string> {
   console.log('=== GET DEFINITION API CALL ===');
-  console.log('Current model config:', JSON.stringify(currentModelConfig));
+  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
 
   const { systemPrompt, userMessage } = buildDefinitionPrompt(topic);
 
@@ -273,28 +165,22 @@ export async function getDefinition(topic: string): Promise<string> {
 
 export async function getAiResponse(
   topic: string,
-  originalTopic: string,
   gameHistory: LegacyAiGameHistoryItem[],
   difficulty: string,
-  circleEnabled: boolean,
-  isFinalRound: boolean,
   availableNodes: AiResponsePromptNode[] = [],
   selectedSourceNodeIds: string[] = [],
   sourceSelectionMode: AiSourceSelectionMode = 'suggested'
 ): Promise<string> {
   console.log('=== GET AI RESPONSE API CALL ===');
-  console.log('Current model config:', JSON.stringify(currentModelConfig));
+  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
 
   const { systemPrompt, userMessage } = buildAiResponsePrompt({
     topic,
     availableNodes,
     selectedSourceNodeIds,
     sourceSelectionMode,
-    originalTopic,
     gameHistory: gameHistory || [],
     difficulty,
-    circleEnabled,
-    isFinalRound,
     timestamp: new Date().toISOString(),
   });
 
@@ -316,20 +202,15 @@ export async function getAiResponse(
 export async function evaluateResponse(
   topic: string,
   response: string,
-  difficulty: string,
-  originalTopic?: string,
-  isFinalRound?: boolean
+  difficulty: string
 ): Promise<LlmEvaluationResponse> {
   console.log('=== EVALUATE RESPONSE API CALL ===');
-  console.log('Current model config:', JSON.stringify(currentModelConfig));
+  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
 
-  const isFinalEvaluation = Boolean(isFinalRound && originalTopic);
   const { systemPrompt, userMessage } = buildEvaluationPrompt({
     topic,
     response,
     difficulty,
-    originalTopic,
-    isFinalRound,
   });
 
   try {
@@ -342,9 +223,7 @@ export async function evaluateResponse(
       responseJson: true,
     });
 
-    return parseEvaluationResponse(evaluationText, {
-      isFinalRound: isFinalEvaluation,
-    });
+    return parseEvaluationResponse(evaluationText);
   } catch (error) {
     console.error('Error evaluating response:', error);
     throw error;

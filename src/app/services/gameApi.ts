@@ -50,15 +50,6 @@ export const gameApi: GameFlowServices & {
   },
 
   async evaluateTurn(request: EvaluateTurnRequest): Promise<TurnEvaluation> {
-    if (request.isFinalCircleRound) {
-      return postJson('/api/evaluate-final-response', {
-        currentTopic: request.topic,
-        originalTopic: request.originalTopic,
-        response: request.response,
-        difficulty: request.difficulty,
-      });
-    }
-
     return postJson('/api/evaluate-response', {
       topic: request.topic,
       response: request.response,
@@ -67,16 +58,13 @@ export const gameApi: GameFlowServices & {
   },
 
   async generateAiResponse(request: GenerateAiResponseRequest) {
-    const endpoint = request.isFinalCircleRound ? '/api/ai-final-response' : '/api/ai-response';
-    const result = await axios.post(endpoint, {
+    const result = await axios.post('/api/ai-response', {
       topic: request.topic,
       availableNodes: request.availableNodes,
       selectedSourceNodeIds: request.selectedSourceNodeIds,
       sourceSelectionMode: request.sourceSelectionMode,
-      originalTopic: request.originalTopic,
       gameHistory: toLegacyAiGameHistory(request.gameHistory),
       difficulty: request.difficulty,
-      circleEnabled: request.circleEnabled,
     });
 
     return result.data.response;

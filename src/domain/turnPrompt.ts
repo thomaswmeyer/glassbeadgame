@@ -16,17 +16,12 @@ export function getTurnResponsePanelTitle(params: {
 
 export function getTurnResponsePlaceholder(params: {
   isOpeningTurn?: boolean;
-  isFinalCircleRound: boolean;
-  currentSourceTopicText: string;
-  originalTopic: string;
 }) {
   if (params.isOpeningTurn) {
     return 'Choose the opening topic for this game and press Enter...';
   }
 
-  return params.isFinalCircleRound
-    ? `Type a brief response (1-5 words) that connects to both "${params.currentSourceTopicText}" and "${params.originalTopic}"...`
-    : 'Type a brief response (1-5 words) and press Enter...';
+  return 'Type a brief response (1-5 words) and press Enter...';
 }
 
 export function canSubmitTurnResponse(params: {

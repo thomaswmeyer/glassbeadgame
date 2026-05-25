@@ -14,10 +14,7 @@ export type PlayerTurnContext = {
   topic: string;
   availableNodes: TopicNode[];
   selectedSourceNodeIds: string[];
-  originalTopic: string;
   difficulty: DifficultyLevel;
-  circleEnabled: boolean;
-  isFinalCircleRound: boolean;
   gameHistory: TurnContextHistoryItem[];
 };
 
