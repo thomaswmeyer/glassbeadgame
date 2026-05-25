@@ -5,6 +5,7 @@ import { gameApi } from '@/app/services/gameApi';
 import {
   DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
+  CurrentEvaluationView,
   Score,
   addOpeningTopicTurnToGameState,
   addTurnToGameState,
@@ -73,6 +74,7 @@ export function useGameController({
   const startedAutomaticTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
   const [response, setResponse] = useState<string>('');
+  const [inlineEvaluation, setInlineEvaluation] = useState<CurrentEvaluationView | null>(null);
 
   const defaultAiController = useMemo<PlayerTurnController>(() => ({
     playerId: DEFAULT_AI_PLAYER_ID,
@@ -105,6 +107,10 @@ export function useGameController({
         difficulty: context.difficulty,
       });
       const parsedMove = parseAiMoveResponse(aiResponse);
+      console.log('Parsed AI move:', parsedMove || {
+        parseFailed: true,
+        rawResponsePreview: aiResponse.slice(0, 240),
+      });
 
       return {
         selectedSourceNodeIds: parsedMove?.selectedSourceNodeIds,
@@ -146,6 +152,7 @@ export function useGameController({
   const isOpeningTurn = !gameState.rootNodeId;
 
   const setSelectedGraphNodeId = (nodeId: string | null) => {
+    setInlineEvaluation(null);
     setGameState(prev => setSelectedNodeIds(prev, nodeId ? [nodeId] : []));
   };
 
@@ -155,6 +162,7 @@ export function useGameController({
 
     const initialPlayer = aiGoesFirst ? 'ai' : 'human';
     startedAutomaticTurnKeyRef.current = null;
+    setInlineEvaluation(null);
     setResponse('');
     setGameState(setGameStatus(
       createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
@@ -167,6 +175,7 @@ export function useGameController({
     responseText: string;
     evaluationTopic: string;
     result: TurnEvaluation;
+    continueToNextTurn?: boolean;
   }) => {
     setGameState(prev => {
       const withTurn = addTurnToGameState(prev, {
@@ -181,10 +190,18 @@ export function useGameController({
         scoringDescription: params.result.evaluation,
       });
 
-      return setGameStatus(
-        withTurn,
-        currentRound === maxRounds ? 'completed' : 'showingResults'
-      );
+      if (currentRound === maxRounds) {
+        setInlineEvaluation(null);
+        return setGameStatus(withTurn, 'completed');
+      }
+
+      if (!params.continueToNextTurn) {
+        setInlineEvaluation(null);
+        return setGameStatus(withTurn, 'showingResults');
+      }
+
+      setInlineEvaluation(selectCurrentEvaluation(setGameStatus(withTurn, 'showingResults')));
+      return advanceGameTurn(withTurn, getNextPlayerId(withTurn));
     });
   }, [currentRound, maxRounds]);
 
@@ -206,10 +223,9 @@ export function useGameController({
           subjectCategory: params.destinationSubjectCategory,
         });
 
-        return setGameStatus(
-          withOpeningTopic,
-          currentRound === maxRounds ? 'completed' : 'showingResults'
-        );
+        return advanceGameTurn(withOpeningTopic, getNextPlayerId(withOpeningTopic), {
+          incrementRound: false,
+        });
       });
 
       if (params.clearResponseOnSuccess) {
@@ -225,6 +241,11 @@ export function useGameController({
       },
       { selectedSourceNodeIds: params.selectedSourceNodeIds }
     );
+    console.log('Resolved turn source ids:', {
+      requestedSourceNodeIds: params.selectedSourceNodeIds || [],
+      resolvedSourceNodeIds: selectedSourceNodeIds,
+      fallbackActiveSourceNodeIds: gameState.activeSourceNodeIds,
+    });
     const evaluationTargets = selectedSourceNodeIds
       .map(nodeId => gameState.nodesById[nodeId])
       .filter(Boolean);
@@ -277,6 +298,7 @@ export function useGameController({
           responseText: params.responseText,
           evaluationTopic,
           result,
+          continueToNextTurn: !params.clearResponseOnSuccess,
         });
 
         if (params.clearResponseOnSuccess) {
@@ -317,6 +339,7 @@ export function useGameController({
               scores: combinedScores,
               edgeEvaluations,
             },
+            continueToNextTurn: !params.clearResponseOnSuccess,
           });
         } else {
           setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
@@ -326,12 +349,10 @@ export function useGameController({
     }
   }, [
     completeEvaluatedTurn,
-    currentRound,
     difficulty,
     gameState.activeSourceNodeIds,
     gameState.nodesById,
     isOpeningTurn,
-    maxRounds,
     services,
   ]);
 
@@ -369,6 +390,7 @@ export function useGameController({
   const resetCurrentGame = (currentPlayerId: string) => {
     setResponse('');
     startedAutomaticTurnKeyRef.current = null;
+    setInlineEvaluation(null);
     setSelectedGraphNodeId(null);
     setGameState(createEmptyGameState(maxRounds, currentPlayerId));
   };
@@ -411,7 +433,6 @@ export function useGameController({
         });
         const responseText = submission.responseText.trim() || `Response to ${promptTopic}`;
 
-        setResponse(responseText);
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText,
@@ -423,7 +444,6 @@ export function useGameController({
       } catch (error) {
         console.error('Error getting automatic player response:', error);
         const fallbackResponse = `Response to ${promptTopic}`;
-        setResponse(fallbackResponse);
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText: fallbackResponse,
@@ -457,6 +477,8 @@ export function useGameController({
     response,
     setResponse,
     currentEvaluation,
+    inlineEvaluation,
+    clearInlineEvaluation: () => setInlineEvaluation(null),
     graphRenderData,
     currentPlayerModel,
     turnHistoryRows,

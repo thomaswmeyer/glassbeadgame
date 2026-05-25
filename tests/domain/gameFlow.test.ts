@@ -30,7 +30,7 @@ const normalizedDefaultScore = {
   total: 56,
 };
 
-test('starts a generated game by recording the generated root as a zero-point opening turn', async () => {
+test('starts a generated game by recording the generated root and advancing to round one', async () => {
   const calls: unknown[] = [];
   const services = {
     async generateTopic(request) {
@@ -48,8 +48,8 @@ test('starts a generated game by recording the generated root as a zero-point op
   });
 
   assert.deepEqual(calls, [{ difficulty: 'undergrad' }]);
-  assert.equal(state.gameStatus, 'showingResults');
-  assert.equal(state.currentPlayerId, DEFAULT_HUMAN_PLAYER_ID);
+  assert.equal(state.gameStatus, 'awaitingResponse');
+  assert.equal(state.currentPlayerId, DEFAULT_AI_PLAYER_ID);
   assert.equal(selectRootTopic(state), 'Cathedrals');
   assert.deepEqual(state.activeSourceNodeIds, [state.rootNodeId]);
   assert.deepEqual(state.selectedNodeIds, [state.rootNodeId]);

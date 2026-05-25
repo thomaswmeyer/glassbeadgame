@@ -1,6 +1,8 @@
 import { GraphRenderEdge, GraphRenderNode } from './game';
 import { getSubjectCategoryColor } from './subjectCategories';
 
+export const GRAPH_NODE_RADIUS = 12;
+
 export type GraphPosition = {
   x: number;
   y: number;
@@ -91,7 +93,7 @@ export function createGraphLayoutData(params: {
     return {
       ...node,
       color: getGraphNodeColor(node),
-      radius: node.isRoot ? 16 : 12,
+      radius: GRAPH_NODE_RADIUS,
       x: seededPosition.x,
       y: seededPosition.y,
     };

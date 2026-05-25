@@ -54,6 +54,8 @@ export default function GameInterface() {
     response,
     setResponse,
     currentEvaluation,
+    inlineEvaluation,
+    clearInlineEvaluation,
     graphRenderData,
     currentPlayerModel,
     turnHistoryRows,
@@ -106,10 +108,20 @@ export default function GameInterface() {
 
     setSelectedGraphNodeId(sourceNodeId);
     if (sourceNodeId) {
+      clearInlineEvaluation();
       setGameState(prev => setSingleActiveSourceNode(prev, sourceNodeId));
     }
     
     console.log(`Selected previous topic: "${historyItem.destinationNode.topic}" from round ${historyItem.turn.round}`);
+  };
+
+  const handleAddHistoryItem = (historyItem: TurnHistoryRow) => {
+    if (sourceSelectionLocked) {
+      return;
+    }
+
+    clearInlineEvaluation();
+    setGameState(prev => addActiveSourceNode(prev, historyItem.destinationNode.id));
   };
 
   const getTopicGraphNodeId = (topicValue: string, beforeHistoryIndex = turnHistoryRows.length) => {
@@ -129,16 +141,19 @@ export default function GameInterface() {
     }
 
     setSelectedGraphNodeId(nodeId);
+    clearInlineEvaluation();
     setGameState(prev => setSingleActiveSourceNode(prev, nodeId));
   };
 
   const handleAddSourceNode = (nodeId: string) => {
     if (sourceSelectionLocked) return;
+    clearInlineEvaluation();
     setGameState(prev => addActiveSourceNode(prev, nodeId));
   };
 
   const handleRemoveSourceNode = (nodeId: string) => {
     if (sourceSelectionLocked) return;
+    clearInlineEvaluation();
     setGameState(prev => removeActiveSourceNode(prev, nodeId));
   };
 
@@ -220,6 +235,18 @@ export default function GameInterface() {
               onRemoveSource={handleRemoveSourceNode}
             />
 
+            {!showingResults && inlineEvaluation && (
+              <EvaluationResultsPanel
+                currentEvaluation={inlineEvaluation}
+                compact
+                gameCompleted={false}
+                playerScoreRows={playerScoreRows}
+                onNextTurn={advanceTurn}
+                onRestart={restartGame}
+                onReturnToSettings={returnToSettings}
+              />
+            )}
+
             {!showingResults ? (
               <TurnResponsePanel
                 isCurrentPlayerManual={isCurrentPlayerManual}
@@ -265,6 +292,7 @@ export default function GameInterface() {
                 onScoreMouseEnter={handleScoreMouseEnter}
                 onScoreMouseLeave={handleScoreMouseLeave}
                 onSelectHistoryItem={handleSelectHistoryItem}
+                onAddHistoryItem={handleAddHistoryItem}
               />
             )}
           </div>

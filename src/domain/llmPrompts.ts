@@ -124,6 +124,11 @@ export function buildAiResponsePrompt(params: {
         
         Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
         This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
+        Your response must be a recognizable topic that could plausibly have a concise encyclopedia-style
+        definition: a concept, term, object, event, work, practice, theory, place, or phenomenon.
+        Avoid invented poetic phrases, private metaphors, vibes, or word-salad compounds.
+        Do not answer with phrases like "exodus of memory" unless the phrase is an established concept,
+        title, event, or term.
         
         You must choose one or more source nodes for this move. Each selected source creates a separate edge
         to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,

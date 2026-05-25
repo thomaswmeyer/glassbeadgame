@@ -80,7 +80,7 @@ test('graph layout assigns visual node attributes without depending on the rende
     x: node.x,
     y: node.y,
   })), [
-    { id: 'root', color: '#B45309', radius: 16, x: 400, y: 300 },
+    { id: 'root', color: '#B45309', radius: 12, x: 400, y: 300 },
     {
       id: 'node-1',
       color: '#DB2777',

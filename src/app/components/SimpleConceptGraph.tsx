@@ -377,16 +377,9 @@ export default function SimpleConceptGraph({
 
     function updateNodeStyles() {
       renderedNodes
-        .attr('stroke', node => {
-          if (node.isSelected) return '#7C3AED';
-          if (node.isActiveSource) return '#16A34A';
-          if (node.id === hoveredNodeIdRef.current) return '#111827';
-          if (node.isRoot) return '#92400E';
-          return 'white';
-        })
+        .attr('stroke', node => (node.isSelected || node.isActiveSource ? node.color : 'white'))
         .attr('stroke-width', node => {
           if (node.isSelected || node.isActiveSource) return 4;
-          if (node.id === hoveredNodeIdRef.current || node.isRoot) return 3;
           return 1.5;
         });
 

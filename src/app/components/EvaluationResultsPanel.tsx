@@ -9,6 +9,7 @@ import { getRegularScoreDisplayItems } from '@/domain/scoreDisplay';
 type EvaluationResultsPanelProps = {
   currentEvaluation: CurrentEvaluationView;
   gameCompleted: boolean;
+  compact?: boolean;
   playerScoreRows: PlayerScoreRow[];
   onNextTurn: () => void;
   onRestart: () => void;
@@ -18,6 +19,7 @@ type EvaluationResultsPanelProps = {
 export default function EvaluationResultsPanel({
   currentEvaluation,
   gameCompleted,
+  compact = false,
   playerScoreRows,
   onNextTurn,
   onRestart,
@@ -98,14 +100,14 @@ export default function EvaluationResultsPanel({
             </button>
           </div>
         </div>
-      ) : (
+      ) : !compact ? (
         <button
           onClick={onNextTurn}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
         >
           Next Round
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

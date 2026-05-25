@@ -3,7 +3,9 @@ import {
   Score,
   addOpeningTopicTurnToGameState,
   addTurnToGameState,
+  advanceGameTurn,
   createEmptyGameState,
+  getNextPlayerId,
   selectTurnHistoryRows,
   setGameStatus,
 } from './game';
@@ -125,14 +127,18 @@ export async function startGeneratedGame(params: {
     difficulty: params.difficulty,
   }));
 
-  return setGameStatus(addOpeningTopicTurnToGameState(createEmptyGameState(
+  const stateWithOpeningTopic = addOpeningTopicTurnToGameState(createEmptyGameState(
     params.maxRounds,
     params.currentPlayerId
   ), {
     topic: rootTopicResult.topic,
     playerId: params.currentPlayerId,
     subjectCategory: rootTopicResult.subjectCategory,
-  }), 'showingResults');
+  });
+
+  return advanceGameTurn(stateWithOpeningTopic, getNextPlayerId(stateWithOpeningTopic), {
+    incrementRound: false,
+  });
 }
 
 export async function evaluateAndApplyTurn(params: {

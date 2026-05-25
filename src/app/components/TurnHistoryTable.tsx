@@ -32,6 +32,7 @@ type TurnHistoryTableProps = {
   ) => void;
   onScoreMouseLeave: () => void;
   onSelectHistoryItem: (historyItem: TurnHistoryRow) => void;
+  onAddHistoryItem: (historyItem: TurnHistoryRow) => void;
 };
 
 export default function TurnHistoryTable({
@@ -51,6 +52,7 @@ export default function TurnHistoryTable({
   onScoreMouseEnter,
   onScoreMouseLeave,
   onSelectHistoryItem,
+  onAddHistoryItem,
 }: TurnHistoryTableProps) {
   const isCurrentTopicSelected = Boolean(currentTopicNodeId && selectedGraphNodeId === currentTopicNodeId);
 
@@ -60,7 +62,7 @@ export default function TurnHistoryTable({
       <p className="text-sm text-gray-600 mb-2">
         Click a row to select that row's topic in the graph.
       </p>
-      <div className="overflow-auto max-h-60">
+      <div className="overflow-auto max-h-96">
         <table className="min-w-full bg-white">
           <thead className="bg-gray-100">
             <tr>
@@ -133,19 +135,32 @@ export default function TurnHistoryTable({
                     </td>
                     <td className="py-2 px-4">
                       {canSelectHistoryRows && (
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onSelectHistoryItem(round);
-                          }}
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            isResponseSelectedForTopic
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                          }`}
-                        >
-                          {isResponseSelectedForTopic ? 'Selected' : 'Use as Topic'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSelectHistoryItem(round);
+                            }}
+                            className={`text-xs px-2 py-1 rounded-full ${
+                              isResponseSelectedForTopic
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                            }`}
+                          >
+                            {isResponseSelectedForTopic ? 'Selected' : 'Use as Topic'}
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onAddHistoryItem(round);
+                            }}
+                            disabled={isResponseSelectedForTopic}
+                            title="Add topic to current turn"
+                            className="h-7 w-7 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            +
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
