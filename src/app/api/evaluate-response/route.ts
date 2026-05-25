@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       // Provide a fallback evaluation
       const fallbackEvaluation = {
         evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
+        destinationSubjectCategory: 'science',
         scores: {
           semanticDistance: 5,
           relevanceQuality: 5,

@@ -1,8 +1,10 @@
 import { Score } from './game';
+import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategories';
 
 export type LlmEvaluationResponse = {
   evaluation: string;
   finalEvaluation?: string;
+  destinationSubjectCategory?: SubjectCategoryId;
   scores: Score;
 };
 
@@ -33,6 +35,7 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
     return {
       evaluation: 'Error parsing the evaluation. The response could not be properly evaluated.',
       finalEvaluation: 'Error parsing the evaluation.',
+      destinationSubjectCategory: 'science',
       scores: {
         semanticDistance: 5,
         relevanceQuality: 5,
@@ -53,6 +56,7 @@ export function fallbackEvaluationResponse(isFinalRound = false): LlmEvaluationR
 
   return {
     evaluation: 'Error parsing the evaluation. The response could not be properly evaluated.',
+    destinationSubjectCategory: 'science',
     scores: {
       semanticDistance: 5,
       relevanceQuality: 5,
@@ -86,7 +90,11 @@ export function parseEvaluationResponse(
 }
 
 function parseJsonObject(text: string): LlmEvaluationResponse {
-  return JSON.parse(text) as LlmEvaluationResponse;
+  const parsed = JSON.parse(text) as LlmEvaluationResponse;
+  return {
+    ...parsed,
+    destinationSubjectCategory: normalizeSubjectCategoryId(parsed.destinationSubjectCategory),
+  };
 }
 
 function extractLongestJsonObject(text: string) {

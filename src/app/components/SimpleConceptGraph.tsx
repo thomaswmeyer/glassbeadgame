@@ -9,6 +9,8 @@ import {
   GraphPosition,
   calculateGraphViewportTransform,
   createGraphLayoutData,
+  getGraphEdgeDistance,
+  getGraphEdgeStrokeWidth,
 } from '@/domain/graphLayout';
 
 type SimulationNode = GraphLayoutNode & d3.SimulationNodeDatum;
@@ -149,11 +151,13 @@ export default function SimpleConceptGraph({
             .append('line')
             .attr('stroke-opacity', 0)
             .attr('stroke', edge => edge.color)
-            .attr('stroke-width', 2)
+            .attr('stroke-width', edge => getGraphEdgeStrokeWidth(edge))
             .call(enterSelection =>
               enterSelection.transition().duration(180).attr('stroke-opacity', 0.65)
             ),
-        update => update.attr('stroke', edge => edge.color),
+        update => update
+          .attr('stroke', edge => edge.color)
+          .attr('stroke-width', edge => getGraphEdgeStrokeWidth(edge)),
         exit => exit.transition().duration(120).attr('stroke-opacity', 0).remove()
       );
 
@@ -275,7 +279,7 @@ export default function SimpleConceptGraph({
           d3
             .forceLink<SimulationNode, SimulationEdge>(graphData.edges)
             .id(node => node.id)
-            .distance(edge => 64 + (edge.semanticDistanceScore || 5) * 9)
+            .distance(edge => getGraphEdgeDistance(edge))
             .strength(0.75)
         )
         .force('charge', d3.forceManyBody<SimulationNode>().strength(-260))
@@ -292,7 +296,7 @@ export default function SimpleConceptGraph({
         d3
           .forceLink<SimulationNode, SimulationEdge>(graphData.edges)
           .id(node => node.id)
-          .distance(edge => 64 + (edge.semanticDistanceScore || 5) * 9)
+          .distance(edge => getGraphEdgeDistance(edge))
           .strength(0.75)
       );
       simulation.force('center', d3.forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.06));

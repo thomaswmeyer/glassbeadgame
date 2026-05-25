@@ -22,6 +22,7 @@ import {
 import {
   DifficultyLevel,
   GameFlowServices,
+  GeneratedTopic,
   TurnEvaluation,
   selectCurrentSourceTopicText,
   selectRootTopic,
@@ -33,6 +34,7 @@ import {
   resolvePlayerController,
   shouldAutoSubmitTurn,
 } from '@/domain/playerController';
+import { normalizeSubjectCategoryId } from '@/domain/subjectCategories';
 import {
   SourceTurnEvaluation,
   combineSourceScores,
@@ -57,6 +59,10 @@ function getPlayerIdForTurn(player: 'human' | 'ai') {
 }
 
 const EMPTY_PLAYER_CONTROLLERS: PlayerTurnController[] = [];
+
+function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic {
+  return typeof result === 'string' ? { topic: result } : result;
+}
 
 export function useGameController({
   maxRounds,
@@ -136,16 +142,17 @@ export function useGameController({
     ));
 
     try {
-      const newTopic = await services.generateTopic({
+      const newTopic = resolveGeneratedTopic(await services.generateTopic({
         difficulty,
-      });
+      }));
       setResponse('');
 
       setGameState(startGameState({
-        rootTopic: newTopic,
+        rootTopic: newTopic.topic,
         maxRounds,
         currentPlayerId: getPlayerIdForTurn(initialPlayer),
         rootCreatedByPlayerId: DEFAULT_AI_PLAYER_ID,
+        rootSubjectCategory: newTopic.subjectCategory,
       }));
     } catch (error) {
       console.error('Error generating topic:', error);
@@ -170,6 +177,7 @@ export function useGameController({
         totalScore: params.result.scores.total,
         legacyScores: params.result.scores,
         edgeEvaluations: params.result.edgeEvaluations,
+        destinationSubjectCategory: params.result.destinationSubjectCategory,
         scoringDescription: params.result.evaluation,
       });
 
@@ -213,14 +221,21 @@ export function useGameController({
               sourceTopic: sourceNode.topic,
               evaluation: result.evaluation,
               finalEvaluation: result.finalEvaluation,
+              destinationSubjectCategory: normalizeSubjectCategoryId(result.destinationSubjectCategory),
               scores: normalizeScore(result.scores),
             } satisfies SourceTurnEvaluation;
           })
         );
         const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
+        const destinationSubjectCategory = normalizeSubjectCategoryId(
+          edgeEvaluations
+            .map(edgeEvaluation => edgeEvaluation.destinationSubjectCategory)
+            .find(Boolean)
+        );
         const result: TurnEvaluation = {
           evaluation: formatCombinedEvaluation(edgeEvaluations),
           finalEvaluation: formatCombinedFinalEvaluation(edgeEvaluations),
+          destinationSubjectCategory,
           scores: combinedScores,
           edgeEvaluations,
         };
@@ -266,6 +281,7 @@ export function useGameController({
             evaluationTopic,
             result: {
               evaluation: formatCombinedEvaluation(edgeEvaluations),
+              destinationSubjectCategory: 'science',
               scores: combinedScores,
               edgeEvaluations,
             },

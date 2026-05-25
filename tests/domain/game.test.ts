@@ -439,6 +439,7 @@ test('turn history and graph render selectors expose edge scoring details', () =
     sourceNodeId: state.rootNodeId,
     destinationNodeId: turn.destinationNodeId,
     playerId: DEFAULT_HUMAN_PLAYER_ID,
+    playerKind: 'local',
     semanticDistanceScore: 6,
     strengthScore: 7,
     totalScore: 13,

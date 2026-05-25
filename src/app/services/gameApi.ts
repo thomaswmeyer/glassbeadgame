@@ -43,7 +43,10 @@ export const gameApi: GameFlowServices & {
     const result = await axios.post('/api/generate-topic', {
       difficulty: request.difficulty,
     });
-    return result.data.topic;
+    return {
+      topic: result.data.topic,
+      subjectCategory: result.data.subjectCategory,
+    };
   },
 
   async evaluateTurn(request: EvaluateTurnRequest): Promise<TurnEvaluation> {

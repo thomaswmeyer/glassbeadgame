@@ -1,4 +1,5 @@
 import { GraphRenderEdge, GraphRenderNode } from './game';
+import { getSubjectCategoryColor } from './subjectCategories';
 
 export type GraphPosition = {
   x: number;
@@ -37,9 +38,27 @@ export type GraphViewportTransform = {
 };
 
 export function getGraphNodeColor(node: GraphRenderNode) {
-  if (node.isRoot) return '#D97706';
-  if (node.playerKind === 'ai') return '#DC2626';
-  return '#2563EB';
+  return getSubjectCategoryColor(node.subjectCategory);
+}
+
+export function getGraphEdgeColor(edge: Pick<GraphRenderEdge, 'playerKind'>) {
+  if (edge.playerKind === 'ai') return '#DC2626';
+  if (edge.playerKind === 'local') return '#2563EB';
+  return '#94A3B8';
+}
+
+function clampScore(score: number) {
+  return Math.max(1, Math.min(10, score));
+}
+
+export function getGraphEdgeDistance(edge: Pick<GraphLayoutEdge, 'semanticDistanceScore'>) {
+  const semanticDistance = clampScore(edge.semanticDistanceScore ?? 5);
+  return semanticDistance * 24;
+}
+
+export function getGraphEdgeStrokeWidth(edge: Pick<GraphLayoutEdge, 'strengthScore'>) {
+  const relevance = clampScore(edge.strengthScore ?? 5);
+  return 1 + relevance * 0.55;
 }
 
 export function createGraphLayoutData(params: {
@@ -85,7 +104,7 @@ export function createGraphLayoutData(params: {
       id: edge.id,
       source: edge.sourceNodeId,
       target: edge.destinationNodeId,
-      color: '#94A3B8',
+      color: getGraphEdgeColor(edge),
       semanticDistanceScore: edge.semanticDistanceScore,
       strengthScore: edge.strengthScore,
       totalScore: edge.totalScore,

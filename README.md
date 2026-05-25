@@ -258,6 +258,31 @@ The calibration command posts the examples in
 `src/domain/scoringCalibrationExamples.json` to the running evaluation API and
 checks whether the configured model stays within the expected score bands.
 
+Future scoring should add novelty as a separate signal from both distance and
+relevance. The LLM judge can estimate intrinsic or semantic novelty: whether a
+specific connection is fresh, non-obvious, or clichéd in general knowledge. For
+example, `DNA -> alphabet` is distant and relevant but a familiar analogy, so
+it should receive lower novelty than a less common but still meaningful
+connection such as `DNA -> weaving pattern`.
+
+Historical novelty should come from game data rather than the LLM. As games are
+played, the system can track exact pair frequency, unordered pair frequency,
+domain-pair frequency, and destination subject-area frequency. Those counts can
+then reduce the score for moves that repeat well-trodden paths across previous
+games.
+
+A likely future edge formula is:
+
+```text
+baseEdgeScore = semanticDistance * relevance
+llmNoveltyMultiplier = 0.5 + noveltyScore / 10
+historicalNoveltyMultiplier = 1 / sqrt(1 + previousSimilarUses)
+edgeScore = baseEdgeScore * llmNoveltyMultiplier * historicalNoveltyMultiplier
+```
+
+This keeps the responsibilities clean: the LLM judges semantic novelty, while
+the database judges observed novelty from actual play history.
+
 ## Leaderboards, Hosting, and Partnerships
 
 The game can become a model-quality evaluation if rated games are separated

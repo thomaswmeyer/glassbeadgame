@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   calculateGraphViewportTransform,
   createGraphLayoutData,
+  getGraphEdgeDistance,
+  getGraphEdgeStrokeWidth,
   getGraphNodeColor,
   type GraphPosition,
 } from '../../src/domain/graphLayout';
@@ -17,6 +19,7 @@ const rootNode: GraphRenderNode = {
   topic: 'Cathedrals',
   playerId: 'player-ai',
   playerKind: 'ai',
+  subjectCategory: 'history',
   isRoot: true,
   isCurrent: false,
   isSelected: false,
@@ -29,6 +32,7 @@ const childNode: GraphRenderNode = {
   topic: 'Flying buttresses',
   playerId: 'player-local',
   playerKind: 'local',
+  subjectCategory: 'arts',
   isRoot: false,
   isCurrent: true,
   isSelected: true,
@@ -40,6 +44,7 @@ const edge: GraphRenderEdge = {
   sourceNodeId: 'root',
   destinationNodeId: 'node-1',
   playerId: 'player-local',
+  playerKind: 'local',
   semanticDistanceScore: 6,
   strengthScore: 7,
   totalScore: 42,
@@ -56,9 +61,9 @@ function assertApproximatelyEqual(actual: number, expected: number) {
 }
 
 test('graph layout assigns visual node attributes without depending on the renderer', () => {
-  assert.equal(getGraphNodeColor(rootNode), '#D97706');
-  assert.equal(getGraphNodeColor({ ...childNode, playerKind: 'ai' }), '#DC2626');
-  assert.equal(getGraphNodeColor(childNode), '#2563EB');
+  assert.equal(getGraphNodeColor(rootNode), '#B45309');
+  assert.equal(getGraphNodeColor({ ...childNode, playerKind: 'ai' }), '#DB2777');
+  assert.equal(getGraphNodeColor(childNode), '#DB2777');
 
   const layout = createGraphLayoutData({
     nodes: [rootNode, childNode],
@@ -75,10 +80,10 @@ test('graph layout assigns visual node attributes without depending on the rende
     x: node.x,
     y: node.y,
   })), [
-    { id: 'root', color: '#D97706', radius: 16, x: 400, y: 300 },
+    { id: 'root', color: '#B45309', radius: 16, x: 400, y: 300 },
     {
       id: 'node-1',
-      color: '#2563EB',
+      color: '#DB2777',
       radius: 12,
       x: 400 + Math.cos(0.9) * 72,
       y: 300 + Math.sin(0.9) * 72,
@@ -129,7 +134,7 @@ test('graph layout filters edges with missing endpoints and preserves edge scori
     id: 'edge-0-0',
     source: 'root',
     target: 'node-1',
-    color: '#94A3B8',
+    color: '#2563EB',
     semanticDistanceScore: 6,
     strengthScore: 7,
     totalScore: 42,
@@ -137,6 +142,20 @@ test('graph layout filters edges with missing endpoints and preserves edge scori
     semanticDistanceDescription: 'Distant but coherent.',
     strengthDescription: 'Strong similarity.',
   }]);
+});
+
+test('graph edge visuals map semantic distance to length and relevance to thickness', () => {
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 1 }), 24);
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 2 }), 48);
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 9 }), 216);
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 10 }), 240);
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 20 }), 240);
+  assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 0 }), 24);
+
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 1 }), 1.55);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 10 }), 6.5);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 20 }), 6.5);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 0 }), 1.55);
 });
 
 test('viewport transform fits graph bounds within viewport padding', () => {

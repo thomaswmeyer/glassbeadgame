@@ -1,4 +1,5 @@
 import { formatScoringCalibrationExamples } from './scoringCalibration';
+import { formatSubjectCategoryPromptOptions } from './subjectCategories';
 
 export type LegacyAiGameHistoryItem = {
   topic: string;
@@ -7,7 +8,7 @@ export type LegacyAiGameHistoryItem = {
 };
 
 export const difficultyPrompts = {
-  secondary: 'Use vocabulary and concepts appropriate for high school students. Avoid specialized academic terminology and obscure references.',
+  secondary: 'Use familiar high school level concepts and vocabulary. Prefer concepts commonly taught in secondary school or widely understood from everyday life. Do not use named theorems, conjectures, graduate mathematics, specialized academic terminology, obscure references, or research-level ideas. If the category is mathematics, use topics like symmetry, fractions, probability, triangles, graphs, prime numbers, or ratios rather than advanced named results.',
   undergrad: 'Use concepts appropriate for a broadly educated undergraduate student. Favor recognizable survey-course ideas, canonical works, and standard concepts. Avoid niche graduate-level mathematics, highly specialized technical terms, and obscure research terminology.',
   university: 'Use concepts appropriate for a broadly educated undergraduate student. Favor recognizable survey-course ideas, canonical works, and standard concepts. Avoid niche graduate-level mathematics, highly specialized technical terms, and obscure research terminology.',
   grad: 'Use graduate-level concepts that may be specialized, but should still be recognizable within a field and not gratuitously obscure.',
@@ -190,6 +191,7 @@ export function buildEvaluationPrompt(params: {
     params.difficulty as keyof typeof evaluationDifficultyPrompts
   ];
   const scoringCalibrationText = formatScoringCalibrationExamples();
+  const subjectCategoryOptions = formatSubjectCategoryPromptOptions();
   const scoringCalibrationInstructions = [
     'Use the full 1-10 range for each score. Do not cluster most scores in the middle.',
     '',
@@ -232,10 +234,14 @@ export function buildEvaluationPrompt(params: {
         Each connection subtotal is semantic distance multiplied by relevance. The final score will be
         the average of these two connection subtotals.
         
+        Also classify the player's response into exactly one destination subject category.
+        Allowed destinationSubjectCategory values: ${subjectCategoryOptions}.
+
         IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
           "evaluation": "Your evaluation of the connection to the current topic",
           "finalEvaluation": "Your evaluation of the connection to the original topic",
+          "destinationSubjectCategory": "one allowed category id",
           "scores": {
             "currentConnection": {
               "semanticDistance": X, // 1-10 score for semantic distance to current topic
@@ -285,9 +291,13 @@ export function buildEvaluationPrompt(params: {
         and why it deserves the scores you've assigned. Focus on the quality of the conceptual connection,
         not on the brevity of the response.
         
+        Also classify the player's response into exactly one destination subject category.
+        Allowed destinationSubjectCategory values: ${subjectCategoryOptions}.
+
         IMPORTANT: Your response MUST be valid JSON with the following structure:
         {
           "evaluation": "Your evaluation text here, explaining the connection and justifying the scores",
+          "destinationSubjectCategory": "one allowed category id",
           "scores": {
             "semanticDistance": X, // 1-10 score
             "relevanceQuality": Y, // 1-10 score

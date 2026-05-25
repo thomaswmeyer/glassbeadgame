@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       const fallbackEvaluation = {
         evaluation: "I couldn't evaluate this response properly due to a technical issue. Here's a default score.",
         finalEvaluation: "I couldn't evaluate the connection to the original topic due to a technical issue.",
+        destinationSubjectCategory: 'science',
         scores: {
           currentConnection: {
             semanticDistance: 5,

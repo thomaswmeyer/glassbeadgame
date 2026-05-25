@@ -1,10 +1,12 @@
 import { Score } from './game';
+import { SubjectCategoryId } from './subjectCategories';
 
 export type SourceTurnEvaluation = {
   sourceNodeId: string;
   sourceTopic: string;
   evaluation: string;
   finalEvaluation?: string;
+  destinationSubjectCategory?: SubjectCategoryId;
   scores: Score;
 };
 

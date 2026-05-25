@@ -23,6 +23,7 @@ test('definition trimming removes long incomplete trailing sentences', () => {
 test('evaluation parser accepts direct JSON responses', () => {
   const parsed = parseEvaluationResponse(JSON.stringify({
     evaluation: 'Strong connection.',
+    destinationSubjectCategory: 'Mathematics',
     scores: {
       semanticDistance: 7,
       relevanceQuality: 8,
@@ -31,6 +32,7 @@ test('evaluation parser accepts direct JSON responses', () => {
   }));
 
   assert.equal(parsed.evaluation, 'Strong connection.');
+  assert.equal(parsed.destinationSubjectCategory, 'mathematics');
   assert.equal(parsed.scores.total, 15);
 });
 

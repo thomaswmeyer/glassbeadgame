@@ -1,3 +1,5 @@
+import { SubjectCategoryId } from './subjectCategories';
+
 export type PlayerKind = 'local' | 'ai';
 
 export type Score = {
@@ -33,6 +35,7 @@ export type TopicNode = {
   definitionVisible: boolean;
   createdByPlayerId?: string;
   createdTurnId?: string;
+  subjectCategory?: SubjectCategoryId;
   isRoot: boolean;
 };
 
@@ -110,6 +113,7 @@ export type GraphRenderNode = {
   topic: string;
   playerId?: string;
   playerKind?: PlayerKind;
+  subjectCategory?: SubjectCategoryId;
   isRoot: boolean;
   isCurrent: boolean;
   isSelected: boolean;
@@ -121,6 +125,7 @@ export type GraphRenderEdge = {
   sourceNodeId: string;
   destinationNodeId: string;
   playerId: string;
+  playerKind?: PlayerKind;
   semanticDistanceScore?: number;
   strengthScore?: number;
   totalScore?: number;
@@ -234,6 +239,7 @@ export function startGameState(params: {
   maxRounds: number;
   currentPlayerId: string;
   rootCreatedByPlayerId?: string;
+  rootSubjectCategory?: SubjectCategoryId;
   players?: Player[];
 }): GameState {
   const state = createEmptyGameState(params.maxRounds, params.currentPlayerId, params.players);
@@ -242,6 +248,7 @@ export function startGameState(params: {
     topic: params.rootTopic,
     definitionVisible: false,
     createdByPlayerId: params.rootCreatedByPlayerId,
+    subjectCategory: params.rootSubjectCategory,
     isRoot: true,
   };
 
@@ -266,6 +273,7 @@ export function addTurnToGameState(
     totalScore?: number;
     legacyScores?: Score;
     edgeEvaluations?: TurnEdgeEvaluation[];
+    destinationSubjectCategory?: SubjectCategoryId;
     scoringDescription?: string;
     semanticDistanceDescription?: string;
     strengthDescription?: string;
@@ -286,6 +294,7 @@ export function addTurnToGameState(
     definitionVisible: false,
     createdByPlayerId: params.playerId,
     createdTurnId: turnId,
+    subjectCategory: params.destinationSubjectCategory,
     isRoot: false,
   };
 
@@ -511,24 +520,29 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
         topic: node.topic,
         playerId: node.createdByPlayerId,
         playerKind: player?.kind,
+        subjectCategory: node.subjectCategory,
         isRoot: node.isRoot,
         isCurrent: currentSourceNodeIds.has(node.id),
         isSelected: selectedNodeIds.has(node.id),
         isActiveSource: currentSourceNodeIds.has(node.id),
       };
     }),
-    edges: Object.values(state.edgesById).map(edge => ({
-      id: edge.id,
-      sourceNodeId: edge.sourceNodeId,
-      destinationNodeId: edge.destinationNodeId,
-      playerId: edge.playerId,
-      semanticDistanceScore: edge.semanticDistanceScore,
-      strengthScore: edge.strengthScore,
-      totalScore: edge.totalScore,
-      scoringDescription: edge.scoringDescription,
-      semanticDistanceDescription: edge.semanticDistanceDescription,
-      strengthDescription: edge.strengthDescription,
-    })),
+    edges: Object.values(state.edgesById).map(edge => {
+      const player = state.playersById[edge.playerId];
+      return {
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        destinationNodeId: edge.destinationNodeId,
+        playerId: edge.playerId,
+        playerKind: player?.kind,
+        semanticDistanceScore: edge.semanticDistanceScore,
+        strengthScore: edge.strengthScore,
+        totalScore: edge.totalScore,
+        scoringDescription: edge.scoringDescription,
+        semanticDistanceDescription: edge.semanticDistanceDescription,
+        strengthDescription: edge.strengthDescription,
+      };
+    }),
   };
 }
 

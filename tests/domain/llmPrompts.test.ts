@@ -24,6 +24,22 @@ test('topic prompt includes difficulty, category context, recent exclusions, and
   assert.match(prompt.userMessage, /Physics/);
 });
 
+test('secondary topic prompt excludes advanced named theorem seed concepts', () => {
+  const prompt = buildGenerateTopicPrompt({
+    category: 'Mathematics',
+    subcategory: 'Topology',
+    difficulty: 'secondary',
+    recentTopics: [],
+    timestamp: '2026-05-23T00:00:00.000Z',
+  });
+
+  assert.match(prompt.systemPrompt, /Do not use named theorems/);
+  assert.match(prompt.systemPrompt, /graduate mathematics/);
+  assert.match(prompt.systemPrompt, /research-level ideas/);
+  assert.match(prompt.systemPrompt, /symmetry, fractions, probability, triangles, graphs, prime numbers, or ratios/);
+  assert.doesNotMatch(prompt.systemPrompt, /Borsuk-Ulam/);
+});
+
 test('definition prompt asks for concise complete definitions only', () => {
   const prompt = buildDefinitionPrompt('Counterpoint');
 
@@ -64,7 +80,10 @@ test('evaluation prompt uses final-round JSON schema only when original topic is
   });
 
   assert.doesNotMatch(regular.systemPrompt, /finalEvaluation/);
+  assert.match(regular.systemPrompt, /destinationSubjectCategory/);
+  assert.match(regular.systemPrompt, /mathematics \(Mathematics\)/);
   assert.match(final.systemPrompt, /finalEvaluation/);
+  assert.match(final.systemPrompt, /destinationSubjectCategory/);
   assert.match(final.userMessage, /Cathedral/);
 });
 

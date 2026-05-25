@@ -6,6 +6,8 @@
     "dev": "next dev -p 4321",
     "build": "next build",
     "start": "next start -p 4321",
+    "upload": "npm run build && bash deploy.sh",
+    "clean:remote": "bash scripts/clean-remote-deploy.sh",
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.test.js",
     "calibrate:scoring": "node scripts/calibrate-scoring.mjs"

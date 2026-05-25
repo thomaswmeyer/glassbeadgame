@@ -14,12 +14,14 @@ import {
   formatCombinedFinalEvaluation,
   normalizeScore,
 } from './turnScoring';
+import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategories';
 
 export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
 export type TurnEvaluation = {
   evaluation: string;
   finalEvaluation?: string;
+  destinationSubjectCategory?: SubjectCategoryId;
   scores: Score;
   edgeEvaluations?: SourceTurnEvaluation[];
 };
@@ -30,11 +32,17 @@ export type CurrentEvaluation = {
   evaluation: string;
   scores: Score;
   playerId: string;
+  destinationSubjectCategory?: SubjectCategoryId;
   finalEvaluation?: string;
 };
 
 export type GenerateTopicRequest = {
   difficulty: DifficultyLevel;
+};
+
+export type GeneratedTopic = {
+  topic: string;
+  subjectCategory?: SubjectCategoryId;
 };
 
 export type EvaluateTurnRequest = {
@@ -66,10 +74,14 @@ export type GenerateAiResponseRequest = {
 };
 
 export type GameFlowServices = {
-  generateTopic(request: GenerateTopicRequest): Promise<string>;
+  generateTopic(request: GenerateTopicRequest): Promise<string | GeneratedTopic>;
   evaluateTurn(request: EvaluateTurnRequest): Promise<TurnEvaluation>;
   generateAiResponse(request: GenerateAiResponseRequest): Promise<string>;
 };
+
+function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic {
+  return typeof result === 'string' ? { topic: result } : result;
+}
 
 export function selectCurrentSourceTopicText(state: GameState) {
   const activeSourceNodes = state.activeSourceNodeIds
@@ -107,15 +119,16 @@ export async function startGeneratedGame(params: {
   difficulty: DifficultyLevel;
   services: Pick<GameFlowServices, 'generateTopic'>;
 }) {
-  const rootTopic = await params.services.generateTopic({
+  const rootTopicResult = resolveGeneratedTopic(await params.services.generateTopic({
     difficulty: params.difficulty,
-  });
+  }));
 
   return startGameState({
-    rootTopic,
+    rootTopic: rootTopicResult.topic,
     maxRounds: params.maxRounds,
     currentPlayerId: params.currentPlayerId,
     rootCreatedByPlayerId: params.rootCreatedByPlayerId || DEFAULT_AI_PLAYER_ID,
+    rootSubjectCategory: rootTopicResult.subjectCategory,
   });
 }
 
@@ -148,6 +161,7 @@ export async function evaluateAndApplyTurn(params: {
         sourceTopic: sourceNode.topic,
         evaluation: evaluation.evaluation,
         finalEvaluation: evaluation.finalEvaluation,
+        destinationSubjectCategory: normalizeSubjectCategoryId(evaluation.destinationSubjectCategory),
         scores: normalizeScore(evaluation.scores),
       } satisfies SourceTurnEvaluation;
     })
@@ -155,6 +169,11 @@ export async function evaluateAndApplyTurn(params: {
   const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
   const combinedEvaluation = formatCombinedEvaluation(edgeEvaluations);
   const combinedFinalEvaluation = formatCombinedFinalEvaluation(edgeEvaluations);
+  const destinationSubjectCategory = normalizeSubjectCategoryId(
+    edgeEvaluations
+      .map(edgeEvaluation => edgeEvaluation.destinationSubjectCategory)
+      .find(Boolean)
+  );
 
   const stateWithTurn = addTurnToGameState(params.state, {
     destinationTopic: params.response,
@@ -165,6 +184,7 @@ export async function evaluateAndApplyTurn(params: {
     totalScore: combinedScores.total,
     legacyScores: combinedScores,
     edgeEvaluations,
+    destinationSubjectCategory,
     scoringDescription: combinedEvaluation,
   });
 
@@ -180,6 +200,7 @@ export async function evaluateAndApplyTurn(params: {
       playerId: params.playerId,
       evaluation: combinedEvaluation,
       finalEvaluation: combinedFinalEvaluation,
+      destinationSubjectCategory,
       scores: combinedScores,
     } satisfies CurrentEvaluation,
   };
