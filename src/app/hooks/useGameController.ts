@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { gameApi } from '@/app/services/gameApi';
 import {
-  DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
   CurrentEvaluationView,
+  Player,
   Score,
   addOpeningTopicTurnToGameState,
   addTurnToGameState,
@@ -20,6 +20,7 @@ import {
   setGameStatus,
   setSelectedNodeIds,
 } from '@/domain/game';
+import { resolveInitialPlayerId } from '@/domain/playerSetup';
 import {
   DifficultyLevel,
   GameFlowServices,
@@ -50,13 +51,10 @@ type UseGameControllerParams = {
   maxRounds: number;
   aiGoesFirst: boolean;
   difficulty: DifficultyLevel;
+  players?: Player[];
   services?: GameFlowServices;
   playerControllers?: PlayerTurnController[];
 };
-
-function getPlayerIdForTurn(player: 'human' | 'ai') {
-  return player === 'ai' ? DEFAULT_AI_PLAYER_ID : DEFAULT_HUMAN_PLAYER_ID;
-}
 
 const EMPTY_PLAYER_CONTROLLERS: PlayerTurnController[] = [];
 
@@ -68,61 +66,73 @@ export function useGameController({
   maxRounds,
   aiGoesFirst,
   difficulty,
+  players,
   services = gameApi,
   playerControllers = EMPTY_PLAYER_CONTROLLERS,
 }: UseGameControllerParams) {
   const startedAutomaticTurnKeyRef = useRef<string | null>(null);
-  const [gameState, setGameState] = useState(() => createEmptyGameState(10, DEFAULT_HUMAN_PLAYER_ID));
+  const [gameState, setGameState] = useState(() => createEmptyGameState(
+    10,
+    players?.[0]?.id || DEFAULT_HUMAN_PLAYER_ID,
+    players
+  ));
   const [response, setResponse] = useState<string>('');
   const [inlineEvaluation, setInlineEvaluation] = useState<CurrentEvaluationView | null>(null);
 
-  const defaultAiController = useMemo<PlayerTurnController>(() => ({
-    playerId: DEFAULT_AI_PLAYER_ID,
-    mode: 'automatic',
-    async submitTurn(context) {
-      if (context.availableNodes.length === 0) {
-        const generatedTopic = resolveGeneratedTopic(await services.generateTopic({
-          difficulty: context.difficulty,
-        }));
-
-        return {
-          responseText: generatedTopic.topic,
-          destinationSubjectCategory: generatedTopic.subjectCategory,
-          fallbackOnEvaluationFailure: true,
-        };
-      }
-
-      const aiResponse = await services.generateAiResponse({
-        topic: context.topic,
-        availableNodes: context.availableNodes.map(node => ({
-          id: node.id,
-          topic: node.topic,
-          definition: node.definition,
-          subjectCategory: node.subjectCategory,
-          isCurrentSource: false,
-        })),
-        selectedSourceNodeIds: [],
-        sourceSelectionMode: 'free',
-        gameHistory: context.gameHistory,
+  const submitAiTurn = useCallback<NonNullable<PlayerTurnController['submitTurn']>>(async (context) => {
+    if (context.availableNodes.length === 0) {
+      const generatedTopic = resolveGeneratedTopic(await services.generateTopic({
         difficulty: context.difficulty,
-      });
-      const parsedMove = parseAiMoveResponse(aiResponse);
-      console.log('Parsed AI move:', parsedMove || {
-        parseFailed: true,
-        rawResponsePreview: aiResponse.slice(0, 240),
-      });
+      }));
 
       return {
-        selectedSourceNodeIds: parsedMove?.selectedSourceNodeIds,
-        responseText: parsedMove?.responseText.trim() || aiResponse.trim() || `Response to ${context.topic}`,
+        responseText: generatedTopic.topic,
+        destinationSubjectCategory: generatedTopic.subjectCategory,
         fallbackOnEvaluationFailure: true,
       };
-    },
-  }), [services]);
+    }
+
+    const aiResponse = await services.generateAiResponse({
+      topic: context.topic,
+      availableNodes: context.availableNodes.map(node => ({
+        id: node.id,
+        topic: node.topic,
+        definition: node.definition,
+        subjectCategory: node.subjectCategory,
+        isCurrentSource: false,
+      })),
+      selectedSourceNodeIds: [],
+      sourceSelectionMode: 'free',
+      gameHistory: context.gameHistory,
+      difficulty: context.difficulty,
+    });
+    const parsedMove = parseAiMoveResponse(aiResponse);
+    console.log('Parsed AI move:', parsedMove || {
+      parseFailed: true,
+      rawResponsePreview: aiResponse.slice(0, 240),
+    });
+
+    return {
+      selectedSourceNodeIds: parsedMove?.selectedSourceNodeIds,
+      responseText: parsedMove?.responseText.trim() || aiResponse.trim() || `Response to ${context.topic}`,
+      fallbackOnEvaluationFailure: true,
+    };
+  }, [services]);
+
+  const defaultAiControllers = useMemo<PlayerTurnController[]>(
+    () => Object.values(gameState.playersById)
+      .filter(player => player.kind === 'ai')
+      .map(player => ({
+        playerId: player.id,
+        mode: 'automatic',
+        submitTurn: submitAiTurn,
+      })),
+    [gameState.playersById, submitAiTurn]
+  );
 
   const effectivePlayerControllers = useMemo(
-    () => [...playerControllers, defaultAiController],
-    [defaultAiController, playerControllers]
+    () => [...playerControllers, ...defaultAiControllers],
+    [defaultAiControllers, playerControllers]
   );
 
   const graphRenderData = selectGraphRenderData(gameState);
@@ -160,12 +170,12 @@ export function useGameController({
     console.log('=== STARTING GAME ===');
     console.log('aiGoesFirst setting:', aiGoesFirst);
 
-    const initialPlayer = aiGoesFirst ? 'ai' : 'human';
+    const initialPlayerId = resolveInitialPlayerId(players, aiGoesFirst);
     startedAutomaticTurnKeyRef.current = null;
     setInlineEvaluation(null);
     setResponse('');
     setGameState(setGameStatus(
-      createEmptyGameState(maxRounds, getPlayerIdForTurn(initialPlayer)),
+      createEmptyGameState(maxRounds, initialPlayerId, players),
       'awaitingResponse'
     ));
   };
@@ -392,16 +402,16 @@ export function useGameController({
     startedAutomaticTurnKeyRef.current = null;
     setInlineEvaluation(null);
     setSelectedGraphNodeId(null);
-    setGameState(createEmptyGameState(maxRounds, currentPlayerId));
+    setGameState(createEmptyGameState(maxRounds, currentPlayerId, players));
   };
 
   const handleRestart = () => {
-    resetCurrentGame(getPlayerIdForTurn(aiGoesFirst ? 'ai' : 'human'));
+    resetCurrentGame(resolveInitialPlayerId(players, aiGoesFirst));
     generateFirstTopic();
   };
 
   const handleReturnToSettings = () => {
-    resetCurrentGame(DEFAULT_HUMAN_PLAYER_ID);
+    resetCurrentGame(players?.[0]?.id || DEFAULT_HUMAN_PLAYER_ID);
   };
 
   useEffect(() => {

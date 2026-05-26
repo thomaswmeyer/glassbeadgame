@@ -170,6 +170,7 @@ export type SetupPlayerNames = {
 
 export const DEFAULT_HUMAN_PLAYER_ID = 'player-human';
 export const DEFAULT_AI_PLAYER_ID = 'player-ai';
+export const SECOND_AI_PLAYER_ID = 'player-ai-2';
 export const DEFAULT_ROOT_NODE_ID = 'root';
 
 export function createDefaultPlayers() {

@@ -95,7 +95,13 @@ Edit `.env.local` and add your Gemini key:
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Gemini is the only configured LLM provider.
+Gemini is the only configured LLM provider. The default model is
+`gemini-3.1-flash-lite`. To compare against the higher-end Gemini reasoning
+model, set:
+
+```bash
+GEMINI_MODEL=gemini-2.5-pro
+```
 
 ## Run Locally
 
@@ -121,6 +127,7 @@ secrets in a private file:
 ```bash
 cat > /home/tomto/.gbg.env <<'EOF'
 GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite
 EOF
 chmod 600 /home/tomto/.gbg.env
 ```
@@ -379,6 +386,7 @@ shared evolving graph state.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | For Gemini | Topic generation, AI responses, definitions, and scoring with Gemini |
+| `GEMINI_MODEL` | No | Gemini model id. Defaults to `gemini-3.1-flash-lite`; use `gemini-2.5-pro` for the higher-end reasoning model. |
 
 ## License
 

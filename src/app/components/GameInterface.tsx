@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import GameSetupPanel from './GameSetupPanel';
@@ -8,7 +8,6 @@ import ScoreTooltip from './ScoreTooltip';
 import SimpleConceptGraph from './SimpleConceptGraph';
 import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
-import { LLM_CONFIG } from '@/config/llm';
 import {
   CurrentEvaluationEdgeScore,
   Score,
@@ -17,7 +16,6 @@ import {
   removeActiveSourceNode,
   selectActiveSourceRows,
   selectHasBranchedSourceSelection,
-  selectSetupPlayerNames,
   selectTopicNodeIdByTopic,
   setSingleActiveSourceNode,
 } from '@/domain/game';
@@ -29,11 +27,18 @@ import {
   DEFAULT_ROUND_OPTIONS,
   difficultyDescriptions,
 } from '@/domain/setupDisplay';
+import {
+  GamePlayerMode,
+  createConfiguredPlayers,
+  getPlayerNameAt,
+} from '@/domain/playerSetup';
 
 export default function GameInterface() {
   const [maxRounds, setMaxRounds] = useState<number>(10);
+  const [playerMode, setPlayerMode] = useState<GamePlayerMode>('human-vs-ai');
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
+  const configuredPlayers = useMemo(() => createConfiguredPlayers(playerMode), [playerMode]);
 
   const [tooltipData, setTooltipData] = useState<{
     visible: boolean;
@@ -80,6 +85,7 @@ export default function GameInterface() {
     maxRounds,
     aiGoesFirst,
     difficulty,
+    players: configuredPlayers,
   });
 
   const {
@@ -92,11 +98,12 @@ export default function GameInterface() {
   });
 
   const hasBranchedSourceSelection = selectHasBranchedSourceSelection(gameState);
-  const { localPlayerName, aiPlayerName } = selectSetupPlayerNames(playerScoreRows);
+  const firstPlayerName = getPlayerNameAt(configuredPlayers, 0, 'Player 1');
+  const secondPlayerName = getPlayerNameAt(configuredPlayers, 1, 'Player 2');
   const activeSourceRows = selectActiveSourceRows(gameState);
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
-  const productionModelName = LLM_CONFIG.model.displayName;
+  const productionModelName = 'the configured Gemini model';
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
@@ -198,121 +205,127 @@ export default function GameInterface() {
     setTooltipData(prev => ({ ...prev, visible: false }));
   };
 
-  return (
-    <div className="max-w-7xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <h1 className="text-3xl font-bold text-center mb-8">The Glass Bead Game</h1>
-      
-      {!gameStarted ? (
+  if (!gameStarted) {
+    return (
+      <div className="max-w-7xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+        <h1 className="text-3xl font-bold text-center mb-8">The Glass Bead Game</h1>
         <GameSetupPanel
           maxRounds={maxRounds}
           roundOptions={DEFAULT_ROUND_OPTIONS}
+          playerMode={playerMode}
           aiGoesFirst={aiGoesFirst}
           difficulty={difficulty}
           difficultyLevels={DEFAULT_DIFFICULTY_LEVELS}
           difficultyDescriptions={difficultyDescriptions}
-          localPlayerName={localPlayerName}
-          aiPlayerName={aiPlayerName}
+          firstPlayerName={firstPlayerName}
+          secondPlayerName={secondPlayerName}
           isGeneratingTopic={isGeneratingTopic}
           productionModelName={productionModelName}
           onMaxRoundsChange={setMaxRounds}
+          onPlayerModeChange={setPlayerMode}
           onAiGoesFirstChange={setAiGoesFirst}
           onDifficultyChange={setDifficulty}
           onStartGame={startGame}
         />
-      ) : (
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Main game area - left side */}
-          <div className="flex-1">
-            <CurrentTurnSourcesPanel
-              activeSourceRows={activeSourceRows}
-              currentRound={currentRound}
-              maxRounds={maxRounds}
+        <ScoreTooltip tooltipData={tooltipData} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-white p-4 lg:p-6">
+      <h1 className="mb-4 text-3xl font-bold">The Glass Bead Game</h1>
+
+      <div className="flex min-h-0 w-full flex-col gap-4 lg:h-[calc(100vh-7rem)] lg:flex-row">
+        <div className="w-full shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white p-4 shadow-sm lg:w-[560px]">
+          <CurrentTurnSourcesPanel
+            activeSourceRows={activeSourceRows}
+            currentRound={currentRound}
+            maxRounds={maxRounds}
+            playerScoreRows={playerScoreRows}
+            isGeneratingTopic={isGeneratingTopic}
+            isSourceSelectionLocked={sourceSelectionLocked}
+            isDefinitionLoading={isDefinitionLoading}
+            onFetchDefinition={(nodeId, topic) => fetchDefinition({ nodeId, topic })}
+            onRemoveSource={handleRemoveSourceNode}
+          />
+
+          {!showingResults && inlineEvaluation && (
+            <EvaluationResultsPanel
+              currentEvaluation={inlineEvaluation}
+              compact
+              gameCompleted={false}
               playerScoreRows={playerScoreRows}
-              isGeneratingTopic={isGeneratingTopic}
-              isSourceSelectionLocked={sourceSelectionLocked}
-              isDefinitionLoading={isDefinitionLoading}
-              onFetchDefinition={(nodeId, topic) => fetchDefinition({ nodeId, topic })}
-              onRemoveSource={handleRemoveSourceNode}
+              onNextTurn={advanceTurn}
+              onRestart={restartGame}
+              onReturnToSettings={returnToSettings}
             />
+          )}
 
-            {!showingResults && inlineEvaluation && (
-              <EvaluationResultsPanel
-                currentEvaluation={inlineEvaluation}
-                compact
-                gameCompleted={false}
-                playerScoreRows={playerScoreRows}
-                onNextTurn={advanceTurn}
-                onRestart={restartGame}
-                onReturnToSettings={returnToSettings}
-              />
-            )}
-
-            {!showingResults ? (
-              <TurnResponsePanel
-                isCurrentPlayerManual={isCurrentPlayerManual}
-                isOpeningTurn={isOpeningTurn}
-                playerName={currentPlayerModel?.name}
-                response={response}
-                isEvaluating={isEvaluating}
-                hasBranchedSourceSelection={hasBranchedSourceSelection}
-                onResponseChange={setResponse}
-                onSubmit={evaluateResponse}
-              />
-            ) : currentEvaluation && (
-              <EvaluationResultsPanel
-                currentEvaluation={currentEvaluation}
-                gameCompleted={gameCompleted}
-                playerScoreRows={playerScoreRows}
-                onNextTurn={advanceTurn}
-                onRestart={restartGame}
-                onReturnToSettings={returnToSettings}
-              />
-            )}
-            
-            {gameStarted && gameState.rootNodeId && (
-              <TurnHistoryTable
-                activeSourceNodeIds={gameState.activeSourceNodeIds}
-                canSelectHistoryRows={!sourceSelectionLocked}
-                showCurrentTurnRow={!showingResults}
-                currentRound={currentRound}
-                currentPlayerKind={currentPlayerModel?.kind}
-                currentPlayerName={currentPlayerModel?.name}
-                currentSourceTopicText={currentSourceTopicText}
-                currentTopicNodeId={gameState.activeSourceNodeIds.length === 1 ? gameState.activeSourceNodeIds[0] : null}
-                selectedGraphNodeId={selectedGraphNodeId}
-                turnHistoryRows={turnHistoryRows}
-                getTopicGraphNodeId={getTopicGraphNodeId}
-                onCurrentTopicClick={() => {
-                  const currentTopicNodeId = gameState.activeSourceNodeIds.length === 1
-                    ? gameState.activeSourceNodeIds[0]
-                    : null;
-                  if (currentTopicNodeId) handleGraphNodeClick(currentTopicNodeId);
-                }}
-                onHistoryTopicClick={handleTopicRowClick}
-                onScoreMouseEnter={handleScoreMouseEnter}
-                onScoreMouseLeave={handleScoreMouseLeave}
-                onSelectHistoryItem={handleSelectHistoryItem}
-                onAddHistoryItem={handleAddHistoryItem}
-              />
-            )}
-          </div>
-          
-          {/* Concept graph visualization - right side */}
-          <div className="w-full lg:w-[450px] sticky top-6 self-start">
-            <SimpleConceptGraph 
-              nodes={graphRenderData.nodes}
-              edges={graphRenderData.edges}
-              width={450}
-              height={500}
-              interactionsDisabled={sourceSelectionLocked}
-              onNodeClick={handleGraphNodeClick}
-              onAddSourceNode={handleAddSourceNode}
-              onRemoveSourceNode={handleRemoveSourceNode}
+          {!showingResults ? (
+            <TurnResponsePanel
+              isCurrentPlayerManual={isCurrentPlayerManual}
+              isOpeningTurn={isOpeningTurn}
+              playerName={currentPlayerModel?.name}
+              response={response}
+              isEvaluating={isEvaluating}
+              hasBranchedSourceSelection={hasBranchedSourceSelection}
+              onResponseChange={setResponse}
+              onSubmit={evaluateResponse}
             />
-          </div>
+          ) : currentEvaluation && (
+            <EvaluationResultsPanel
+              currentEvaluation={currentEvaluation}
+              gameCompleted={gameCompleted}
+              playerScoreRows={playerScoreRows}
+              onNextTurn={advanceTurn}
+              onRestart={restartGame}
+              onReturnToSettings={returnToSettings}
+            />
+          )}
+
+          {gameState.rootNodeId && (
+            <TurnHistoryTable
+              activeSourceNodeIds={gameState.activeSourceNodeIds}
+              canSelectHistoryRows={!sourceSelectionLocked}
+              showCurrentTurnRow={!showingResults}
+              currentRound={currentRound}
+              currentPlayerKind={currentPlayerModel?.kind}
+              currentPlayerName={currentPlayerModel?.name}
+              currentSourceTopicText={currentSourceTopicText}
+              currentTopicNodeId={gameState.activeSourceNodeIds.length === 1 ? gameState.activeSourceNodeIds[0] : null}
+              selectedGraphNodeId={selectedGraphNodeId}
+              turnHistoryRows={turnHistoryRows}
+              getTopicGraphNodeId={getTopicGraphNodeId}
+              onCurrentTopicClick={() => {
+                const currentTopicNodeId = gameState.activeSourceNodeIds.length === 1
+                  ? gameState.activeSourceNodeIds[0]
+                  : null;
+                if (currentTopicNodeId) handleGraphNodeClick(currentTopicNodeId);
+              }}
+              onHistoryTopicClick={handleTopicRowClick}
+              onScoreMouseEnter={handleScoreMouseEnter}
+              onScoreMouseLeave={handleScoreMouseLeave}
+              onSelectHistoryItem={handleSelectHistoryItem}
+              onAddHistoryItem={handleAddHistoryItem}
+            />
+          )}
         </div>
-      )}
-      
+
+        <div className="min-h-[560px] min-w-0 flex-1 lg:h-full">
+          <SimpleConceptGraph
+            nodes={graphRenderData.nodes}
+            edges={graphRenderData.edges}
+            width={900}
+            height={650}
+            interactionsDisabled={sourceSelectionLocked}
+            onNodeClick={handleGraphNodeClick}
+            onAddSourceNode={handleAddSourceNode}
+            onRemoveSourceNode={handleRemoveSourceNode}
+          />
+        </div>
+      </div>
+
       <ScoreTooltip tooltipData={tooltipData} />
     </div>
   );

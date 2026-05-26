@@ -1,20 +1,23 @@
 "use client";
 
 import { DifficultyLevel } from '@/domain/gameFlow';
+import { GamePlayerMode } from '@/domain/playerSetup';
 import { formatDifficultyLabel, getTurnsEachLabel } from '@/domain/setupDisplay';
 
 type GameSetupPanelProps = {
   maxRounds: number;
   roundOptions: readonly number[];
+  playerMode: GamePlayerMode;
   aiGoesFirst: boolean;
   difficulty: DifficultyLevel;
   difficultyLevels: readonly DifficultyLevel[];
   difficultyDescriptions: Record<DifficultyLevel, string>;
-  localPlayerName: string;
-  aiPlayerName: string;
+  firstPlayerName: string;
+  secondPlayerName: string;
   isGeneratingTopic: boolean;
   productionModelName: string;
   onMaxRoundsChange: (rounds: number) => void;
+  onPlayerModeChange: (mode: GamePlayerMode) => void;
   onAiGoesFirstChange: (aiGoesFirst: boolean) => void;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
   onStartGame: () => void;
@@ -23,15 +26,17 @@ type GameSetupPanelProps = {
 export default function GameSetupPanel({
   maxRounds,
   roundOptions,
+  playerMode,
   aiGoesFirst,
   difficulty,
   difficultyLevels,
   difficultyDescriptions,
-  localPlayerName,
-  aiPlayerName,
+  firstPlayerName,
+  secondPlayerName,
   isGeneratingTopic,
   productionModelName,
   onMaxRoundsChange,
+  onPlayerModeChange,
   onAiGoesFirstChange,
   onDifficultyChange,
   onStartGame,
@@ -65,6 +70,38 @@ export default function GameSetupPanel({
         </div>
 
         <div className="mb-4">
+          <label className="block text-left mb-2 font-medium">Players:</label>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                onPlayerModeChange('human-vs-ai');
+                onAiGoesFirstChange(false);
+              }}
+              className={`px-4 py-2 rounded ${
+                playerMode === 'human-vs-ai'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              You vs AI
+            </button>
+            <button
+              onClick={() => {
+                onPlayerModeChange('ai-vs-ai');
+                onAiGoesFirstChange(false);
+              }}
+              className={`px-4 py-2 rounded ${
+                playerMode === 'ai-vs-ai'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              AI vs AI
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4">
           <label className="block text-left mb-2 font-medium">Who Goes First:</label>
           <div className="flex gap-3 justify-center">
             <button
@@ -75,7 +112,7 @@ export default function GameSetupPanel({
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {localPlayerName} First
+              {firstPlayerName} First
             </button>
             <button
               onClick={() => onAiGoesFirstChange(true)}
@@ -85,7 +122,7 @@ export default function GameSetupPanel({
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {aiPlayerName} First
+              {secondPlayerName} First
             </button>
           </div>
         </div>

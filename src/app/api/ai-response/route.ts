@@ -45,9 +45,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ response });
     } catch (error) {
       console.error('Error generating AI response:', error);
-      
-      // Generate a fallback response using the imported function
-      return NextResponse.json({ response: "Could not generate a response. Please try again." });
+      return NextResponse.json(
+        { error: 'Failed to generate AI response' },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error('Error in ai-response route:', error);

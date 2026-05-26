@@ -1,5 +1,11 @@
 import axios from 'axios';
-import { LLM_CONFIG, getCurrentModelConfig } from '@/config/llm';
+import {
+  LLM_CONFIG,
+  LlmTask,
+  getCurrentModelConfig,
+  resolveGeminiMaxOutputTokens,
+  resolveGeminiThinkingConfig,
+} from '@/config/llm';
 import {
   AiSourceSelectionMode,
   AiResponsePromptNode,
@@ -22,9 +28,9 @@ export { difficultyPrompts, evaluationDifficultyPrompts };
 type TextPromptRequest = {
   systemPrompt: string;
   userMessage: string;
+  task: LlmTask;
   maxTokens: number;
   temperature: number;
-  fallbackText: string;
   responseJson?: boolean;
 };
 
@@ -65,6 +71,12 @@ async function callGeminiAPI(request: TextPromptRequest) {
   }
 
   const modelConfig = getCurrentModelConfig();
+  const maxOutputTokens = resolveGeminiMaxOutputTokens(
+    modelConfig.model,
+    request.task,
+    request.maxTokens
+  );
+  const thinkingConfig = resolveGeminiThinkingConfig(modelConfig.model, request.task);
   const url = `${LLM_CONFIG.endpoints.gemini}/models/${modelConfig.model}:generateContent`;
   const response = await axios.post(
     url,
@@ -80,7 +92,8 @@ async function callGeminiAPI(request: TextPromptRequest) {
       ],
       generationConfig: {
         temperature: request.temperature,
-        maxOutputTokens: request.maxTokens,
+        maxOutputTokens,
+        ...(thinkingConfig ? { thinkingConfig } : {}),
         ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
       },
     },
@@ -91,12 +104,26 @@ async function callGeminiAPI(request: TextPromptRequest) {
     }
   );
 
-  const parts = response.data?.candidates?.[0]?.content?.parts;
+  const candidate = response.data?.candidates?.[0];
+  const parts = candidate?.content?.parts;
   const text = Array.isArray(parts)
     ? parts.map((part: { text?: string }) => part.text || '').join('')
     : '';
 
-  return text.trim() || request.fallbackText;
+  if (!text.trim()) {
+    console.warn('Gemini returned no visible text', {
+      model: modelConfig.model,
+      task: request.task,
+      maxOutputTokens,
+      thinkingConfig,
+      finishReason: candidate?.finishReason,
+      usageMetadata: response.data?.usageMetadata,
+      promptFeedback: response.data?.promptFeedback,
+    });
+    throw new Error(`Gemini returned no visible text for ${request.task}`);
+  }
+
+  return text.trim();
 }
 
 export function getModelConfig() {
@@ -132,9 +159,9 @@ export async function generateTopic(
   const topic = await callTextPrompt({
     systemPrompt,
     userMessage,
+    task: 'topic',
     maxTokens: LLM_CONFIG.maxTokens.topic,
     temperature: LLM_CONFIG.temperature.creative,
-    fallbackText: 'Failed to generate a topic',
   });
 
   console.log('API request successful');
@@ -151,9 +178,9 @@ export async function getDefinition(topic: string): Promise<string> {
     const definition = await callTextPrompt({
       systemPrompt,
       userMessage,
+      task: 'definition',
       maxTokens: LLM_CONFIG.maxTokens.definition,
       temperature: LLM_CONFIG.temperature.factual,
-      fallbackText: 'Definition not available.',
     });
 
     return trimIncompleteTrailingSentence(definition);
@@ -188,9 +215,9 @@ export async function getAiResponse(
     return await callTextPrompt({
       systemPrompt,
       userMessage,
+      task: 'response',
       maxTokens: LLM_CONFIG.maxTokens.response,
       temperature: LLM_CONFIG.temperature.creative,
-      fallbackText: 'Connection not found',
       responseJson: true,
     });
   } catch (error) {
@@ -217,9 +244,9 @@ export async function evaluateResponse(
     const evaluationText = await callTextPrompt({
       systemPrompt,
       userMessage,
+      task: 'evaluation',
       maxTokens: LLM_CONFIG.maxTokens.evaluation,
       temperature: LLM_CONFIG.temperature.evaluation,
-      fallbackText: '{}',
       responseJson: true,
     });
 
