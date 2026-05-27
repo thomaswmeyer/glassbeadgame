@@ -130,3 +130,58 @@ test('Drizzle SQLite repository saves a game snapshot into normalized tables', a
     closeSqliteDatabaseForTests();
   }
 });
+
+test('server turn command rejects incomplete scored turns before persistence', async () => {
+  const {
+    commitCompletedTurn,
+  } = await import('../../src/server/game/turnCommitService');
+  const state = createPersistableState();
+  const latestTurnId = state.turnOrder[state.turnOrder.length - 1];
+  const invalidState: GameState = {
+    ...state,
+    turnsById: {
+      ...state.turnsById,
+      [latestTurnId]: {
+        ...state.turnsById[latestTurnId],
+        totalScore: undefined,
+        legacyScores: undefined,
+      },
+    },
+  };
+
+  assert.throws(() => commitCompletedTurn({
+    gameId: '22222222-2222-4222-8222-222222222222',
+    state: invalidState,
+    turnId: latestTurnId,
+    difficulty: 'undergrad',
+    sourceEnvironment: 'test',
+  }), /must include applied scores/);
+});
+
+test('server turn command rejects edges that do not match turn sources', async () => {
+  const {
+    commitCompletedTurn,
+  } = await import('../../src/server/game/turnCommitService');
+  const state = createPersistableState();
+  const latestTurnId = state.turnOrder[state.turnOrder.length - 1];
+  const latestTurn = state.turnsById[latestTurnId];
+  const edgeId = latestTurn.edgeIds[0];
+  const invalidState: GameState = {
+    ...state,
+    edgesById: {
+      ...state.edgesById,
+      [edgeId]: {
+        ...state.edgesById[edgeId],
+        sourceNodeId: latestTurn.destinationNodeId,
+      },
+    },
+  };
+
+  assert.throws(() => commitCompletedTurn({
+    gameId: '33333333-3333-4333-8333-333333333333',
+    state: invalidState,
+    turnId: latestTurnId,
+    difficulty: 'undergrad',
+    sourceEnvironment: 'test',
+  }), /edge source mismatch/);
+});

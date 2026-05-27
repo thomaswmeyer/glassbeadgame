@@ -27,6 +27,7 @@ type SaveGameSnapshotParams = {
   gameId: string;
   state: GameState;
   sourceEnvironment?: SourceEnvironment;
+  difficulty?: 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 };
 
 const DEFAULT_RULES_VERSION = 'prototype-v1';
@@ -153,6 +154,7 @@ export function saveGameSnapshot({
   gameId,
   state,
   sourceEnvironment = 'local',
+  difficulty = 'undergrad',
 }: SaveGameSnapshotParams) {
   const db = getSqliteDatabase();
   const scoreTotals = selectPlayerScoreTotals(state);
@@ -195,7 +197,7 @@ export function saveGameSnapshot({
         id: gameId,
         status: toPersistedGameStatus(state.gameStatus),
         mode: 'casual',
-        difficulty: 'undergrad',
+        difficulty,
         maxRounds: state.maxRounds,
         currentRound: state.currentRound,
         rulesVersion: DEFAULT_RULES_VERSION,

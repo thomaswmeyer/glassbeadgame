@@ -39,6 +39,7 @@ export default function GameInterface() {
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
   const persistedGameIdRef = useRef<string | null>(null);
+  const lastPersistedTurnKeyRef = useRef<string | null>(null);
   const configuredPlayers = useMemo(() => createConfiguredPlayers(playerMode), [playerMode]);
 
   const [tooltipData, setTooltipData] = useState<{
@@ -108,35 +109,45 @@ export default function GameInterface() {
 
   const startNewPersistedGame = () => {
     persistedGameIdRef.current = crypto.randomUUID();
+    lastPersistedTurnKeyRef.current = null;
     startGame();
   };
 
   const restartPersistedGame = () => {
     persistedGameIdRef.current = crypto.randomUUID();
+    lastPersistedTurnKeyRef.current = null;
     restartGame();
   };
 
   const returnToSettingsAndClearPersistedGame = () => {
     persistedGameIdRef.current = null;
+    lastPersistedTurnKeyRef.current = null;
     returnToSettings();
   };
 
   useEffect(() => {
-    if (!gameStarted || !gameState.rootNodeId) return;
+    const latestTurnId = gameState.turnOrder[gameState.turnOrder.length - 1];
+    if (!gameStarted || !gameState.rootNodeId || !latestTurnId) return;
 
     if (!persistedGameIdRef.current) {
       persistedGameIdRef.current = crypto.randomUUID();
     }
 
-    const gameId = persistedGameIdRef.current;
-    const saveTimer = window.setTimeout(() => {
-      gameApi.saveGameSnapshot(gameId, gameState).catch(error => {
-        console.warn('Failed to save game snapshot:', error);
-      });
-    }, 500);
+    const latestTurn = gameState.turnsById[latestTurnId];
+    const turnPersistenceKey = `${latestTurnId}:${gameState.turnOrder.length}:${latestTurn?.totalScore ?? 'pending'}`;
+    if (lastPersistedTurnKeyRef.current === turnPersistenceKey) return;
+    lastPersistedTurnKeyRef.current = turnPersistenceKey;
 
-    return () => window.clearTimeout(saveTimer);
-  }, [gameStarted, gameState]);
+    const gameId = persistedGameIdRef.current;
+    gameApi.commitCompletedTurn({
+      gameId,
+      state: gameState,
+      turnId: latestTurnId,
+      difficulty,
+    }).catch(error => {
+      console.warn('Failed to commit completed turn:', error);
+    });
+  }, [difficulty, gameStarted, gameState.rootNodeId, gameState.turnOrder, gameState.turnsById, gameState]);
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {

@@ -309,7 +309,7 @@ export function addTurnToGameState(
     sourceNodeIds: string[];
     evaluation?: string;
     totalScore?: number;
-    legacyScores?: Score;
+    legacyScores?: Score; // TODO what is legacyScores?
     edgeEvaluations?: TurnEdgeEvaluation[];
     destinationSubjectCategory?: SubjectCategoryId;
     scoringDescription?: string;
@@ -318,7 +318,7 @@ export function addTurnToGameState(
   }
 ): GameState {
   const turnIndex = state.turnOrder.length;
-  const turnId = `turn-${turnIndex}`;
+  const turnId = `turn-${turnIndex}`; // TODO turnID and destinationNodeID should be the same number.
   const destinationNodeId = `node-${turnIndex + 1}`;
   const sourceNodeIds = params.sourceNodeIds.length > 0 ? params.sourceNodeIds : state.activeSourceNodeIds;
   const edgeIds = sourceNodeIds.map((sourceNodeId, index) => `edge-${turnIndex}-${index}`);

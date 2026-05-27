@@ -18,6 +18,7 @@ const THINKING_MODEL_BUDGETS: Record<LlmTask, number> = {
   evaluation: 1024,
 };
 
+// TODO Turn these into an interface that each type of model implements
 export function normalizeGeminiModelName(modelName: string | undefined) {
   return modelName?.trim() || DEFAULT_GEMINI_MODEL_NAME;
 }

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import {
   GameState,
+  Turn,
 } from '@/domain/game';
 import {
   EvaluateTurnRequest,
@@ -41,7 +42,12 @@ function toLegacyAiGameHistory(gameHistory: TurnContextHistoryItem[]) {
 
 export const gameApi: GameFlowServices & {
   getDefinition(topic: string): Promise<string>;
-  saveGameSnapshot(gameId: string, state: GameState): Promise<void>;
+  commitCompletedTurn(params: {
+    gameId: string;
+    state: GameState;
+    turnId: Turn['id'];
+    difficulty: string;
+  }): Promise<void>;
 } = {
   async generateTopic(request: GenerateTopicRequest) {
     const result = await axios.post('/api/generate-topic', {
@@ -81,10 +87,11 @@ export const gameApi: GameFlowServices & {
     return result.data.definition;
   },
 
-  async saveGameSnapshot(gameId: string, state: GameState) {
-    await postJson('/api/games/save', {
-      gameId,
+  async commitCompletedTurn({ gameId, state, turnId, difficulty }) {
+    await postJson(`/api/games/${gameId}/turns/commit`, {
       state,
+      turnId,
+      difficulty,
     });
   },
 };
