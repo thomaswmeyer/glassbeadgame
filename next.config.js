@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: false, // Disable strict mode to prevent double renders in development
   output: 'standalone',
+  serverExternalPackages: ['better-sqlite3'],
   // swcMinify is now default in Next.js 16, no need to specify
   // Enable Turbopack config (Next.js 16 default)
   turbopack: {},

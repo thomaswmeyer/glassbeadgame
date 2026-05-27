@@ -113,8 +113,7 @@ CREATE TABLE IF NOT EXISTS topics (
   layout_x REAL,
   layout_y REAL,
   metadata TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (game_id, normalized_text)
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS model_invocations (

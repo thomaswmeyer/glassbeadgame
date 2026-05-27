@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
+import test from 'node:test';
+import {
+  addOpeningTopicTurnToGameState,
+  addTurnToGameState,
+  createEmptyGameState,
+  setGameStatus,
+  type GameState,
+  type Player,
+} from '../../src/domain/game';
+
+type CountRow = { count: number };
+type SavedGameRow = {
+  status: string;
+  current_round: number;
+  current_game_player_id: string | null;
+  root_topic_id: string | null;
+};
+type EdgeRow = {
+  semantic_distance_score: number;
+  relevance_score: number;
+  final_edge_score: number;
+};
+
+const players: Player[] = [
+  { id: 'player-a', name: 'AI 1', kind: 'ai', modelKey: 'gemini-pro' },
+  { id: 'player-b', name: 'AI 2', kind: 'ai', modelKey: 'claude-sonnet' },
+];
+
+function createPersistableState(): GameState {
+  const empty = createEmptyGameState(4, 'player-a', players);
+  const withOpening = addOpeningTopicTurnToGameState(empty, {
+    topic: 'Apophenia',
+    playerId: 'player-a',
+    subjectCategory: 'psychology',
+  });
+
+  return setGameStatus(addTurnToGameState({
+    ...withOpening,
+    currentPlayerId: 'player-b',
+  }, {
+    destinationTopic: 'Augury',
+    playerId: 'player-b',
+    sourceNodeIds: [withOpening.rootNodeId],
+    evaluation: 'A symbolic practice for pattern-finding in signs.',
+    totalScore: 70,
+    legacyScores: {
+      semanticDistance: 7,
+      relevanceQuality: 10,
+      total: 70,
+    },
+    edgeEvaluations: [{
+      sourceNodeId: withOpening.rootNodeId,
+      evaluation: 'A symbolic practice for pattern-finding in signs.',
+      scores: {
+        semanticDistance: 7,
+        relevanceQuality: 10,
+        total: 70,
+      },
+    }],
+    destinationSubjectCategory: 'religion',
+  }), 'showingResults');
+}
+
+function tableCount(db: Database.Database, tableName: string) {
+  return (db.prepare(`SELECT count(*) AS count FROM ${tableName}`).get() as CountRow).count;
+}
+
+test('Drizzle SQLite repository saves a game snapshot into normalized tables', async () => {
+  const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-drizzle-')), 'game.sqlite');
+  process.env.DATABASE_URL = `file:${databasePath}`;
+
+  const {
+    saveGameSnapshot,
+  } = await import('../../src/server/persistence/gameSnapshotRepository');
+  const {
+    closeSqliteDatabaseForTests,
+  } = await import('../../src/server/db/sqlite');
+
+  try {
+    const gameId = '11111111-1111-4111-8111-111111111111';
+    const state = createPersistableState();
+
+    saveGameSnapshot({
+      gameId,
+      state,
+      sourceEnvironment: 'test',
+    });
+    saveGameSnapshot({
+      gameId,
+      state,
+      sourceEnvironment: 'test',
+    });
+    closeSqliteDatabaseForTests();
+
+    const db = new Database(databasePath, { readonly: true });
+    try {
+      assert.equal(tableCount(db, 'games'), 1);
+      assert.equal(tableCount(db, 'players'), 2);
+      assert.equal(tableCount(db, 'game_players'), 2);
+      assert.equal(tableCount(db, 'topics'), 2);
+      assert.equal(tableCount(db, 'turns'), 2);
+      assert.equal(tableCount(db, 'turn_sources'), 1);
+      assert.equal(tableCount(db, 'edges'), 1);
+
+      const savedGame = db
+        .prepare('SELECT status, current_round, current_game_player_id, root_topic_id FROM games WHERE id = ?')
+        .get(gameId) as SavedGameRow;
+      assert.equal(savedGame.status, 'showing_results');
+      assert.equal(savedGame.current_round, 1);
+      assert.equal(typeof savedGame.current_game_player_id, 'string');
+      assert.equal(typeof savedGame.root_topic_id, 'string');
+
+      const edge = db
+        .prepare('SELECT semantic_distance_score, relevance_score, final_edge_score FROM edges')
+        .get() as EdgeRow;
+      assert.deepEqual(edge, {
+        semantic_distance_score: 7,
+        relevance_score: 10,
+        final_edge_score: 70,
+      });
+    } finally {
+      db.close();
+    }
+  } finally {
+    closeSqliteDatabaseForTests();
+  }
+});

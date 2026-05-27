@@ -62,10 +62,8 @@ for (const filename of migrations) {
   const migrationSql = readFileSync(join(MIGRATIONS_DIR, filename), 'utf8');
   runSql(databasePath, `
     PRAGMA foreign_keys = ON;
-    BEGIN;
     ${migrationSql}
     INSERT INTO schema_migrations (filename) VALUES (${sqliteString(filename)});
-    COMMIT;
   `);
   console.log(`Applied ${filename}`);
 }

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-const migrationPath = resolve('db/migrations/sqlite/0001_initial_schema.sql');
+const migrationsPath = resolve('db/migrations/sqlite');
 
 function runSql(databasePath: string, sql: string) {
   const result = spawnSync('sqlite3', [databasePath], {
@@ -30,7 +30,12 @@ function runSqlExpectingFailure(databasePath: string, sql: string) {
 test('SQLite schema migration creates core tables and constraints', () => {
   const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-schema-')), 'schema.sqlite');
 
-  runSql(databasePath, readFileSync(migrationPath, 'utf8'));
+  readdirSync(migrationsPath)
+    .filter(filename => filename.endsWith('.sql'))
+    .sort()
+    .forEach(filename => {
+      runSql(databasePath, readFileSync(join(migrationsPath, filename), 'utf8'));
+    });
 
   const tables = runSql(databasePath, `
     SELECT name

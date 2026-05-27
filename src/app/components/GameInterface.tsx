@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import GameSetupPanel from './GameSetupPanel';
@@ -38,6 +38,7 @@ export default function GameInterface() {
   const [playerMode, setPlayerMode] = useState<GamePlayerMode>('human-vs-ai');
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
+  const persistedGameIdRef = useRef<string | null>(null);
   const configuredPlayers = useMemo(() => createConfiguredPlayers(playerMode), [playerMode]);
 
   const [tooltipData, setTooltipData] = useState<{
@@ -104,6 +105,38 @@ export default function GameInterface() {
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
   const productionModelName = 'the configured Gemini model';
+
+  const startNewPersistedGame = () => {
+    persistedGameIdRef.current = crypto.randomUUID();
+    startGame();
+  };
+
+  const restartPersistedGame = () => {
+    persistedGameIdRef.current = crypto.randomUUID();
+    restartGame();
+  };
+
+  const returnToSettingsAndClearPersistedGame = () => {
+    persistedGameIdRef.current = null;
+    returnToSettings();
+  };
+
+  useEffect(() => {
+    if (!gameStarted || !gameState.rootNodeId) return;
+
+    if (!persistedGameIdRef.current) {
+      persistedGameIdRef.current = crypto.randomUUID();
+    }
+
+    const gameId = persistedGameIdRef.current;
+    const saveTimer = window.setTimeout(() => {
+      gameApi.saveGameSnapshot(gameId, gameState).catch(error => {
+        console.warn('Failed to save game snapshot:', error);
+      });
+    }, 500);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [gameStarted, gameState]);
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
@@ -225,7 +258,7 @@ export default function GameInterface() {
           onPlayerModeChange={setPlayerMode}
           onAiGoesFirstChange={setAiGoesFirst}
           onDifficultyChange={setDifficulty}
-          onStartGame={startGame}
+          onStartGame={startNewPersistedGame}
         />
         <ScoreTooltip tooltipData={tooltipData} />
       </div>
@@ -257,8 +290,8 @@ export default function GameInterface() {
               gameCompleted={false}
               playerScoreRows={playerScoreRows}
               onNextTurn={advanceTurn}
-              onRestart={restartGame}
-              onReturnToSettings={returnToSettings}
+              onRestart={restartPersistedGame}
+              onReturnToSettings={returnToSettingsAndClearPersistedGame}
             />
           )}
 
@@ -279,8 +312,8 @@ export default function GameInterface() {
               gameCompleted={gameCompleted}
               playerScoreRows={playerScoreRows}
               onNextTurn={advanceTurn}
-              onRestart={restartGame}
-              onReturnToSettings={returnToSettings}
+              onRestart={restartPersistedGame}
+              onReturnToSettings={returnToSettingsAndClearPersistedGame}
             />
           )}
 
