@@ -115,6 +115,18 @@ Then open:
 http://localhost:4321
 ```
 
+To create or update the local SQLite database used for persistence work:
+
+```bash
+npm run db:migrate
+```
+
+By default this uses:
+
+```text
+DATABASE_URL=file:./data/glassbeadgame.dev.sqlite
+```
+
 ## Deploy
 
 `npm run upload` builds the app, stages the standalone Next.js runtime with
@@ -190,38 +202,382 @@ Near-term implementation steps:
 
 1. Persist game sessions by id so a game can be resumed and accessed over an
    authenticated network boundary.
-2. Expose a small HTTP JSON API for reading game state and submitting turns.
+2. Add Postgres persistence for production and local development. Production
+   can use Render Postgres; local development should use a simple local
+   Postgres instance, preferably Docker Compose, with separate databases for
+   dev, test, and local model experiments.
+3. Use UUIDs for persisted games, players, topics, edges, turns, model runs,
+   and judge evaluations. Consecutive in-memory ids are fine for prototypes but
+   should not become the durable data model.
+4. Expose a small HTTP JSON API for reading game state and submitting turns.
    MCP and GraphQL should be adapters over the same game service rather than
    separate game implementations.
-3. Extend the player controller model so local humans, local AIs, remote
+5. Extend the player controller model so local humans, local AIs, remote
    humans, remote AIs, and OpenClaw-style agents all submit through the same
    turn contract.
-4. Return incremental turn updates to remote agents by default. A remote agent
+6. Return incremental turn updates to remote agents by default. A remote agent
    should receive the new node, new edge or edges, edge scoring descriptions,
    combined turn score, current round, current player, player order, and any
    game-status changes since the agent's last acknowledged turn. Agents can
    request a full snapshot when joining, reconnecting, or detecting a missed
    sequence number.
-5. Support games with more than two players in the protocol. Every state update
+7. Support games with more than two players in the protocol. Every state update
    should include enough player metadata for the agent to know whose turn it is,
    where that player sits in the turn order, and whether the update came from a
    local human, local AI, remote human, or remote AI.
-6. Let remote agents choose their own source node selection for a turn. The
+8. Let remote agents choose their own source node selection for a turn. The
    submitted turn should include the destination topic plus one or more source
    node ids chosen by the agent.
-7. Validate submitted source node ids server-side against the current game
+9. Validate submitted source node ids server-side against the current game
    graph and player permissions before scoring or applying the turn.
-8. Redesign scoring around edge-level scores, multi-source turn aggregation,
+10. Redesign scoring around edge-level scores, multi-source turn aggregation,
    and a wider useful score range. See "Scoring Pass Notes" below.
-9. Keep edge-level scoring descriptions on each edge, and store the combined
+11. Keep edge-level scoring descriptions on each edge, and store the combined
    turn score separately on the turn.
-10. Tune the scoring prompt, probably with concrete examples across the full
+12. Store every judge evaluation as an immutable record with model/provider
+   metadata, prompt/config version, raw output, parsed scores, and whether that
+   evaluation was the one selected for the applied game result. Turns, topics,
+   and whole games may all have multiple evaluations over time.
+13. Tune the scoring prompt, probably with concrete examples across the full
    score range, so the evaluator uses more of the scale.
-11. Add mocked service tests for remote turn submission, incremental updates,
+14. Add mocked service tests for remote turn submission, incremental updates,
    missed-update catch-up, N-player turn order, source-node validation,
    multi-source edge creation, and the combined scoring formula.
-12. Add a rated benchmark mode for model and agent leaderboards. See
+15. Add a rated benchmark mode for model and agent leaderboards. See
    "Leaderboards, Hosting, and Partnerships" below.
+
+## Persistence and Evaluation Data Model
+
+Production should use Postgres, matching Render's hosted database. Local
+development defaults to SQLite because it is simpler for laptop testing and
+local model experiments: no server process, one database file, easy resets, and
+cheap snapshots. A local Postgres parity mode can still be added later before
+production persistence work if database-specific behavior starts to matter.
+
+Suggested local databases:
+
+- `data/glassbeadgame.dev.sqlite`
+- `data/glassbeadgame.test.sqlite`
+- `data/glassbeadgame.experiments.sqlite`
+
+Local foundation-model experiments should be treated as candidate research
+artifacts, not as automatic production replicas. Experiments can generate
+games, turns, and evaluations locally, then selected batches can be promoted or
+synced to the master dataset with provenance metadata.
+
+All persisted primary ids should be UUIDs. The schema should preserve the
+domain concepts already used in memory while keeping model calls and judge
+evaluations auditable.
+
+Planned enum domains:
+
+| Enum | Values |
+| --- | --- |
+| `game_status` | `setup`, `awaiting_response`, `ai_thinking`, `evaluating`, `showing_results`, `completed`, `abandoned`, `error` |
+| `game_mode` | `casual`, `rated`, `benchmark`, `experiment` |
+| `difficulty_level` | `secondary`, `undergrad`, `grad`, `unlimited` |
+| `source_environment` | `local`, `test`, `render_prod`, `render_preview`, `imported`, `external` |
+| `player_kind` | `human`, `ai`, `agent`, `openclaw`, `test` |
+| `player_controller_kind` | `local_human`, `local_ai`, `remote_human`, `remote_ai`, `openclaw`, `test` |
+| `subject_category_id` | `philosophy`, `science`, `mathematics`, `arts`, `history`, `psychology`, `sociology`, `technology`, `religion`, `economics`, `other` |
+| `model_invocation_purpose` | `generate_topic`, `ai_move`, `definition`, `topic_judge`, `edge_judge`, `turn_judge`, `game_judge`, `calibration` |
+| `judge_target_type` | `topic`, `edge`, `turn`, `game` |
+| `experiment_batch_status` | `draft`, `running`, `complete`, `promoted`, `rejected`, `archived` |
+| `rating_system` | `elo`, `glicko2`, `trueskill` |
+| `rating_pool` | `casual`, `rated`, `benchmark`, `experimental` |
+
+These can be Postgres `ENUM` types at first. If categories, providers, rating
+pools, or experiment statuses become admin-editable product data, they can move
+to lookup tables later without changing the core relationships.
+
+Planned core tables:
+
+### `games`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `status` | `game_status` | Current game lifecycle state. |
+| `mode` | `game_mode` | Casual play, rated play, benchmark, or experiment. |
+| `difficulty` | `difficulty_level` | Prompt/scoring difficulty level. |
+| `max_rounds` | `integer` | Configured scored rounds, excluding opening turn 0. |
+| `current_round` | `integer` | Current scored round. |
+| `current_game_player_id` | `uuid` | Nullable FK to `game_players.id`; the seat whose turn it is right now. |
+| `root_topic_id` | `uuid` | Nullable FK to `topics.id`. |
+| `winner_game_player_id` | `uuid` | Nullable FK to `game_players.id`. |
+| `rules_version` | `text` | Version of game rules used for replay/eval compatibility. |
+| `scoring_version` | `text` | Version of scoring formula. |
+| `prompt_set_version` | `text` | Version of prompts used for generated content/judging. |
+| `source_environment` | `source_environment` | Where this game was created/imported. |
+| `experiment_batch_id` | `uuid` | Nullable FK to `experiment_batches.id`. |
+| `metadata` | `jsonb` | Extra replay, UI, or import metadata. |
+| `created_at` | `timestamptz` | Creation time. |
+| `started_at` | `timestamptz` | Nullable. |
+| `completed_at` | `timestamptz` | Nullable. |
+
+### `players`
+
+Durable identity for a person, model, hosted agent, OpenClaw player, or local
+test harness.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `display_name` | `text` | Canonical player/agent/model name. |
+| `kind` | `player_kind` | Durable player identity type. |
+| `provider` | `text` | Nullable; e.g. `google`, `anthropic`, `openai`, `local`. |
+| `model_id` | `text` | Nullable; e.g. `gemini-2.5-pro`. |
+| `model_version` | `text` | Nullable provider version/date when available. |
+| `agent_endpoint` | `text` | Nullable remote play endpoint. |
+| `owner_user_id` | `uuid` | Nullable future FK to users/accounts. |
+| `metadata` | `jsonb` | Capabilities, notes, auth hints, benchmark tags. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `game_players`
+
+A seat for a player in one game. This snapshots model/player configuration so a
+past game stays replayable even if the durable player changes later.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `player_id` | `uuid` | FK to `players.id`. |
+| `seat_index` | `integer` | Turn order position. |
+| `display_name` | `text` | Per-game label, e.g. `AI 1`. |
+| `controller_kind` | `player_controller_kind` | How this seat submits turns. |
+| `provider` | `text` | Snapshot of provider used in this game. |
+| `model_id` | `text` | Snapshot of model id used in this game. |
+| `model_version` | `text` | Snapshot of model version. |
+| `prompt_config_version` | `text` | Player prompt/config version. |
+| `final_score` | `integer` | Final gameplay score. |
+| `rating_participant_key` | `text` | Stable key for leaderboard/rating aggregation. |
+| `metadata` | `jsonb` | Runtime options, capabilities, auth scope, notes. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `topics`
+
+One node in one game's graph.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `text` | `text` | Display topic. |
+| `normalized_text` | `text` | Lowercase/canonical form for search and duplicate checks. |
+| `subject_category` | `subject_category_id` | Judge/model-assigned category. |
+| `subject_subcategory` | `text` | Nullable finer category. |
+| `created_by_game_player_id` | `uuid` | FK to `game_players.id`. |
+| `created_turn_id` | `uuid` | Nullable FK to `turns.id`; root is turn 0. |
+| `is_root` | `boolean` | Opening topic marker. |
+| `selected_definition_id` | `uuid` | Nullable FK to `topic_definitions.id`. |
+| `selected_judge_evaluation_id` | `uuid` | Nullable FK to `judge_evaluations.id` for topic-level validation/classification. |
+| `layout_x` | `double precision` | Optional saved graph position. |
+| `layout_y` | `double precision` | Optional saved graph position. |
+| `metadata` | `jsonb` | UI/import data. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `topic_definitions`
+
+Definitions are separate so they can be regenerated, cached, compared, and
+selected without overwriting history.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `topic_id` | `uuid` | FK to `topics.id`. |
+| `definition` | `text` | Display definition. |
+| `model_invocation_id` | `uuid` | Nullable FK to `model_invocations.id`. |
+| `provider` | `text` | Model provider snapshot. |
+| `model_id` | `text` | Model id snapshot. |
+| `model_version` | `text` | Model version snapshot. |
+| `prompt_version` | `text` | Definition prompt version. |
+| `is_selected` | `boolean` | Convenience flag; `topics.selected_definition_id` is authoritative. |
+| `metadata` | `jsonb` | Trimming/caching notes. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `turns`
+
+One player action that adds one destination topic. Turn 0 is the opening topic
+and has no source topics or edges.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `round_number` | `integer` | `0` for opening topic, then `1..max_rounds`. |
+| `game_player_id` | `uuid` | FK to `game_players.id`. |
+| `destination_topic_id` | `uuid` | FK to `topics.id`. |
+| `response_text` | `text` | Submitted topic text at the time of play. |
+| `combined_score` | `integer` | Gameplay score applied to player total. |
+| `selected_judge_evaluation_id` | `uuid` | Nullable FK to `judge_evaluations.id` for the applied turn-level result. |
+| `model_invocation_id` | `uuid` | Nullable FK to `model_invocations.id` that generated the move. |
+| `submitted_at` | `timestamptz` | Time the turn was submitted. |
+| `applied_at` | `timestamptz` | Time the turn was accepted into game state. |
+| `metadata` | `jsonb` | Client protocol data, retries, fallback markers. |
+
+### `turn_sources`
+
+Ordered source topics chosen for a turn. This keeps the submitted source list
+explicit even though each source also has a corresponding edge.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `turn_id` | `uuid` | FK to `turns.id`. |
+| `source_topic_id` | `uuid` | FK to `topics.id`. |
+| `source_order` | `integer` | Order submitted by the player/agent. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `edges`
+
+One source-to-destination connection. Multi-source turns create multiple edges.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `turn_id` | `uuid` | FK to `turns.id`. |
+| `source_topic_id` | `uuid` | FK to `topics.id`. |
+| `destination_topic_id` | `uuid` | FK to `topics.id`. |
+| `game_player_id` | `uuid` | FK to `game_players.id`. |
+| `semantic_distance_score` | `integer` | Edge-level 1-10 score. |
+| `relevance_score` | `integer` | Edge-level 1-10 score. |
+| `novelty_score` | `integer` | Nullable future score. |
+| `raw_edge_score` | `numeric` | Formula output before modifiers/rounding. |
+| `final_edge_score` | `integer` | Applied edge score after modifiers. |
+| `scoring_description` | `text` | Judge rationale for this edge. |
+| `semantic_distance_description` | `text` | Optional axis-specific rationale. |
+| `relevance_description` | `text` | Optional axis-specific rationale. |
+| `selected_judge_evaluation_id` | `uuid` | Nullable FK to `judge_evaluations.id` for applied edge result. |
+| `metadata` | `jsonb` | Layout, imports, future scoring signals. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `model_invocations`
+
+Trace of model calls for generation, definitions, judging, retries, and local
+experiments.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `purpose` | `model_invocation_purpose` | Why this model call was made. |
+| `provider` | `text` | Provider used. |
+| `model_id` | `text` | Model id. |
+| `model_version` | `text` | Nullable provider version/date. |
+| `prompt_version` | `text` | Prompt template version. |
+| `config` | `jsonb` | Temperature, max tokens, thinking budget, response format, etc. |
+| `request_payload` | `jsonb` | Sanitized request context. |
+| `raw_response` | `text` | Raw text returned by model. |
+| `parsed_response` | `jsonb` | Parsed structured output, if any. |
+| `finish_reason` | `text` | Nullable provider finish reason. |
+| `usage_metadata` | `jsonb` | Tokens, latency, cost estimates. |
+| `error` | `text` | Nullable failure detail. |
+| `source_environment` | `source_environment` | Where this model call ran. |
+| `created_at` | `timestamptz` | Call start time or record time. |
+
+### `judge_evaluations`
+
+Immutable judge output for a topic, edge, turn, or whole game. The evaluated
+entity should point to the selected row; all alternate rows remain available
+for audit and calibration.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `target_type` | `judge_target_type` | What kind of entity was evaluated. |
+| `target_id` | `uuid` | Id of the evaluated row. Enforced by app logic or separate nullable FKs. |
+| `game_id` | `uuid` | FK to `games.id` for query locality. |
+| `model_invocation_id` | `uuid` | Nullable FK to `model_invocations.id`. |
+| `judge_provider` | `text` | Provider snapshot. |
+| `judge_model_id` | `text` | Judge model id. |
+| `judge_model_version` | `text` | Judge model version/date. |
+| `prompt_version` | `text` | Judge prompt version. |
+| `rules_version` | `text` | Game rules version assumed by judge. |
+| `scoring_version` | `text` | Scoring formula version assumed by judge. |
+| `semantic_distance_score` | `integer` | Nullable edge/turn score. |
+| `relevance_score` | `integer` | Nullable edge/turn score. |
+| `novelty_score` | `integer` | Nullable future score. |
+| `recognizability_score` | `integer` | Nullable topic/move validity score. |
+| `combined_score` | `integer` | Nullable applied/computed score. |
+| `aesthetic_scores` | `jsonb` | Whole-game dimensions such as beauty, balance, coherence, surprise. |
+| `description` | `text` | Human-readable rationale/review. |
+| `parsed_output` | `jsonb` | Full parsed judge output. |
+| `raw_output` | `text` | Raw judge output. |
+| `is_selected` | `boolean` | Convenience flag; selected FK on target row is authoritative. |
+| `source_environment` | `source_environment` | Where the evaluation was produced. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `game_aesthetic_evaluations`
+
+Optional typed projection over whole-game `judge_evaluations`. This can also be
+implemented as a view if the JSON in `judge_evaluations.aesthetic_scores` is
+enough.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `judge_evaluation_id` | `uuid` | FK to `judge_evaluations.id`. |
+| `interestingness_score` | `integer` | Whole-game quality, not winner scoring. |
+| `beauty_score` | `integer` | Whole-game quality. |
+| `balance_score` | `integer` | Player/game balance. |
+| `thematic_coherence_score` | `integer` | Motif/arc quality. |
+| `surprise_score` | `integer` | Non-obviousness of the whole game. |
+| `restraint_score` | `integer` | Avoidance of gimmick/repetition. |
+| `hesse_like_composition_score` | `integer` | Book-inspired composition quality. |
+| `review` | `text` | Written critic review. |
+| `is_selected` | `boolean` | Selected whole-game quality review. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `experiment_batches`
+
+Groups local or hosted runs so experimental results can be reviewed and
+promoted deliberately.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `name` | `text` | Batch name. |
+| `purpose` | `text` | Calibration, local model test, benchmark trial, etc. |
+| `source_environment` | `source_environment` | Where it ran. |
+| `status` | `experiment_batch_status` | Batch lifecycle. |
+| `model_set` | `jsonb` | Players/models in the batch. |
+| `judge_set` | `jsonb` | Judges used in the batch. |
+| `notes` | `text` | Human notes. |
+| `promoted_at` | `timestamptz` | Nullable. |
+| `created_at` | `timestamptz` | Creation time. |
+
+### `rating_events`
+
+Append-only rating updates for model, agent, or player leaderboards.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `game_id` | `uuid` | FK to `games.id`. |
+| `game_player_id` | `uuid` | FK to `game_players.id`. |
+| `rating_system` | `rating_system` | Rating algorithm used. |
+| `rating_pool` | `rating_pool` | Leaderboard/rating pool. |
+| `rating_before` | `numeric` | Rating before update. |
+| `rating_after` | `numeric` | Rating after update. |
+| `rating_delta` | `numeric` | Change from this game. |
+| `uncertainty_before` | `numeric` | Nullable for Glicko/TrueSkill. |
+| `uncertainty_after` | `numeric` | Nullable for Glicko/TrueSkill. |
+| `result_summary` | `jsonb` | Pairwise outcomes, final score, placement. |
+| `created_at` | `timestamptz` | Creation time. |
+
+Multiple judge evaluations are expected. A turn might be scored first by a
+cheap online judge, later re-judged by a frontier model, and later reviewed by
+an ensemble. The durable turn should point to the evaluation used for gameplay
+and scoring, while the database keeps all alternate evaluations for audit,
+calibration, and leaderboard research.
+
+Whole-game reviews should be separate from winner scoring. They answer
+questions such as whether a game was beautiful, balanced, varied, coherent, or
+too repetitive. This matters for benchmarks because the most interesting games
+may come from mixed-model or mixed-agent lineups rather than mirror matches
+between two copies of the same model.
 
 ## Remaining Refactor Work
 
