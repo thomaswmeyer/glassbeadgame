@@ -22,6 +22,8 @@ import {
 } from './turnCommitService';
 
 type SubmitTurnCommand = SubmitTurnRequest & {
+  state: GameState;
+  difficulty: DifficultyLevel;
   sourceEnvironment?: SourceEnvironment;
   services: Pick<GameFlowServices, 'evaluateTurn'>;
 };

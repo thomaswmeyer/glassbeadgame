@@ -164,14 +164,25 @@ export function useGameController({
     console.log('aiGoesFirst setting:', aiGoesFirst);
 
     const initialPlayerId = resolveInitialPlayerId(players, aiGoesFirst);
-    gameIdRef.current = createClientGameId();
+    const gameId = createClientGameId();
+    gameIdRef.current = gameId;
     startedAutomaticTurnKeyRef.current = null;
     setInlineEvaluation(null);
     setResponse('');
-    setGameState(setGameStatus(
-      createEmptyGameState(maxRounds, initialPlayerId, players),
-      'awaitingResponse'
-    ));
+
+    if (services.createGame) {
+      const result = await services.createGame({
+        gameId,
+        maxRounds,
+        initialPlayerId,
+        players,
+        difficulty,
+      });
+      setGameState(result.state);
+      return;
+    }
+
+    setGameState(setGameStatus(createEmptyGameState(maxRounds, initialPlayerId, players), 'awaitingResponse'));
   };
 
   const evaluateTurnResponse = useCallback(async (params: {
@@ -191,10 +202,8 @@ export function useGameController({
     try {
       const result = await services.submitTurn({
         gameId: gameIdRef.current,
-        state: gameState,
         playerId: params.playerId,
         responseText,
-        difficulty,
         selectedSourceNodeIds: params.selectedSourceNodeIds,
         destinationSubjectCategory: params.destinationSubjectCategory,
         fallbackOnEvaluationFailure: params.fallbackOnFailure,
@@ -213,8 +222,6 @@ export function useGameController({
       alert('Failed to submit turn. Please try again.');
     }
   }, [
-    difficulty,
-    gameState,
     currentPlayerModel?.kind,
     isOpeningTurn,
     services,

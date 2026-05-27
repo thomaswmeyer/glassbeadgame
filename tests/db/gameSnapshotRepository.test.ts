@@ -76,6 +76,7 @@ test('Drizzle SQLite repository saves a game snapshot into normalized tables', a
   process.env.DATABASE_URL = `file:${databasePath}`;
 
   const {
+    loadGameSnapshot,
     saveGameSnapshot,
   } = await import('../../src/server/persistence/gameSnapshotRepository');
   const {
@@ -96,6 +97,18 @@ test('Drizzle SQLite repository saves a game snapshot into normalized tables', a
       state,
       sourceEnvironment: 'test',
     });
+    const loaded = loadGameSnapshot(gameId);
+    assert.ok(loaded);
+    assert.equal(loaded.gameId, gameId);
+    assert.equal(loaded.difficulty, 'undergrad');
+    assert.deepEqual(loaded.state.playerOrder, state.playerOrder);
+    assert.deepEqual(loaded.state.turnOrder, state.turnOrder);
+    assert.equal(loaded.state.currentPlayerId, state.currentPlayerId);
+    assert.equal(loaded.state.nodesById[state.rootNodeId].topic, 'Apophenia');
+    assert.equal(
+      loaded.state.edgesById[state.turnsById[state.turnOrder[1]].edgeIds[0]].totalScore,
+      70
+    );
     closeSqliteDatabaseForTests();
 
     const db = new Database(databasePath, { readonly: true });

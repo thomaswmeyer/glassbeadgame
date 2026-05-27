@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import {
+  GameStatus,
   GameState,
   Player,
+  Score,
   TopicEdge,
   TopicNode,
   Turn,
@@ -30,6 +32,12 @@ type SaveGameSnapshotParams = {
   difficulty?: 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 };
 
+type LoadGameSnapshotResult = {
+  gameId: string;
+  difficulty: 'secondary' | 'undergrad' | 'grad' | 'unlimited';
+  state: GameState;
+};
+
 const DEFAULT_RULES_VERSION = 'prototype-v1';
 const DEFAULT_SCORING_VERSION = 'multiplicative-v1';
 const DEFAULT_PROMPT_SET_VERSION = 'prototype-v1';
@@ -49,6 +57,42 @@ function json(value: unknown) {
   return JSON.stringify(value ?? {});
 }
 
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> {
+  if (!value) return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function asScore(value: unknown): Score | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+
+  const record = value as Partial<Score>;
+  return typeof record.semanticDistance === 'number' &&
+    typeof record.relevanceQuality === 'number' &&
+    typeof record.total === 'number'
+    ? {
+      semanticDistance: record.semanticDistance,
+      relevanceQuality: record.relevanceQuality,
+      total: record.total,
+    }
+    : undefined;
+}
+
+function asTurnEdgeEvaluations(value: unknown): Turn['edgeEvaluations'] {
+  return Array.isArray(value) ? value as Turn['edgeEvaluations'] : undefined;
+}
+
 function normalizeTopicText(topic: string) {
   return topic.trim().toLocaleLowerCase();
 }
@@ -64,6 +108,24 @@ function toPersistedGameStatus(status: GameState['gameStatus']) {
       return 'evaluating';
     case 'showingResults':
       return 'showing_results';
+    case 'completed':
+      return 'completed';
+    case 'setup':
+    default:
+      return 'setup';
+  }
+}
+
+function toGameStatus(status: string): GameStatus {
+  switch (status) {
+    case 'awaiting_response':
+      return 'awaitingResponse';
+    case 'ai_thinking':
+      return 'aiThinking';
+    case 'evaluating':
+      return 'evaluating';
+    case 'showing_results':
+      return 'showingResults';
     case 'completed':
       return 'completed';
     case 'setup':
@@ -351,4 +413,195 @@ export function saveGameSnapshot({
   });
 
   return { gameId };
+}
+
+export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null {
+  const db = getSqliteDatabase();
+  const game = db.select().from(games).where(eq(games.id, gameId)).get();
+  if (!game) return null;
+
+  const gameMetadata = parseJsonObject(game.metadata);
+  const gamePlayerRows = db.select()
+    .from(gamePlayers)
+    .where(eq(gamePlayers.gameId, gameId))
+    .orderBy(asc(gamePlayers.seatIndex))
+    .all();
+  const playerRows = db.select().from(players).all();
+  const playerRowsById = new Map(playerRows.map(player => [player.id, player]));
+  const inMemoryPlayerIdByGamePlayerId = new Map<string, string>();
+
+  const playerEntries = gamePlayerRows.map(gamePlayer => {
+    const player = playerRowsById.get(gamePlayer.playerId);
+    const playerMetadata = parseJsonObject(player?.metadata);
+    const gamePlayerMetadata = parseJsonObject(gamePlayer.metadata);
+    const inMemoryPlayerId = typeof gamePlayerMetadata.inMemoryPlayerId === 'string'
+      ? gamePlayerMetadata.inMemoryPlayerId
+      : gamePlayer.id;
+    inMemoryPlayerIdByGamePlayerId.set(gamePlayer.id, inMemoryPlayerId);
+
+    return {
+      id: inMemoryPlayerId,
+      name: gamePlayer.displayName,
+      kind: player?.kind === 'human' ? 'local' : 'ai',
+      modelKey: gamePlayer.promptConfigVersion ||
+        (typeof playerMetadata.modelKey === 'string' ? playerMetadata.modelKey : undefined),
+    } satisfies Player;
+  });
+  const playersById = Object.fromEntries(playerEntries.map(player => [player.id, player]));
+  const playerOrder = playerEntries.map(player => player.id);
+
+  const topicRows = db.select()
+    .from(topics)
+    .where(eq(topics.gameId, gameId))
+    .all();
+  const definitionRows = db.select().from(topicDefinitions).all();
+  const definitionsById = new Map(definitionRows.map(definition => [definition.id, definition]));
+  const inMemoryNodeIdByTopicId = new Map<string, string>();
+
+  topicRows.forEach(topic => {
+    const topicMetadata = parseJsonObject(topic.metadata);
+    const inMemoryNodeId = typeof topicMetadata.inMemoryNodeId === 'string'
+      ? topicMetadata.inMemoryNodeId
+      : topic.id;
+    inMemoryNodeIdByTopicId.set(topic.id, inMemoryNodeId);
+  });
+
+  const turnRows = db.select()
+    .from(turns)
+    .where(eq(turns.gameId, gameId))
+    .orderBy(asc(turns.roundNumber))
+    .all();
+  const persistedTurnIdToInMemoryTurnId = new Map<string, string>();
+  turnRows.forEach((turn, index) => {
+    persistedTurnIdToInMemoryTurnId.set(turn.id, `turn-${index}`);
+  });
+
+  const nodesById = Object.fromEntries(topicRows.map(topic => {
+    const topicMetadata = parseJsonObject(topic.metadata);
+    const nodeId = inMemoryNodeIdByTopicId.get(topic.id) || topic.id;
+    const definition = topic.selectedDefinitionId
+      ? definitionsById.get(topic.selectedDefinitionId)?.definition
+      : undefined;
+    const createdByPlayerId = inMemoryPlayerIdByGamePlayerId.get(topic.createdByGamePlayerId);
+    const createdTurnId = topic.createdTurnId
+      ? persistedTurnIdToInMemoryTurnId.get(topic.createdTurnId)
+      : undefined;
+
+    const node: TopicNode = {
+      id: nodeId,
+      topic: topic.text,
+      definition,
+      definitionVisible: topicMetadata.definitionVisible === true,
+      createdByPlayerId,
+      createdTurnId,
+      subjectCategory: topic.subjectCategory === 'other' ? undefined : topic.subjectCategory,
+      isRoot: topic.isRoot === 1,
+    };
+
+    return [node.id, node];
+  }));
+
+  const turnSourceRows = db.select().from(turnSources).all();
+  const turnSourcesByTurnId = new Map<string, string[]>();
+  turnSourceRows
+    .filter(turnSource => persistedTurnIdToInMemoryTurnId.has(turnSource.turnId))
+    .sort((left, right) => left.sourceOrder - right.sourceOrder)
+    .forEach(turnSource => {
+      const sourceNodeId = inMemoryNodeIdByTopicId.get(turnSource.sourceTopicId);
+      if (!sourceNodeId) return;
+
+      const existing = turnSourcesByTurnId.get(turnSource.turnId) || [];
+      existing.push(sourceNodeId);
+      turnSourcesByTurnId.set(turnSource.turnId, existing);
+    });
+
+  const turnsById = Object.fromEntries(turnRows.map((turn, index) => {
+    const turnId = persistedTurnIdToInMemoryTurnId.get(turn.id) || `turn-${index}`;
+    const metadata = parseJsonObject(turn.metadata);
+    const sourceNodeIds = stringArray(metadata.sourceNodeIds);
+    const edgeIds = stringArray(metadata.edgeIds);
+    const fallbackSourceNodeIds = turnSourcesByTurnId.get(turn.id) || [];
+    const turnModel: Turn = {
+      id: turnId,
+      round: turn.roundNumber,
+      playerId: inMemoryPlayerIdByGamePlayerId.get(turn.gamePlayerId) || turn.gamePlayerId,
+      sourceNodeIds: sourceNodeIds.length > 0 ? sourceNodeIds : fallbackSourceNodeIds,
+      edgeIds,
+      destinationNodeId: inMemoryNodeIdByTopicId.get(turn.destinationTopicId) || turn.destinationTopicId,
+      evaluation: typeof metadata.evaluation === 'string' ? metadata.evaluation : undefined,
+      totalScore: turn.combinedScore,
+      legacyScores: asScore(metadata.legacyScores),
+      edgeEvaluations: asTurnEdgeEvaluations(metadata.edgeEvaluations),
+    };
+
+    return [turnModel.id, turnModel];
+  }));
+  const turnOrder = turnRows.map((turn, index) => persistedTurnIdToInMemoryTurnId.get(turn.id) || `turn-${index}`);
+
+  const edgeRows = db.select()
+    .from(edges)
+    .where(eq(edges.gameId, gameId))
+    .all();
+  const edgesById = Object.fromEntries(edgeRows.map(edge => {
+    const turnId = persistedTurnIdToInMemoryTurnId.get(edge.turnId) || edge.turnId;
+    const turn = turnsById[turnId];
+    const sourceNodeId = inMemoryNodeIdByTopicId.get(edge.sourceTopicId) || edge.sourceTopicId;
+    const sourceIndex = turn?.sourceNodeIds.indexOf(sourceNodeId) ?? -1;
+    const edgeId = sourceIndex >= 0
+      ? turn?.edgeIds[sourceIndex] || `edge-${turnOrder.indexOf(turnId)}-${sourceIndex}`
+      : edge.id;
+    const metadata = parseJsonObject(edge.metadata);
+    const edgeModel: TopicEdge = {
+      id: edgeId,
+      sourceNodeId,
+      destinationNodeId: inMemoryNodeIdByTopicId.get(edge.destinationTopicId) || edge.destinationTopicId,
+      playerId: inMemoryPlayerIdByGamePlayerId.get(edge.gamePlayerId) || edge.gamePlayerId,
+      turnId,
+      strengthScore: edge.relevanceScore ?? undefined,
+      semanticDistanceScore: edge.semanticDistanceScore ?? undefined,
+      totalScore: edge.finalEdgeScore ?? undefined,
+      scoringDescription: edge.scoringDescription ?? undefined,
+      semanticDistanceDescription: edge.semanticDistanceDescription ?? undefined,
+      strengthDescription: edge.relevanceDescription ?? undefined,
+    };
+
+    if (edgeModel.strengthScore === undefined && typeof metadata.legacyStrengthScore === 'number') {
+      edgeModel.strengthScore = metadata.legacyStrengthScore;
+    }
+
+    return [edgeModel.id, edgeModel];
+  }));
+
+  const rootNodeId = game.rootTopicId
+    ? inMemoryNodeIdByTopicId.get(game.rootTopicId) || ''
+    : '';
+  const currentPlayerId = typeof gameMetadata.inMemoryCurrentPlayerId === 'string'
+    ? gameMetadata.inMemoryCurrentPlayerId
+    : game.currentGamePlayerId
+      ? inMemoryPlayerIdByGamePlayerId.get(game.currentGamePlayerId) || playerOrder[0] || ''
+      : playerOrder[0] || '';
+  const activeSourceNodeIds = stringArray(gameMetadata.activeSourceNodeIds)
+    .filter(nodeId => Boolean(nodesById[nodeId]));
+  const selectedNodeIds = stringArray(gameMetadata.selectedNodeIds)
+    .filter(nodeId => Boolean(nodesById[nodeId]));
+
+  return {
+    gameId,
+    difficulty: game.difficulty,
+    state: {
+      playersById,
+      playerOrder,
+      nodesById,
+      edgesById,
+      turnsById,
+      turnOrder,
+      rootNodeId,
+      activeSourceNodeIds,
+      selectedNodeIds,
+      currentPlayerId,
+      currentRound: game.currentRound,
+      maxRounds: game.maxRounds,
+      gameStatus: toGameStatus(game.status),
+    },
+  };
 }
