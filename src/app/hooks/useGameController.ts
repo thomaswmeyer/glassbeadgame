@@ -6,9 +6,6 @@ import {
   DEFAULT_HUMAN_PLAYER_ID,
   CurrentEvaluationView,
   Player,
-  Score,
-  addOpeningTopicTurnToGameState,
-  addTurnToGameState,
   advanceGameTurn,
   createEmptyGameState,
   getNextPlayerId,
@@ -25,7 +22,6 @@ import {
   DifficultyLevel,
   GameFlowServices,
   GeneratedTopic,
-  TurnEvaluation,
   selectCurrentSourceTopicText,
   selectTurnContextHistory,
 } from '@/domain/gameFlow';
@@ -33,16 +29,8 @@ import {
   PlayerTurnController,
   createTurnExecutionKey,
   resolvePlayerController,
-  resolveSubmittedSourceNodeIds,
   shouldAutoSubmitTurn,
 } from '@/domain/playerController';
-import { normalizeSubjectCategoryId } from '@/domain/subjectCategories';
-import {
-  SourceTurnEvaluation,
-  combineSourceScores,
-  formatCombinedEvaluation,
-  normalizeScore,
-} from '@/domain/turnScoring';
 import { parseAiMoveResponse } from '@/domain/llmParsing';
 
 export type { DifficultyLevel } from '@/domain/gameFlow';
@@ -62,6 +50,10 @@ function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic 
   return typeof result === 'string' ? { topic: result } : result;
 }
 
+function createClientGameId() {
+  return crypto.randomUUID();
+}
+
 export function useGameController({
   maxRounds,
   aiGoesFirst,
@@ -70,6 +62,7 @@ export function useGameController({
   services = gameApi,
   playerControllers = EMPTY_PLAYER_CONTROLLERS,
 }: UseGameControllerParams) {
+  const gameIdRef = useRef<string>(createClientGameId());
   const startedAutomaticTurnKeyRef = useRef<string | null>(null);
   const [gameState, setGameState] = useState(() => createEmptyGameState(
     10,
@@ -171,6 +164,7 @@ export function useGameController({
     console.log('aiGoesFirst setting:', aiGoesFirst);
 
     const initialPlayerId = resolveInitialPlayerId(players, aiGoesFirst);
+    gameIdRef.current = createClientGameId();
     startedAutomaticTurnKeyRef.current = null;
     setInlineEvaluation(null);
     setResponse('');
@@ -180,41 +174,6 @@ export function useGameController({
     ));
   };
 
-  const completeEvaluatedTurn = useCallback((params: {
-    playerId: string;
-    responseText: string;
-    evaluationTopic: string;
-    result: TurnEvaluation;
-    continueToNextTurn?: boolean;
-  }) => {
-    setGameState(prev => {
-      const withTurn = addTurnToGameState(prev, {
-        destinationTopic: params.responseText,
-        playerId: params.playerId,
-        sourceNodeIds: prev.activeSourceNodeIds,
-        evaluation: params.result.evaluation,
-        totalScore: params.result.scores.total,
-        legacyScores: params.result.scores,
-        edgeEvaluations: params.result.edgeEvaluations,
-        destinationSubjectCategory: params.result.destinationSubjectCategory,
-        scoringDescription: params.result.evaluation,
-      });
-
-      if (currentRound === maxRounds) {
-        setInlineEvaluation(null);
-        return setGameStatus(withTurn, 'completed');
-      }
-
-      if (!params.continueToNextTurn) {
-        setInlineEvaluation(null);
-        return setGameStatus(withTurn, 'showingResults');
-      }
-
-      setInlineEvaluation(selectCurrentEvaluation(setGameStatus(withTurn, 'showingResults')));
-      return advanceGameTurn(withTurn, getNextPlayerId(withTurn));
-    });
-  }, [currentRound, maxRounds]);
-
   const evaluateTurnResponse = useCallback(async (params: {
     playerId: string;
     responseText: string;
@@ -223,145 +182,40 @@ export function useGameController({
     fallbackOnFailure?: boolean;
     clearResponseOnSuccess?: boolean;
   }) => {
-    if (isOpeningTurn) {
-      if (!params.responseText.trim()) return;
+    const responseText = params.responseText.trim();
+    if (!responseText || !services.submitTurn) return;
 
-      setGameState(prev => {
-        const withOpeningTopic = addOpeningTopicTurnToGameState(prev, {
-          topic: params.responseText.trim(),
-          playerId: params.playerId,
-          subjectCategory: params.destinationSubjectCategory,
-        });
+    const nextStatus = isOpeningTurn && currentPlayerModel?.kind === 'ai' ? 'aiThinking' : 'evaluating';
+    setGameState(prev => setGameStatus(prev, nextStatus));
 
-        return advanceGameTurn(withOpeningTopic, getNextPlayerId(withOpeningTopic), {
-          incrementRound: false,
-        });
+    try {
+      const result = await services.submitTurn({
+        gameId: gameIdRef.current,
+        state: gameState,
+        playerId: params.playerId,
+        responseText,
+        difficulty,
+        selectedSourceNodeIds: params.selectedSourceNodeIds,
+        destinationSubjectCategory: params.destinationSubjectCategory,
+        fallbackOnEvaluationFailure: params.fallbackOnFailure,
+        advanceAfterScoring: !params.clearResponseOnSuccess,
       });
+
+      setInlineEvaluation(result.inlineEvaluation);
+      setGameState(result.state);
 
       if (params.clearResponseOnSuccess) {
         setResponse('');
       }
-      return;
-    }
-
-    const selectedSourceNodeIds = resolveSubmittedSourceNodeIds(
-      {
-        nodesById: gameState.nodesById,
-        activeSourceNodeIds: gameState.activeSourceNodeIds,
-      },
-      { selectedSourceNodeIds: params.selectedSourceNodeIds }
-    );
-    console.log('Resolved turn source ids:', {
-      requestedSourceNodeIds: params.selectedSourceNodeIds || [],
-      resolvedSourceNodeIds: selectedSourceNodeIds,
-      fallbackActiveSourceNodeIds: gameState.activeSourceNodeIds,
-    });
-    const evaluationTargets = selectedSourceNodeIds
-      .map(nodeId => gameState.nodesById[nodeId])
-      .filter(Boolean);
-    const evaluationTopic = evaluationTargets.map(node => node.topic).join(' + ');
-    if (!evaluationTopic || !params.responseText) return;
-
-    setGameState(prev => setGameStatus({
-      ...prev,
-      activeSourceNodeIds: selectedSourceNodeIds,
-      selectedNodeIds: selectedSourceNodeIds,
-    }, 'evaluating'));
-
-    let retries = 0;
-    const maxRetries = 3;
-
-    while (retries < maxRetries) {
-      try {
-        const edgeEvaluations = await Promise.all(
-          evaluationTargets.map(async sourceNode => {
-            const result = await services.evaluateTurn({
-              topic: sourceNode.topic,
-              response: params.responseText,
-              difficulty,
-            });
-
-            return {
-              sourceNodeId: sourceNode.id,
-              sourceTopic: sourceNode.topic,
-              evaluation: result.evaluation,
-              destinationSubjectCategory: normalizeSubjectCategoryId(result.destinationSubjectCategory),
-              scores: normalizeScore(result.scores),
-            } satisfies SourceTurnEvaluation;
-          })
-        );
-        const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
-        const destinationSubjectCategory = normalizeSubjectCategoryId(
-          edgeEvaluations
-            .map(edgeEvaluation => edgeEvaluation.destinationSubjectCategory)
-            .find(Boolean)
-        );
-        const result: TurnEvaluation = {
-          evaluation: formatCombinedEvaluation(edgeEvaluations),
-          destinationSubjectCategory,
-          scores: combinedScores,
-          edgeEvaluations,
-        };
-
-        completeEvaluatedTurn({
-          playerId: params.playerId,
-          responseText: params.responseText,
-          evaluationTopic,
-          result,
-          continueToNextTurn: !params.clearResponseOnSuccess,
-        });
-
-        if (params.clearResponseOnSuccess) {
-          setResponse('');
-        }
-        break;
-      } catch (error) {
-        console.error(`Evaluation attempt ${retries + 1} failed:`, error);
-        retries++;
-
-        if (retries < maxRetries) {
-          const backoffTime = 1000 * Math.pow(2, retries);
-          console.log(`Retrying in ${backoffTime}ms...`);
-          await new Promise(r => setTimeout(r, backoffTime));
-          continue;
-        }
-
-        if (params.fallbackOnFailure) {
-          const fallbackScores: Score = {
-            semanticDistance: 5,
-            relevanceQuality: 5,
-            total: 25,
-          };
-          const edgeEvaluations = evaluationTargets.map(sourceNode => ({
-            sourceNodeId: sourceNode.id,
-            sourceTopic: sourceNode.topic,
-            evaluation: "I couldn't evaluate this response properly. Here's a default score.",
-            scores: fallbackScores,
-          } satisfies SourceTurnEvaluation));
-          const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
-          completeEvaluatedTurn({
-            playerId: params.playerId,
-            responseText: params.responseText,
-            evaluationTopic,
-            result: {
-              evaluation: formatCombinedEvaluation(edgeEvaluations),
-              destinationSubjectCategory: 'science',
-              scores: combinedScores,
-              edgeEvaluations,
-            },
-            continueToNextTurn: !params.clearResponseOnSuccess,
-          });
-        } else {
-          setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
-          alert('Failed to evaluate response after multiple attempts. Please try again.');
-        }
-      }
+    } catch (error) {
+      console.error('Failed to submit turn:', error);
+      setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
+      alert('Failed to submit turn. Please try again.');
     }
   }, [
-    completeEvaluatedTurn,
     difficulty,
-    gameState.activeSourceNodeIds,
-    gameState.nodesById,
+    gameState,
+    currentPlayerModel?.kind,
     isOpeningTurn,
     services,
   ]);
@@ -399,6 +253,7 @@ export function useGameController({
 
   const resetCurrentGame = (currentPlayerId: string) => {
     setResponse('');
+    gameIdRef.current = createClientGameId();
     startedAutomaticTurnKeyRef.current = null;
     setInlineEvaluation(null);
     setSelectedGraphNodeId(null);

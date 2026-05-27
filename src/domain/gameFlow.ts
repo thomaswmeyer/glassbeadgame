@@ -1,4 +1,5 @@
 import {
+  CurrentEvaluationView,
   GameState,
   Score,
   addOpeningTopicTurnToGameState,
@@ -81,6 +82,25 @@ export type GameFlowServices = {
   generateTopic(request: GenerateTopicRequest): Promise<string | GeneratedTopic>;
   evaluateTurn(request: EvaluateTurnRequest): Promise<TurnEvaluation>;
   generateAiResponse(request: GenerateAiResponseRequest): Promise<string>;
+  submitTurn?(request: SubmitTurnRequest): Promise<SubmitTurnResult>;
+};
+
+export type SubmitTurnRequest = {
+  gameId: string;
+  state: GameState;
+  playerId: string;
+  responseText: string;
+  difficulty: DifficultyLevel;
+  selectedSourceNodeIds?: string[];
+  destinationSubjectCategory?: SubjectCategoryId;
+  fallbackOnEvaluationFailure?: boolean;
+  advanceAfterScoring?: boolean;
+};
+
+export type SubmitTurnResult = {
+  state: GameState;
+  committedTurnId: string;
+  inlineEvaluation: CurrentEvaluationView | null;
 };
 
 function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic {

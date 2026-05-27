@@ -9,6 +9,7 @@ import {
   addTurnToGameState,
   createEmptyGameState,
   setGameStatus,
+  startGameState,
   type GameState,
   type Player,
 } from '../../src/domain/game';
@@ -184,4 +185,78 @@ test('server turn command rejects edges that do not match turn sources', async (
     difficulty: 'undergrad',
     sourceEnvironment: 'test',
   }), /edge source mismatch/);
+});
+
+test('server submit turn command evaluates, applies, and persists a scored turn', async () => {
+  const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-submit-turn-')), 'game.sqlite');
+  process.env.DATABASE_URL = `file:${databasePath}`;
+
+  const {
+    submitTurn,
+  } = await import('../../src/server/game/submitTurnService');
+  const {
+    closeSqliteDatabaseForTests,
+  } = await import('../../src/server/db/sqlite');
+
+  try {
+    const gameId = '44444444-4444-4444-8444-444444444444';
+    const state = startGameState({
+      rootTopic: 'Cathedrals',
+      maxRounds: 4,
+      currentPlayerId: 'player-a',
+      rootCreatedByPlayerId: 'player-b',
+      players,
+    });
+    const result = await submitTurn({
+      gameId,
+      state,
+      playerId: 'player-a',
+      responseText: 'Flying buttresses',
+      difficulty: 'undergrad',
+      sourceEnvironment: 'test',
+      services: {
+        async evaluateTurn(request) {
+          assert.deepEqual(request, {
+            topic: 'Cathedrals',
+            response: 'Flying buttresses',
+            difficulty: 'undergrad',
+          });
+
+          return {
+            evaluation: 'Strong architectural connection.',
+            destinationSubjectCategory: 'arts',
+            scores: {
+              semanticDistance: 7,
+              relevanceQuality: 8,
+              total: 56,
+            },
+          };
+        },
+      },
+    });
+
+    assert.equal(result.state.gameStatus, 'showingResults');
+    assert.equal(result.committedTurnId, 'turn-0');
+    assert.equal(result.inlineEvaluation, null);
+    assert.equal(result.state.turnOrder.length, 1);
+
+    const turn = result.state.turnsById[result.committedTurnId];
+    const destination = result.state.nodesById[turn.destinationNodeId];
+    assert.equal(destination.topic, 'Flying buttresses');
+    assert.equal(turn.totalScore, 56);
+
+    closeSqliteDatabaseForTests();
+
+    const db = new Database(databasePath, { readonly: true });
+    try {
+      assert.equal(tableCount(db, 'games'), 1);
+      assert.equal(tableCount(db, 'topics'), 2);
+      assert.equal(tableCount(db, 'turns'), 1);
+      assert.equal(tableCount(db, 'edges'), 1);
+    } finally {
+      db.close();
+    }
+  } finally {
+    closeSqliteDatabaseForTests();
+  }
 });

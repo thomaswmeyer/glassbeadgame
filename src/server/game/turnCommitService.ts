@@ -1,8 +1,8 @@
 import { GameState } from '@/domain/game';
 import { saveGameSnapshot } from '../persistence/gameSnapshotRepository';
 
-type SourceEnvironment = 'local' | 'test' | 'render_prod' | 'render_preview' | 'imported' | 'external';
-type Difficulty = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
+export type SourceEnvironment = 'local' | 'test' | 'render_prod' | 'render_preview' | 'imported' | 'external';
+export type Difficulty = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
 export type CommitCompletedTurnCommand = {
   gameId: string;

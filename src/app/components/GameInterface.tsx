@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import GameSetupPanel from './GameSetupPanel';
@@ -38,8 +38,6 @@ export default function GameInterface() {
   const [playerMode, setPlayerMode] = useState<GamePlayerMode>('human-vs-ai');
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
-  const persistedGameIdRef = useRef<string | null>(null);
-  const lastPersistedTurnKeyRef = useRef<string | null>(null);
   const configuredPlayers = useMemo(() => createConfiguredPlayers(playerMode), [playerMode]);
 
   const [tooltipData, setTooltipData] = useState<{
@@ -106,48 +104,6 @@ export default function GameInterface() {
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
   const productionModelName = 'the configured Gemini model';
-
-  const startNewPersistedGame = () => {
-    persistedGameIdRef.current = crypto.randomUUID();
-    lastPersistedTurnKeyRef.current = null;
-    startGame();
-  };
-
-  const restartPersistedGame = () => {
-    persistedGameIdRef.current = crypto.randomUUID();
-    lastPersistedTurnKeyRef.current = null;
-    restartGame();
-  };
-
-  const returnToSettingsAndClearPersistedGame = () => {
-    persistedGameIdRef.current = null;
-    lastPersistedTurnKeyRef.current = null;
-    returnToSettings();
-  };
-
-  useEffect(() => {
-    const latestTurnId = gameState.turnOrder[gameState.turnOrder.length - 1];
-    if (!gameStarted || !gameState.rootNodeId || !latestTurnId) return;
-
-    if (!persistedGameIdRef.current) {
-      persistedGameIdRef.current = crypto.randomUUID();
-    }
-
-    const latestTurn = gameState.turnsById[latestTurnId];
-    const turnPersistenceKey = `${latestTurnId}:${gameState.turnOrder.length}:${latestTurn?.totalScore ?? 'pending'}`;
-    if (lastPersistedTurnKeyRef.current === turnPersistenceKey) return;
-    lastPersistedTurnKeyRef.current = turnPersistenceKey;
-
-    const gameId = persistedGameIdRef.current;
-    gameApi.commitCompletedTurn({
-      gameId,
-      state: gameState,
-      turnId: latestTurnId,
-      difficulty,
-    }).catch(error => {
-      console.warn('Failed to commit completed turn:', error);
-    });
-  }, [difficulty, gameStarted, gameState.rootNodeId, gameState.turnOrder, gameState.turnsById, gameState]);
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
@@ -269,7 +225,7 @@ export default function GameInterface() {
           onPlayerModeChange={setPlayerMode}
           onAiGoesFirstChange={setAiGoesFirst}
           onDifficultyChange={setDifficulty}
-          onStartGame={startNewPersistedGame}
+          onStartGame={startGame}
         />
         <ScoreTooltip tooltipData={tooltipData} />
       </div>
@@ -301,8 +257,8 @@ export default function GameInterface() {
               gameCompleted={false}
               playerScoreRows={playerScoreRows}
               onNextTurn={advanceTurn}
-              onRestart={restartPersistedGame}
-              onReturnToSettings={returnToSettingsAndClearPersistedGame}
+              onRestart={restartGame}
+              onReturnToSettings={returnToSettings}
             />
           )}
 
@@ -323,8 +279,8 @@ export default function GameInterface() {
               gameCompleted={gameCompleted}
               playerScoreRows={playerScoreRows}
               onNextTurn={advanceTurn}
-              onRestart={restartPersistedGame}
-              onReturnToSettings={returnToSettingsAndClearPersistedGame}
+              onRestart={restartGame}
+              onReturnToSettings={returnToSettings}
             />
           )}
 
