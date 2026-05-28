@@ -139,7 +139,8 @@ export function buildAiResponsePrompt(params: {
         You must choose one or more source nodes for this move. Each selected source creates a separate edge
         to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,
         the turn score is round(sum(edgeScores) / sqrt(N)), so multiple sources can help only when each connection
-        is meaningful.
+        is meaningful. The first connecting move after the opening topic receives an opening bonus:
+        round(edgeScore * sqrt(2)), because only one source node is available.
 
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)

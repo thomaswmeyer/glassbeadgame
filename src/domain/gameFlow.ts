@@ -81,6 +81,7 @@ export type GenerateAiResponseRequest = {
 
 export type GameFlowServices = {
   createGame?(request: CreateGameRequest): Promise<CreateGameResult>;
+  advanceTurn?(request: AdvanceTurnRequest): Promise<AdvanceTurnResult>;
   generateTopic(request: GenerateTopicRequest): Promise<string | GeneratedTopic>;
   evaluateTurn(request: EvaluateTurnRequest): Promise<TurnEvaluation>;
   generateAiResponse(request: GenerateAiResponseRequest): Promise<string>;
@@ -96,6 +97,15 @@ export type CreateGameRequest = {
 };
 
 export type CreateGameResult = {
+  gameId: string;
+  state: GameState;
+};
+
+export type AdvanceTurnRequest = {
+  gameId: string;
+};
+
+export type AdvanceTurnResult = {
   gameId: string;
   state: GameState;
 };
@@ -147,6 +157,15 @@ export function selectTurnContextHistory(state: GameState): TurnContextHistoryIt
     playerName: row.player.name,
     playerKind: row.player.kind,
   }));
+}
+
+function isFirstConnectionTurn(state: GameState) {
+  if (state.currentRound !== 1 || state.turnOrder.length !== 1) return false;
+
+  const openingTurn = state.turnsById[state.turnOrder[0]];
+  return openingTurn?.round === 0 &&
+    openingTurn.sourceNodeIds.length === 0 &&
+    openingTurn.edgeIds.length === 0;
 }
 
 export async function startGeneratedGame(params: {
@@ -202,7 +221,9 @@ export async function evaluateAndApplyTurn(params: {
       } satisfies SourceTurnEvaluation;
     })
   );
-  const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores));
+  const combinedScores = combineSourceScores(edgeEvaluations.map(edgeEvaluation => edgeEvaluation.scores), {
+    firstConnectionBonus: isFirstConnectionTurn(params.state),
+  });
   const combinedEvaluation = formatCombinedEvaluation(edgeEvaluations);
   const destinationSubjectCategory = normalizeSubjectCategoryId(
     edgeEvaluations

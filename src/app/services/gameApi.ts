@@ -1,5 +1,7 @@
 import axios from 'axios';
 import {
+  AdvanceTurnRequest,
+  AdvanceTurnResult,
   EvaluateTurnRequest,
   CreateGameRequest,
   CreateGameResult,
@@ -45,6 +47,10 @@ export const gameApi: GameFlowServices & {
 } = {
   async createGame(request: CreateGameRequest): Promise<CreateGameResult> {
     return postJson('/api/games', request);
+  },
+
+  async advanceTurn(request: AdvanceTurnRequest): Promise<AdvanceTurnResult> {
+    return postJson(`/api/games/${request.gameId}/turns/advance`, {});
   },
 
   async generateTopic(request: GenerateTopicRequest) {

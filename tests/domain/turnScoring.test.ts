@@ -38,6 +38,16 @@ test('combines multi-source scores with square-root diminishing returns', () => 
   });
 });
 
+test('applies first connection bonus to the combined turn score', () => {
+  assert.deepEqual(combineSourceScores([
+    { semanticDistance: 7, relevanceQuality: 8, total: 15 },
+  ], { firstConnectionBonus: true }), {
+    semanticDistance: 7,
+    relevanceQuality: 8,
+    total: 79,
+  });
+});
+
 test('combined evaluation names each source when a turn has multiple edges', () => {
   const evaluations: SourceTurnEvaluation[] = [
     {

@@ -4,7 +4,9 @@ import {
   DEFAULT_AI_PLAYER_ID,
   DEFAULT_HUMAN_PLAYER_ID,
   addActiveSourceNode,
+  addOpeningTopicTurnToGameState,
   advanceGameTurn,
+  createEmptyGameState,
   getNextPlayerId,
   removeActiveSourceNode,
   startGameState,
@@ -108,6 +110,38 @@ test('applies a turn by evaluating the active source topic with mocked LLM servi
   assert.equal(edge.strengthScore, 8);
   assert.equal(edge.totalScore, 56);
   assert.equal(edge.scoringDescription, 'Strong architectural connection.');
+});
+
+test('applies sqrt two bonus to the first scored connection after the opening topic', async () => {
+  const empty = createEmptyGameState(4, DEFAULT_HUMAN_PLAYER_ID);
+  const state = advanceGameTurn(addOpeningTopicTurnToGameState(empty, {
+    topic: 'Cathedrals',
+    playerId: DEFAULT_HUMAN_PLAYER_ID,
+  }), DEFAULT_AI_PLAYER_ID, {
+    incrementRound: false,
+  });
+  const services = {
+    async evaluateTurn() {
+      return {
+        evaluation: 'Strong architectural connection.',
+        scores: defaultScore,
+      };
+    },
+  } satisfies Pick<GameFlowServices, 'evaluateTurn'>;
+
+  const result = await evaluateAndApplyTurn({
+    state,
+    response: 'Flying buttresses',
+    playerId: DEFAULT_AI_PLAYER_ID,
+    difficulty: 'undergrad',
+    services,
+  });
+
+  const turn = result.state.turnsById[result.state.turnOrder[1]];
+  const edge = result.state.edgesById[turn.edgeIds[0]];
+  assert.equal(edge.totalScore, 56);
+  assert.equal(turn.totalScore, 79);
+  assert.equal(result.currentEvaluation.scores.total, 79);
 });
 
 test('branches from an older selected node instead of forcing a linear chain', async () => {

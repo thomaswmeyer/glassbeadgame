@@ -20,7 +20,7 @@ export function normalizeScore(score: Score): Score {
   };
 }
 
-export function combineSourceScores(scores: Score[]): Score {
+export function combineSourceScores(scores: Score[], options: { firstConnectionBonus?: boolean } = {}): Score {
   const normalizedScores = scores.map(normalizeScore);
   if (normalizedScores.length === 0) {
     return {
@@ -30,7 +30,11 @@ export function combineSourceScores(scores: Score[]): Score {
     };
   }
   if (normalizedScores.length === 1) {
-    return normalizedScores[0];
+    const score = normalizedScores[0];
+    return {
+      ...score,
+      total: options.firstConnectionBonus ? Math.round(score.total * Math.sqrt(2)) : score.total,
+    };
   }
 
   const scoreCount = normalizedScores.length;
@@ -44,6 +48,10 @@ export function combineSourceScores(scores: Score[]): Score {
     ),
     total: Math.round(totalScore / Math.sqrt(scoreCount)),
   };
+
+  if (options.firstConnectionBonus) {
+    combinedScore.total = Math.round(combinedScore.total * Math.sqrt(2));
+  }
 
   return combinedScore;
 }

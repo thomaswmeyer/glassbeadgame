@@ -6,9 +6,7 @@ import {
   DEFAULT_HUMAN_PLAYER_ID,
   CurrentEvaluationView,
   Player,
-  advanceGameTurn,
   createEmptyGameState,
-  getNextPlayerId,
   selectCurrentEvaluation,
   selectCurrentPlayer,
   selectGraphRenderData,
@@ -204,7 +202,7 @@ export function useGameController({
         gameId: gameIdRef.current,
         playerId: params.playerId,
         responseText,
-        selectedSourceNodeIds: params.selectedSourceNodeIds,
+        selectedSourceNodeIds: params.selectedSourceNodeIds ?? gameState.activeSourceNodeIds,
         destinationSubjectCategory: params.destinationSubjectCategory,
         fallbackOnEvaluationFailure: params.fallbackOnFailure,
         advanceAfterScoring: !params.clearResponseOnSuccess,
@@ -223,6 +221,7 @@ export function useGameController({
     }
   }, [
     currentPlayerModel?.kind,
+    gameState.activeSourceNodeIds,
     isOpeningTurn,
     services,
   ]);
@@ -237,7 +236,7 @@ export function useGameController({
     });
   };
 
-  const handleNextTurn = () => {
+  const handleNextTurn = async () => {
     if (gameCompleted) return;
 
     let nextTopic = currentEvaluation?.response || '';
@@ -252,10 +251,18 @@ export function useGameController({
       }
     }
 
-    setGameState(prev => advanceGameTurn(prev, getNextPlayerId(prev), {
-      incrementRound: !currentEvaluation?.isOpeningTurn,
-    }));
-    setResponse('');
+    if (!services.advanceTurn) return;
+
+    try {
+      const result = await services.advanceTurn({
+        gameId: gameIdRef.current,
+      });
+      setGameState(result.state);
+      setResponse('');
+    } catch (error) {
+      console.error('Failed to advance turn:', error);
+      alert('Failed to advance to the next turn. Please try again.');
+    }
   };
 
   const resetCurrentGame = (currentPlayerId: string) => {

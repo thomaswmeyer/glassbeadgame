@@ -273,3 +273,131 @@ test('server submit turn command evaluates, applies, and persists a scored turn'
     closeSqliteDatabaseForTests();
   }
 });
+
+test('server submit turn command honors selected source ids over persisted active source fallback', async () => {
+  const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-submit-multi-source-')), 'game.sqlite');
+  process.env.DATABASE_URL = `file:${databasePath}`;
+
+  const {
+    loadGameSnapshot,
+    saveGameSnapshot,
+  } = await import('../../src/server/persistence/gameSnapshotRepository');
+  const {
+    submitTurn,
+  } = await import('../../src/server/game/submitTurnService');
+  const {
+    closeSqliteDatabaseForTests,
+  } = await import('../../src/server/db/sqlite');
+
+  try {
+    const gameId = '55555555-5555-4555-8555-555555555555';
+    const staleActiveSourceState: GameState = setGameStatus({
+      ...createPersistableState(),
+      currentRound: 2,
+      currentPlayerId: 'player-a',
+    }, 'awaitingResponse');
+    saveGameSnapshot({
+      gameId,
+      state: staleActiveSourceState,
+      sourceEnvironment: 'test',
+    });
+
+    const loaded = loadGameSnapshot(gameId);
+    assert.ok(loaded);
+
+    const rootNodeId = loaded.state.rootNodeId;
+    const previousTurn = loaded.state.turnsById[loaded.state.turnOrder[loaded.state.turnOrder.length - 1]];
+    const previousDestinationNodeId = previousTurn.destinationNodeId;
+    assert.deepEqual(loaded.state.activeSourceNodeIds, [previousDestinationNodeId]);
+
+    const evaluateCalls: unknown[] = [];
+    const result = await submitTurn({
+      gameId,
+      state: loaded.state,
+      playerId: 'player-a',
+      responseText: 'Hermeneutics',
+      difficulty: loaded.difficulty,
+      selectedSourceNodeIds: [rootNodeId, previousDestinationNodeId],
+      sourceEnvironment: 'test',
+      services: {
+        async evaluateTurn(request) {
+          evaluateCalls.push(request);
+          return {
+            evaluation: `Connection from ${request.topic}.`,
+            destinationSubjectCategory: 'philosophy',
+            scores: {
+              semanticDistance: 6,
+              relevanceQuality: 7,
+              total: 42,
+            },
+          };
+        },
+      },
+    });
+
+    const turn = result.state.turnsById[result.committedTurnId];
+    assert.deepEqual(turn.sourceNodeIds, [rootNodeId, previousDestinationNodeId]);
+    assert.equal(turn.edgeIds.length, 2);
+    assert.deepEqual(
+      turn.edgeIds.map(edgeId => result.state.edgesById[edgeId].sourceNodeId),
+      [rootNodeId, previousDestinationNodeId]
+    );
+    assert.deepEqual(evaluateCalls, [
+      {
+        topic: 'Apophenia',
+        response: 'Hermeneutics',
+        difficulty: 'undergrad',
+      },
+      {
+        topic: 'Augury',
+        response: 'Hermeneutics',
+        difficulty: 'undergrad',
+      },
+    ]);
+  } finally {
+    closeSqliteDatabaseForTests();
+  }
+});
+
+test('server advance turn command persists the next current player before automatic submissions', async () => {
+  const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-advance-turn-')), 'game.sqlite');
+  process.env.DATABASE_URL = `file:${databasePath}`;
+
+  const {
+    advancePersistedTurn,
+  } = await import('../../src/server/game/advanceTurnService');
+  const {
+    loadGameSnapshot,
+    saveGameSnapshot,
+  } = await import('../../src/server/persistence/gameSnapshotRepository');
+  const {
+    closeSqliteDatabaseForTests,
+  } = await import('../../src/server/db/sqlite');
+
+  try {
+    const gameId = '66666666-6666-4666-8666-666666666666';
+    const showingResultsState = createPersistableState();
+    saveGameSnapshot({
+      gameId,
+      state: showingResultsState,
+      sourceEnvironment: 'test',
+    });
+
+    const result = advancePersistedTurn({
+      gameId,
+      sourceEnvironment: 'test',
+    });
+
+    assert.equal(result.state.gameStatus, 'awaitingResponse');
+    assert.equal(result.state.currentPlayerId, 'player-a');
+    assert.equal(result.state.currentRound, 2);
+
+    const loaded = loadGameSnapshot(gameId);
+    assert.ok(loaded);
+    assert.equal(loaded.state.gameStatus, 'awaitingResponse');
+    assert.equal(loaded.state.currentPlayerId, 'player-a');
+    assert.equal(loaded.state.currentRound, 2);
+  } finally {
+    closeSqliteDatabaseForTests();
+  }
+});

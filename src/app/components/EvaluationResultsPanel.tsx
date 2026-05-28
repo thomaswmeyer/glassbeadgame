@@ -119,6 +119,11 @@ function MultiEdgeScoreBreakdown({
   edgeScores: CurrentEvaluationEdgeScore[];
   combinedTotal: number;
 }) {
+  const rawCombinedTotal = edgeScores.length === 0
+    ? 0
+    : Math.round(edgeScores.reduce((sum, edgeScore) => sum + edgeScore.scores.total, 0) / Math.sqrt(edgeScores.length));
+  const hasFirstConnectionBonus = edgeScores.length === 1 && combinedTotal !== rawCombinedTotal;
+
   return (
     <div className="mt-2 space-y-3 text-sm">
       {edgeScores.map(edgeScore => (
@@ -136,7 +141,11 @@ function MultiEdgeScoreBreakdown({
       ))}
       <p className="font-semibold border-t border-blue-200 pt-2">
         Combined Turn Score: {combinedTotal}
-        <span className="text-xs font-normal text-gray-500"> (sum of edge scores divided by sqrt({edgeScores.length}))</span>
+        <span className="text-xs font-normal text-gray-500">
+          {hasFirstConnectionBonus
+            ? ' (opening connection bonus: edge score multiplied by sqrt(2))'
+            : ` (sum of edge scores divided by sqrt(${edgeScores.length}))`}
+        </span>
       </p>
     </div>
   );
