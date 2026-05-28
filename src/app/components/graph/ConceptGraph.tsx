@@ -40,6 +40,22 @@ const INITIAL_TRANSFORM: GraphViewportTransform = {
   scale: 1,
 };
 
+function easeCubicOut(value: number) {
+  return 1 - Math.pow(1 - value, 3);
+}
+
+function interpolateTransform(
+  start: GraphViewportTransform,
+  end: GraphViewportTransform,
+  progress: number
+): GraphViewportTransform {
+  return {
+    translateX: start.translateX + (end.translateX - start.translateX) * progress,
+    translateY: start.translateY + (end.translateY - start.translateY) * progress,
+    scale: start.scale + (end.scale - start.scale) * progress,
+  };
+}
+
 export default function ConceptGraph({
   renderer = getConfiguredGraphRendererKind(),
   ...props
@@ -47,6 +63,8 @@ export default function ConceptGraph({
   const containerRef = useRef<HTMLDivElement>(null);
   const positionsRef = useRef<Map<string, GraphPosition>>(new Map());
   const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
+  const transformRef = useRef<GraphViewportTransform>(INITIAL_TRANSFORM);
+  const transformAnimationRef = useRef<number | null>(null);
   const [activeRenderer, setActiveRenderer] = useState(renderer);
   const [dimensions, setDimensions] = useState({
     width: props.width ?? 800,
@@ -61,6 +79,44 @@ export default function ConceptGraph({
     width: props.width ?? 800,
     height: props.height ?? 600,
   }) as GraphData);
+
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
+
+  const setViewportTransform = useCallback((nextTransform: GraphViewportTransform, duration = 0) => {
+    if (transformAnimationRef.current !== null) {
+      window.cancelAnimationFrame(transformAnimationRef.current);
+      transformAnimationRef.current = null;
+    }
+
+    if (duration <= 0) {
+      transformRef.current = nextTransform;
+      setTransform(nextTransform);
+      return;
+    }
+
+    const startTransform = transformRef.current;
+    const startTime = performance.now();
+
+    const animateTransform = (time: number) => {
+      const elapsed = time - startTime;
+      const rawProgress = Math.min(1, elapsed / duration);
+      const easedProgress = easeCubicOut(rawProgress);
+      const interpolatedTransform = interpolateTransform(startTransform, nextTransform, easedProgress);
+
+      transformRef.current = interpolatedTransform;
+      setTransform(interpolatedTransform);
+
+      if (rawProgress < 1) {
+        transformAnimationRef.current = window.requestAnimationFrame(animateTransform);
+      } else {
+        transformAnimationRef.current = null;
+      }
+    };
+
+    transformAnimationRef.current = window.requestAnimationFrame(animateTransform);
+  }, []);
 
   useEffect(() => {
     setActiveRenderer(renderer);
@@ -100,13 +156,13 @@ export default function ConceptGraph({
     });
     if (!nextTransform) return;
 
-    const applyTransform = () => setTransform(nextTransform);
+    const applyTransform = () => setViewportTransform(nextTransform, duration);
     if (duration > 0) {
       window.setTimeout(applyTransform, Math.min(duration, 120));
     } else {
       applyTransform();
     }
-  }, [dimensions.height, dimensions.width, graphData.nodes]);
+  }, [dimensions.height, dimensions.width, graphData.nodes, setViewportTransform]);
 
   useEffect(() => {
     let simulation = simulationRef.current;
@@ -172,6 +228,10 @@ export default function ConceptGraph({
 
   useEffect(() => {
     return () => {
+      if (transformAnimationRef.current !== null) {
+        window.cancelAnimationFrame(transformAnimationRef.current);
+        transformAnimationRef.current = null;
+      }
       simulationRef.current?.stop();
       simulationRef.current = null;
     };

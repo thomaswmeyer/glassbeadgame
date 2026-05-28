@@ -75,7 +75,7 @@ export function getGraphEdgeDistance(edge: Pick<GraphLayoutEdge, 'semanticDistan
 
 export function getGraphEdgeStrokeWidth(edge: Pick<GraphLayoutEdge, 'strengthScore'>) {
   const relevance = clampScore(edge.strengthScore ?? 5);
-  return 1 + relevance * 0.7;
+  return 1 + relevance * 1.2;
 }
 
 export function getGraphNodeBeadScore(

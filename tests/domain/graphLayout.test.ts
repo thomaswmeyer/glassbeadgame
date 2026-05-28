@@ -180,10 +180,10 @@ test('graph edge visuals map semantic distance to length and relevance to thickn
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 20 }), 240);
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 0 }), 24);
 
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 1 }), 1.7);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 10 }), 8);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 20 }), 8);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 0 }), 1.7);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 1 }), 2.2);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 10 }), 13);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 20 }), 13);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 0 }), 2.2);
 });
 
 test('viewport transform fits graph bounds within viewport padding', () => {

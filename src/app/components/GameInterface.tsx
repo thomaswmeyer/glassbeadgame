@@ -101,13 +101,13 @@ export default function GameInterface() {
   const firstPlayerName = getPlayerNameAt(configuredPlayers, 0, 'Player 1');
   const secondPlayerName = getPlayerNameAt(configuredPlayers, 1, 'Player 2');
   const activeSourceRows = selectActiveSourceRows(gameState);
-  const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
+  const sourceSelectionLocked = isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
   const productionModelName = 'the configured LLM model';
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
-      // Don't allow selection during evaluation or when showing results
+      // Don't allow selection while a turn is being generated or scored.
       return;
     }
 

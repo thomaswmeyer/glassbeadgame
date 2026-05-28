@@ -11,6 +11,10 @@ import {
   SharedGraphRendererProps,
   SimulationNode,
 } from './graphRendererTypes';
+import {
+  projectedBeadScreenRadius,
+  shaderFloorPointForScreenPoint,
+} from './graphProjection';
 
 type PointerDragState = {
   pointerId: number;
@@ -43,6 +47,8 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
   precision mediump float;
 
   uniform vec2 u_resolution;
+  uniform vec2 u_graphTranslate;
+  uniform float u_graphScale;
   uniform int u_nodeCount;
   uniform vec3 u_centers[64];
   uniform float u_radii[64];
@@ -102,6 +108,24 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
                pow(clamp(rd.y,0.,1.),.5)) * .8;
   }
 
+  vec2 floorPointToScreenPoint(vec3 ro, vec3 fp) {
+    vec3 fwd = normalize(-ro);
+    vec3 rgt = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
+    vec3 up = cross(fwd, rgt);
+    vec3 toPoint = normalize(fp - ro);
+    vec2 uv = vec2(
+      dot(toPoint, rgt) / max(0.001, dot(toPoint, fwd)),
+      dot(toPoint, up) / max(0.001, dot(toPoint, fwd))
+    );
+
+    return uv * u_resolution.y + 0.5 * u_resolution.xy;
+  }
+
+  vec2 graphAnchoredWoodPoint(vec3 ro, vec3 fp) {
+    vec2 screenPoint = floorPointToScreenPoint(ro, fp);
+    return (screenPoint - u_graphTranslate) / max(0.001, u_graphScale);
+  }
+
   float raySegDist(vec3 ro, vec3 rd, vec3 pa, vec3 pb) {
     vec3 ba = pb - pa, op = pa - ro;
     float b = dot(rd, ba), e = dot(ba, ba), d = dot(rd, op), f = dot(ba, op);
@@ -112,10 +136,10 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
 
   vec3 world(vec3 ro, vec3 rd) {
     if (rd.y < 0.) {
-      float t = -ro.y / rd.y;
-      if (t > 0.) {
-        vec3 fp = ro + rd * t;
-        vec3 col = woodColor(fp.xz * 0.25);
+        float t = -ro.y / rd.y;
+        if (t > 0.) {
+          vec3 fp = ro + rd * t;
+        vec3 col = woodColor(graphAnchoredWoodPoint(ro, fp) * 0.002);
 
         vec3  ld      = normalize(vec3(3.0, 6.0, 2.0));
         vec2  lightXZ = normalize(ld.xz);
@@ -211,7 +235,7 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
       vec3 pa = ca + dir * u_connectionRadiusA[i], pb = cb - dir * u_connectionRadiusB[i];
       float dist = raySegDist(ro, rd, pa, pb);
       float width = u_connectionWidth[i];
-      float widthFactor = mix(0.55, 2.35, clamp((width - 1.7) / 6.3, 0., 1.));
+      float widthFactor = mix(0.45, 3.6, clamp((width - 2.2) / 10.8, 0., 1.));
       float scaledDist = dist / widthFactor;
       float g = .00042 / (scaledDist * scaledDist + .0015)
               + .00008 / (scaledDist * scaledDist + .04);
@@ -300,53 +324,6 @@ function worldPoint(
   return {
     x: (point.x - transform.translateX) / transform.scale,
     y: (point.y - transform.translateY) / transform.scale,
-  };
-}
-
-function shaderFloorPointForScreenPoint(
-  point: { x: number; y: number },
-  width: number,
-  height: number
-) {
-  const uv = {
-    x: (point.x - 0.5 * width) / height,
-    y: (height - point.y - 0.5 * height) / height,
-  };
-  const ro = { x: 0, y: 7.5, z: 3.5 };
-  const fwd = normalize3({ x: -ro.x, y: -ro.y, z: -ro.z });
-  const rgt = normalize3(cross3({ x: 0, y: 1, z: 0 }, fwd));
-  const up = cross3(fwd, rgt);
-  const rd = normalize3({
-    x: fwd.x + uv.x * rgt.x + uv.y * up.x,
-    y: fwd.y + uv.x * rgt.y + uv.y * up.y,
-    z: fwd.z + uv.x * rgt.z + uv.y * up.z,
-  });
-  const t = -ro.y / rd.y;
-
-  return {
-    x: ro.x + rd.x * t,
-    z: ro.z + rd.z * t,
-  };
-}
-
-function normalize3(vector: { x: number; y: number; z: number }) {
-  const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
-
-  return {
-    x: vector.x / length,
-    y: vector.y / length,
-    z: vector.z / length,
-  };
-}
-
-function cross3(
-  left: { x: number; y: number; z: number },
-  right: { x: number; y: number; z: number }
-) {
-  return {
-    x: left.y * right.z - left.z * right.y,
-    y: left.z * right.x - left.x * right.z,
-    z: left.x * right.y - left.y * right.x,
   };
 }
 
@@ -452,6 +429,8 @@ export default function WebGlConceptGraphRenderer({
     gl.useProgram(resources.backgroundProgram);
     const backgroundPositionLocation = gl.getAttribLocation(resources.backgroundProgram, 'a_position');
     const backgroundResolutionLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_resolution');
+    const graphTranslateLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_graphTranslate');
+    const graphScaleLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_graphScale');
     const nodeCountLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_nodeCount');
     const centersLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_centers[0]');
     const radiiLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_radii[0]');
@@ -526,7 +505,16 @@ export default function WebGlConceptGraphRenderer({
       shaderConnectionCount += 1;
     });
 
+    const pixelRatio = canvas.width / dimensions.width || 1;
+    const graphTransform = transformRef.current;
+
     gl.uniform2f(backgroundResolutionLocation, canvas.width, canvas.height);
+    gl.uniform2f(
+      graphTranslateLocation,
+      graphTransform.translateX * pixelRatio,
+      graphTransform.translateY * pixelRatio
+    );
+    gl.uniform1f(graphScaleLocation, graphTransform.scale * pixelRatio);
     gl.uniform1i(nodeCountLocation, shaderNodeCount);
     gl.uniform3fv(centersLocation, shaderCenters);
     gl.uniform1fv(radiiLocation, shaderRadii);
@@ -590,7 +578,13 @@ export default function WebGlConceptGraphRenderer({
 
     return orderedNodes.find(node => {
       const nodePoint = screenPoint(node, transform, fallback);
-      const hitRadius = Math.max(14, node.radius * transform.scale + 8);
+      const visualRadius = projectedBeadScreenRadius(
+        node,
+        nodePoint,
+        dimensions.width,
+        dimensions.height
+      );
+      const hitRadius = Math.max(14, visualRadius + 8);
       return Math.hypot(point.x - nodePoint.x, point.y - nodePoint.y) <= hitRadius;
     });
   }, [dimensions.height, dimensions.width]);
@@ -678,10 +672,15 @@ export default function WebGlConceptGraphRenderer({
       y: dimensions.height / 2,
     };
 
-    return graphData.nodes.map(node => ({
-      node,
-      point: screenPoint(node, transform, fallback),
-    }));
+    return graphData.nodes.map(node => {
+      const point = screenPoint(node, transform, fallback);
+
+      return {
+        node,
+        point,
+        visualRadius: projectedBeadScreenRadius(node, point, dimensions.width, dimensions.height),
+      };
+    });
   }, [dimensions.height, dimensions.width, frameVersion, graphData.nodes, transform]);
 
   return (
@@ -697,13 +696,13 @@ export default function WebGlConceptGraphRenderer({
         onPointerCancel={handlePointerUp}
       />
       <div className="pointer-events-none absolute inset-0">
-        {overlayNodes.map(({ node, point }) => (
+        {overlayNodes.map(({ node, point, visualRadius }) => (
           <div
             key={node.id}
             className="absolute text-center font-medium text-gray-900"
             style={{
               left: point.x,
-              top: point.y + node.radius * transform.scale + GRAPH_LABEL_GAP,
+              top: point.y + visualRadius + GRAPH_LABEL_GAP,
               transform: 'translateX(-50%)',
               fontSize: GRAPH_LABEL_FONT_SIZE,
               lineHeight: 1.1,
@@ -716,7 +715,7 @@ export default function WebGlConceptGraphRenderer({
       </div>
       {!interactionsDisabled && (
         <div className="pointer-events-none absolute inset-0">
-          {overlayNodes.map(({ node, point }) => {
+          {overlayNodes.map(({ node, point, visualRadius }) => {
             const canRemove = node.isActiveSource && activeSourceCount > 1;
             const canAdd = !node.isActiveSource;
             if (!canAdd && !canRemove) return null;
@@ -728,8 +727,8 @@ export default function WebGlConceptGraphRenderer({
                 aria-label={canRemove ? `Remove ${node.label} from selected topics` : `Add ${node.label} to selected topics`}
                 className="pointer-events-auto absolute flex h-4 w-4 items-center justify-center rounded-full border border-gray-500 bg-white text-[11px] font-bold leading-none text-gray-700 shadow-sm"
                 style={{
-                  left: point.x + node.radius * transform.scale,
-                  top: point.y - node.radius * transform.scale,
+                  left: point.x + visualRadius,
+                  top: point.y - visualRadius,
                   transform: 'translate(-50%, -50%)',
                 }}
                 onClick={() => {

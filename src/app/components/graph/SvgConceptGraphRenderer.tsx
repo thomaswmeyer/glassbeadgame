@@ -8,6 +8,7 @@ import {
   SimulationEdge,
   SimulationNode,
 } from './graphRendererTypes';
+import { projectedBeadScreenRadius } from './graphProjection';
 
 type PointerDragState = {
   pointerId: number;
@@ -42,6 +43,17 @@ function worldPoint(
   return {
     x: (point.x - transform.translateX) / transform.scale,
     y: (point.y - transform.translateY) / transform.scale,
+  };
+}
+
+function nodeScreenPoint(
+  node: Pick<SimulationNode, 'x' | 'y'>,
+  transform: SharedGraphRendererProps['transform'],
+  fallback: { x: number; y: number }
+) {
+  return {
+    x: (node.x ?? fallback.x) * transform.scale + transform.translateX,
+    y: (node.y ?? fallback.y) * transform.scale + transform.translateY,
   };
 }
 
@@ -89,6 +101,28 @@ export default function SvgConceptGraphRenderer({
         .filter((edge): edge is { edge: SimulationEdge; source: SimulationNode; target: SimulationNode } => Boolean(edge)),
     [graphData.edges, nodesById]
   );
+  const renderedNodes = useMemo(() => {
+    const fallback = {
+      x: dimensions.width / 2,
+      y: dimensions.height / 2,
+    };
+    const graphScale = Math.max(0.001, transform.scale);
+
+    return graphData.nodes.map(node => {
+      const point = nodeScreenPoint(node, transform, fallback);
+      const visualScreenRadius = projectedBeadScreenRadius(
+        node,
+        point,
+        dimensions.width,
+        dimensions.height
+      );
+
+      return {
+        node,
+        visualRadius: visualScreenRadius / graphScale,
+      };
+    });
+  }, [dimensions.height, dimensions.width, graphData.nodes, transform]);
 
   const handlePointerDown = (event: PointerEvent<SVGCircleElement>, node: SimulationNode) => {
     event.stopPropagation();
@@ -177,12 +211,12 @@ export default function SvgConceptGraphRenderer({
           ))}
         </g>
         <g>
-          {graphData.nodes.map(node => (
+          {renderedNodes.map(({ node, visualRadius }) => (
             <circle
               key={node.id}
               cx={node.x || dimensions.width / 2}
               cy={node.y || dimensions.height / 2}
-              r={node.radius}
+              r={visualRadius}
               fill={node.color}
               stroke={node.isSelected || node.isActiveSource ? node.color : 'white'}
               strokeWidth={node.isSelected || node.isActiveSource ? 4 : 1.5}
@@ -193,7 +227,7 @@ export default function SvgConceptGraphRenderer({
         </g>
         {!interactionsDisabled && (
           <g>
-            {graphData.nodes.map(node => {
+            {renderedNodes.map(({ node, visualRadius }) => {
               const canRemove = node.isActiveSource && activeSourceCount > 1;
               const canAdd = !node.isActiveSource;
               if (!canAdd && !canRemove) return null;
@@ -201,7 +235,7 @@ export default function SvgConceptGraphRenderer({
               return (
                 <g
                   key={node.id}
-                  transform={`translate(${(node.x || dimensions.width / 2) + node.radius},${(node.y || dimensions.height / 2) - node.radius})`}
+                  transform={`translate(${(node.x || dimensions.width / 2) + visualRadius},${(node.y || dimensions.height / 2) - visualRadius})`}
                   className="cursor-pointer"
                   onClick={event => {
                     event.stopPropagation();
@@ -228,11 +262,11 @@ export default function SvgConceptGraphRenderer({
           </g>
         )}
         <g>
-          {graphData.nodes.map(node => (
+          {renderedNodes.map(({ node, visualRadius }) => (
             <text
               key={node.id}
               x={node.x || dimensions.width / 2}
-              y={(node.y || dimensions.height / 2) + node.radius + GRAPH_LABEL_OFFSET}
+              y={(node.y || dimensions.height / 2) + visualRadius + GRAPH_LABEL_OFFSET}
               textAnchor="middle"
               fontSize={GRAPH_LABEL_FONT_SIZE}
               paintOrder="stroke"
