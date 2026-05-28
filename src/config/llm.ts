@@ -30,7 +30,7 @@ export type ResolvedLlmModelConfig = {
 const DEFAULT_MODEL_KEY = 'gemini_flash';
 
 const THINKING_MODEL_MIN_OUTPUT_TOKENS: Record<LlmTask, number> = {
-  topic: 1024,
+  topic: 4096,
   definition: 2048,
   response: 1536,
   evaluation: 4096,
@@ -96,6 +96,7 @@ export const LLM_PROVIDERS: Record<LlmProviderId, LlmProvider> = {
     },
     resolveGenerationOptions(modelId, task) {
       if (!isGeminiThinkingBudgetModel(modelId)) return undefined;
+      if (task === 'topic') return undefined;
       return {
         thinkingConfig: {
           thinkingBudget: THINKING_MODEL_BUDGETS[task],

@@ -46,6 +46,17 @@ type OpenAiResponseOutputItem = {
 };
 
 function getErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data;
+    const providerMessage = typeof responseData === 'string'
+      ? responseData
+      : responseData
+        ? JSON.stringify(responseData)
+        : '';
+    const statusText = error.response?.status ? `status ${error.response.status}` : error.message;
+    return providerMessage ? `${statusText}: ${providerMessage}` : statusText;
+  }
+
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
@@ -84,6 +95,35 @@ function getProviderApiKey(modelConfig: ResolvedLlmModelConfig) {
   return apiKey;
 }
 
+function stripCodeFence(text: string) {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+}
+
+function parseGeneratedTopicResponse(text: string) {
+  const cleaned = stripCodeFence(text);
+
+  try {
+    const parsed = JSON.parse(cleaned) as { topic?: unknown };
+    if (typeof parsed.topic === 'string' && parsed.topic.trim()) {
+      return parsed.topic.trim();
+    }
+  } catch {
+    // Fall through to tolerate older non-JSON model outputs.
+  }
+
+  return cleaned
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean)
+    ?.replace(/^["']|["']$/g, '')
+    .replace(/^topic:\s*/i, '')
+    .trim() || '';
+}
+
 async function callGeminiAPI(
   request: TextPromptRequest,
   modelConfig: ResolvedLlmModelConfig
@@ -99,31 +139,45 @@ async function callGeminiAPI(
     request.task
   );
   const url = `${modelConfig.provider.endpoint}/models/${modelConfig.model}:generateContent`;
-  const response = await axios.post(
-    url,
-    {
-      systemInstruction: {
-        parts: [{ text: request.systemPrompt }],
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: request.userMessage }],
-        },
-      ],
-      generationConfig: {
-        temperature: request.temperature,
-        maxOutputTokens,
-        ...(generationOptions || {}),
-        ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
-      },
+  const buildPayload = (options?: Record<string, unknown>) => ({
+    systemInstruction: {
+      parts: [{ text: request.systemPrompt }],
     },
-    {
-      params: { key: apiKey },
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 60_000,
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: request.userMessage }],
+      },
+    ],
+    generationConfig: {
+      temperature: request.temperature,
+      maxOutputTokens,
+      ...(options || {}),
+      ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
+    },
+  });
+  const requestConfig = {
+    params: { key: apiKey },
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 60_000,
+  };
+  let response;
+
+  try {
+    response = await axios.post(url, buildPayload(generationOptions), requestConfig);
+  } catch (error) {
+    if (generationOptions && axios.isAxiosError(error) && error.response?.status === 400) {
+      console.warn('Gemini rejected optional generation options; retrying without them', {
+        model: modelConfig.model,
+        task: request.task,
+        generationOptions,
+        error: getErrorMessage(error),
+      });
+      response = await axios.post(url, buildPayload(), requestConfig);
+    } else {
+      throw error;
     }
-  );
+  }
 
   const candidate = response.data?.candidates?.[0];
   const parts = candidate?.content?.parts;
@@ -306,10 +360,16 @@ export async function generateTopic(
     task: 'topic',
     maxTokens: LLM_CONFIG.maxTokens.topic,
     temperature: LLM_CONFIG.temperature.creative,
+    responseJson: true,
   }, modelKey);
 
+  const parsedTopic = parseGeneratedTopicResponse(topic);
+  if (!parsedTopic) {
+    throw new Error('Generated topic response did not contain a topic');
+  }
+
   console.log('API request successful');
-  return topic;
+  return parsedTopic;
 }
 
 export async function getDefinition(topic: string, modelKey?: string): Promise<string> {

@@ -5,6 +5,8 @@ import {
   createGraphLayoutData,
   getGraphEdgeDistance,
   getGraphEdgeStrokeWidth,
+  getGraphNodeBeadScore,
+  getGraphNodeBeadRadius,
   getGraphNodeColor,
   type GraphPosition,
 } from '../../src/domain/graphLayout';
@@ -19,6 +21,7 @@ const rootNode: GraphRenderNode = {
   topic: 'Cathedrals',
   playerId: 'player-ai',
   playerKind: 'ai',
+  createdTurnScore: 100,
   subjectCategory: 'history',
   isRoot: true,
   isCurrent: false,
@@ -32,6 +35,7 @@ const childNode: GraphRenderNode = {
   topic: 'Flying buttresses',
   playerId: 'player-local',
   playerKind: 'local',
+  createdTurnScore: 64,
   subjectCategory: 'arts',
   isRoot: false,
   isCurrent: true,
@@ -45,6 +49,7 @@ const edge: GraphRenderEdge = {
   destinationNodeId: 'node-1',
   playerId: 'player-local',
   playerKind: 'local',
+  playerTurnIndex: 0,
   semanticDistanceScore: 6,
   strengthScore: 7,
   totalScore: 42,
@@ -76,14 +81,18 @@ test('graph layout assigns visual node attributes without depending on the rende
   assert.deepEqual(layout.nodes.map(node => ({
     id: node.id,
     color: node.color,
+    beadColor: node.beadColor,
+    beadScore: node.beadScore,
     radius: node.radius,
     x: node.x,
     y: node.y,
   })), [
-    { id: 'root', color: '#B45309', radius: 12, x: 400, y: 300 },
+    { id: 'root', color: '#B45309', beadColor: '#B45309', beadScore: 42, radius: 12, x: 400, y: 300 },
     {
       id: 'node-1',
       color: '#DB2777',
+      beadColor: '#DB2777',
+      beadScore: 42,
       radius: 12,
       x: 400 + Math.cos(0.9) * 72,
       y: 300 + Math.sin(0.9) * 72,
@@ -144,6 +153,25 @@ test('graph layout filters edges with missing endpoints and preserves edge scori
   }]);
 });
 
+test('graph bead visuals use topic color and incident edge score', () => {
+  assert.equal(getGraphNodeColor({ ...childNode, playerKind: 'ai' }), '#DB2777');
+  assertApproximatelyEqual(getGraphNodeBeadScore(rootNode, []), 81);
+  assertApproximatelyEqual(getGraphNodeBeadScore(childNode, []), 0);
+  assertApproximatelyEqual(getGraphNodeBeadScore(rootNode, [edge]), 42);
+  assertApproximatelyEqual(getGraphNodeBeadScore(rootNode, [
+    edge,
+    {
+      ...edge,
+      id: 'edge-1-0',
+      sourceNodeId: 'node-2',
+      destinationNodeId: 'root',
+      totalScore: 58,
+    },
+  ]), 100 / Math.sqrt(2));
+  assertApproximatelyEqual(getGraphNodeBeadRadius({ beadScore: 81 }), 0.284);
+  assertApproximatelyEqual(getGraphNodeBeadRadius({ beadScore: 150 }), 0.33595917942265424);
+});
+
 test('graph edge visuals map semantic distance to length and relevance to thickness', () => {
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 1 }), 24);
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 2 }), 48);
@@ -152,10 +180,10 @@ test('graph edge visuals map semantic distance to length and relevance to thickn
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 20 }), 240);
   assert.equal(getGraphEdgeDistance({ semanticDistanceScore: 0 }), 24);
 
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 1 }), 1.55);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 10 }), 6.5);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 20 }), 6.5);
-  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 0 }), 1.55);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 1 }), 1.7);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 10 }), 8);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 20 }), 8);
+  assert.equal(getGraphEdgeStrokeWidth({ strengthScore: 0 }), 1.7);
 });
 
 test('viewport transform fits graph bounds within viewport padding', () => {

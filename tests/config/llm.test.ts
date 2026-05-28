@@ -122,11 +122,19 @@ test('provider generation policies are exposed through provider adapters', () =>
     const openAiConfig = resolveModelConfig('evaluation', 'openai_frontier');
 
     assert.equal(
+      geminiConfig.provider.resolveMaxOutputTokens(geminiConfig.model, 'topic', 100),
+      4096
+    );
+    assert.equal(
       geminiConfig.provider.resolveMaxOutputTokens(geminiConfig.model, 'evaluation', 1000),
       4096
     );
-    assert.deepEqual(geminiConfig.provider.resolveGenerationOptions?.(geminiConfig.model, 'topic'), {
-      thinkingConfig: { thinkingBudget: 256 },
+    assert.equal(geminiConfig.provider.resolveGenerationOptions?.(geminiConfig.model, 'topic'), undefined);
+    assert.deepEqual(geminiConfig.provider.resolveGenerationOptions?.(geminiConfig.model, 'evaluation'), {
+      thinkingConfig: { thinkingBudget: 1024 },
+    });
+    assert.deepEqual(geminiConfig.provider.resolveGenerationOptions?.(geminiConfig.model, 'response'), {
+      thinkingConfig: { thinkingBudget: 512 },
     });
     assert.equal(
       openAiConfig.provider.resolveMaxOutputTokens(openAiConfig.model, 'evaluation', 1000),

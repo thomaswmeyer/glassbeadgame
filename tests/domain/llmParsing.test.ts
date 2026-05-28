@@ -83,3 +83,21 @@ test('ai move parser accepts selected sources and response topic JSON', () => {
     responseText: 'Chorus',
   });
 });
+
+test('ai move parser preserves multi-source choices with common source id aliases', () => {
+  assert.deepEqual(parseAiMoveResponse(JSON.stringify({
+    sourceNodeIds: ['root', 'node-1', 42, 'node-2'],
+    topic: 'Resonance',
+  })), {
+    selectedSourceNodeIds: ['root', 'node-1', 'node-2'],
+    responseText: 'Resonance',
+  });
+
+  assert.deepEqual(parseAiMoveResponse(JSON.stringify({
+    selectedSources: ['root', 'node-3'],
+    destinationTopic: 'Counterpoint',
+  })), {
+    selectedSourceNodeIds: ['root', 'node-3'],
+    responseText: 'Counterpoint',
+  });
+});

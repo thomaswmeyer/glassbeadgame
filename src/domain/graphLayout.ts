@@ -10,6 +10,8 @@ export type GraphPosition = {
 
 export type GraphLayoutNode = GraphRenderNode & {
   color: string;
+  beadColor: string;
+  beadScore: number;
   radius: number;
   x: number;
   y: number;
@@ -43,10 +45,23 @@ export function getGraphNodeColor(node: GraphRenderNode) {
   return getSubjectCategoryColor(node.subjectCategory);
 }
 
-export function getGraphEdgeColor(edge: Pick<GraphRenderEdge, 'playerKind'>) {
-  if (edge.playerKind === 'ai') return '#DC2626';
-  if (edge.playerKind === 'local') return '#2563EB';
-  return '#94A3B8';
+export function getGraphTurnOrderColor(turnIndex: number | undefined) {
+  const colors = [
+    '#2563EB',
+    '#DC2626',
+    '#16A34A',
+    '#D97706',
+    '#7C3AED',
+    '#0891B2',
+  ];
+
+  return typeof turnIndex === 'number' && turnIndex >= 0
+    ? colors[turnIndex % colors.length]
+    : '#64748B';
+}
+
+export function getGraphEdgeColor(edge: Pick<GraphRenderEdge, 'playerTurnIndex'>) {
+  return getGraphTurnOrderColor(edge.playerTurnIndex);
 }
 
 function clampScore(score: number) {
@@ -60,7 +75,26 @@ export function getGraphEdgeDistance(edge: Pick<GraphLayoutEdge, 'semanticDistan
 
 export function getGraphEdgeStrokeWidth(edge: Pick<GraphLayoutEdge, 'strengthScore'>) {
   const relevance = clampScore(edge.strengthScore ?? 5);
-  return 1 + relevance * 0.55;
+  return 1 + relevance * 0.7;
+}
+
+export function getGraphNodeBeadScore(
+  node: Pick<GraphRenderNode, 'id' | 'isRoot'>,
+  edges: Array<Pick<GraphRenderEdge, 'sourceNodeId' | 'destinationNodeId' | 'totalScore'>>
+) {
+  const incidentScores = edges
+    .filter(edge => edge.sourceNodeId === node.id || edge.destinationNodeId === node.id)
+    .map(edge => Math.max(0, edge.totalScore ?? 0));
+
+  if (incidentScores.length === 0) return node.isRoot ? 81 : 0;
+
+  const scoreSum = incidentScores.reduce((sum, score) => sum + score, 0);
+  return scoreSum / Math.sqrt(incidentScores.length);
+}
+
+export function getGraphNodeBeadRadius(node: Pick<GraphLayoutNode, 'beadScore'>) {
+  const score = Math.max(0, Math.min(150, node.beadScore));
+  return 0.14 + Math.sqrt(score / 100) * 0.16;
 }
 
 export function createGraphLayoutData(params: {
@@ -75,10 +109,14 @@ export function createGraphLayoutData(params: {
     x: params.width / 2,
     y: params.height / 2,
   };
+  const nodeIds = new Set(params.nodes.map(node => node.id));
+  const validRenderEdges = params.edges.filter(
+    edge => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.destinationNodeId)
+  );
 
   const nodes = params.nodes.map((node, index) => {
     const previousPosition = params.previousPositions.get(node.id);
-    const incomingEdge = params.edges.find(edge => edge.destinationNodeId === node.id);
+    const incomingEdge = validRenderEdges.find(edge => edge.destinationNodeId === node.id);
     const parentPosition = incomingEdge
       ? params.previousPositions.get(incomingEdge.sourceNodeId) || rootPosition
       : rootPosition;
@@ -93,15 +131,15 @@ export function createGraphLayoutData(params: {
     return {
       ...node,
       color: getGraphNodeColor(node),
+      beadColor: getGraphNodeColor(node),
+      beadScore: getGraphNodeBeadScore(node, validRenderEdges),
       radius: GRAPH_NODE_RADIUS,
       x: seededPosition.x,
       y: seededPosition.y,
     };
   });
 
-  const nodeIds = new Set(nodes.map(node => node.id));
-  const edges = params.edges
-    .filter(edge => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.destinationNodeId))
+  const edges = validRenderEdges
     .map(edge => ({
       id: edge.id,
       source: edge.sourceNodeId,

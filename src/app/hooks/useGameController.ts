@@ -48,6 +48,15 @@ function resolveGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic 
   return typeof result === 'string' ? { topic: result } : result;
 }
 
+function requireGeneratedTopic(result: string | GeneratedTopic): GeneratedTopic {
+  const generatedTopic = resolveGeneratedTopic(result);
+  if (!generatedTopic.topic.trim()) {
+    throw new Error('Opening topic generation returned an empty topic');
+  }
+
+  return generatedTopic;
+}
+
 function createClientGameId() {
   return crypto.randomUUID();
 }
@@ -72,7 +81,7 @@ export function useGameController({
 
   const submitAiTurn = useCallback<NonNullable<PlayerTurnController['submitTurn']>>(async (context) => {
     if (context.availableNodes.length === 0) {
-      const generatedTopic = resolveGeneratedTopic(await services.generateTopic({
+      const generatedTopic = requireGeneratedTopic(await services.generateTopic({
         difficulty: context.difficulty,
       }));
 
@@ -311,7 +320,10 @@ export function useGameController({
           gameHistory,
           difficulty,
         });
-        const responseText = submission.responseText.trim() || `Response to ${promptTopic}`;
+        const responseText = submission.responseText.trim();
+        if (!responseText) {
+          throw new Error('Automatic player returned an empty topic');
+        }
 
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
@@ -323,7 +335,17 @@ export function useGameController({
         });
       } catch (error) {
         console.error('Error getting automatic player response:', error);
-        const fallbackResponse = `Response to ${promptTopic}`;
+        if (isOpeningTurn) {
+          setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
+          alert('Failed to generate an opening topic. Please try again.');
+          return;
+        }
+
+        const fallbackResponse = promptTopic ? `Response to ${promptTopic}` : '';
+        if (!fallbackResponse) {
+          setGameState(prev => setGameStatus(prev, 'awaitingResponse'));
+          return;
+        }
         await evaluateTurnResponse({
           playerId: currentPlayerModel.id,
           responseText: fallbackResponse,
@@ -345,6 +367,7 @@ export function useGameController({
     isCurrentPlayerManual,
     currentRound,
     currentSourceTopicText,
+    isOpeningTurn,
     gameHistory,
     maxRounds,
     difficulty,

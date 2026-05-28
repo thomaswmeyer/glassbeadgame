@@ -5,7 +5,7 @@ import CurrentTurnSourcesPanel from './CurrentTurnSourcesPanel';
 import EvaluationResultsPanel from './EvaluationResultsPanel';
 import GameSetupPanel from './GameSetupPanel';
 import ScoreTooltip from './ScoreTooltip';
-import SimpleConceptGraph from './SimpleConceptGraph';
+import ConceptGraph from './graph/ConceptGraph';
 import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
 import {
@@ -313,7 +313,7 @@ export default function GameInterface() {
         </div>
 
         <div className="min-h-[560px] min-w-0 flex-1 lg:h-full">
-          <SimpleConceptGraph
+          <ConceptGraph
             nodes={graphRenderData.nodes}
             edges={graphRenderData.edges}
             width={900}

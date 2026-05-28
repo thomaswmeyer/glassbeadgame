@@ -62,7 +62,9 @@ inspected as it develops.
 src/app/page.tsx                         Main app entry
 src/app/components/GameInterface.tsx     Top-level game UI wiring
 src/app/components/GameSetupPanel.tsx    Setup screen and rules
-src/app/components/SimpleConceptGraph.tsx D3 concept graph
+src/app/components/graph/ConceptGraph.tsx Renderer-selecting graph host
+src/app/components/graph/SvgConceptGraphRenderer.tsx Default SVG/D3 graph renderer
+src/app/components/graph/WebGlConceptGraphRenderer.tsx WebGL graph renderer
 src/app/api/*/route.ts                   Server-side API endpoints
 src/domain/game.ts                       Graph-oriented game state and selectors
 src/domain/gameFlow.ts                   Turn flow orchestration helpers
@@ -609,10 +611,10 @@ selectors, and the LLM prompt/parsing code has been separated from provider
 calls. The remaining cleanup is intentionally smaller and should happen only
 when it supports the next feature pass.
 
-1. Define a renderer-neutral graph view model that is independent of D3. D3 can
-   keep owning layout for now, but rendering should consume a stable view model
-   so a future WebGL or glass-bead renderer can be swapped in without changing
-   game logic.
+1. Continue hardening the graph renderer boundary. The app now has a graph
+   renderer selector with SVG and WebGL renderers, but layout is still D3-based.
+   A future glass-bead renderer should keep consuming the same graph renderer
+   props while swapping the visual layer.
 2. Split provider-specific LLM clients from `src/services/llm.ts` into separate
    files if that orchestration file starts growing again. Prompt construction,
    response parsing, and provider/model configuration are already separate.
@@ -774,6 +776,7 @@ shared evolving graph state.
 | `NEXT_PUBLIC_GBG_DEFAULT_AI_MODEL_KEY` | No | Browser-visible default model key used when creating AI players. |
 | `NEXT_PUBLIC_GBG_AI_PLAYER_1_MODEL_KEY` | No | Browser-visible model key for the first configured AI player. |
 | `NEXT_PUBLIC_GBG_AI_PLAYER_2_MODEL_KEY` | No | Browser-visible model key for the second configured AI player. |
+| `NEXT_PUBLIC_GBG_GRAPH_RENDERER` | No | Graph renderer key. Use `svg` by default or `webgl` to try the WebGL canvas renderer. |
 | `GEMINI_FLASH_MODEL` / `GEMINI_PRO_MODEL` | No | Provider model-id overrides for Gemini model keys. |
 | `OPENAI_FRONTIER_MODEL` / `OPENAI_FAST_MODEL` | No | Provider model-id overrides for OpenAI model keys. |
 | `ANTHROPIC_OPUS_MODEL` / `ANTHROPIC_SONNET_MODEL` | No | Provider model-id overrides for Claude model keys. |

@@ -503,13 +503,30 @@ test('turn history and graph render selectors expose edge scoring details', () =
 
   const graphData = selectGraphRenderData(state);
   assert.equal(graphData.nodes.find(node => node.id === state.rootNodeId)?.isRoot, true);
-  assert.equal(graphData.nodes.find(node => node.id === turn.destinationNodeId)?.isActiveSource, true);
+  assert.equal(graphData.nodes.find(node => node.id === state.rootNodeId)?.createdTurnScore, 100);
+  assert.deepEqual(
+    graphData.nodes.find(node => node.id === turn.destinationNodeId),
+    {
+      id: turn.destinationNodeId,
+      label: 'Flying buttresses',
+      topic: 'Flying buttresses',
+      playerId: DEFAULT_HUMAN_PLAYER_ID,
+      playerKind: 'local',
+      createdTurnScore: score.total,
+      subjectCategory: undefined,
+      isRoot: false,
+      isCurrent: true,
+      isSelected: true,
+      isActiveSource: true,
+    }
+  );
   assert.deepEqual(graphData.edges, [{
     id: turn.edgeIds[0],
     sourceNodeId: state.rootNodeId,
     destinationNodeId: turn.destinationNodeId,
     playerId: DEFAULT_HUMAN_PLAYER_ID,
     playerKind: 'local',
+    playerTurnIndex: 0,
     semanticDistanceScore: 6,
     strengthScore: 7,
     totalScore: 13,

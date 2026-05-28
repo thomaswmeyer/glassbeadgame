@@ -94,14 +94,22 @@ function normalizeAiMoveResponse(value: unknown): LlmAiMoveResponse | null {
   if (typeof value !== 'object' || value === null) return null;
 
   const record = value as Record<string, unknown>;
-  const selectedSourceNodeIds = Array.isArray(record.selectedSourceNodeIds)
-    ? record.selectedSourceNodeIds.filter((nodeId): nodeId is string => typeof nodeId === 'string')
+  const sourceNodeIdValues = [
+    record.selectedSourceNodeIds,
+    record.sourceNodeIds,
+    record.selectedSources,
+    record.sources,
+  ].find(Array.isArray);
+  const selectedSourceNodeIds = sourceNodeIdValues
+    ? sourceNodeIdValues.filter((nodeId): nodeId is string => typeof nodeId === 'string')
     : [];
   const responseText = typeof record.responseText === 'string'
     ? record.responseText
     : typeof record.destinationTopic === 'string'
       ? record.destinationTopic
-      : '';
+      : typeof record.topic === 'string'
+        ? record.topic
+        : '';
 
   if (!responseText.trim()) return null;
 

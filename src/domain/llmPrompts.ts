@@ -69,8 +69,13 @@ export function buildGenerateTopicPrompt(params: {
     
     For ${params.subcategory} specifically, think of a unique and interesting concept that isn't commonly discussed.
     
-    Provide ONLY the topic name without any explanation or additional text.`,
-    userMessage: `Generate a unique and interesting ${params.difficulty}-level topic related to ${params.subcategory} (a type of ${params.category}) for the Glass Bead Game. The topic should be specific and not generic.`,
+    Return only valid JSON with this exact shape:
+    {
+      "topic": "single topic name"
+    }
+
+    Do not include explanations, markdown, or any text outside the JSON object.`,
+    userMessage: `Generate a unique and interesting ${params.difficulty}-level topic related to ${params.subcategory} (a type of ${params.category}) for the Glass Bead Game. The topic should be specific and not generic. Return only JSON.`,
   };
 }
 
@@ -136,10 +141,15 @@ export function buildAiResponsePrompt(params: {
         Better established responses: "oral tradition", "Stoicism", "Roman architecture",
         "memory palace", "Brutalism", "mnemonics".
         
-        You must choose one or more source nodes for this move. Each selected source creates a separate edge
-        to your new topic. Each edge is scored as semantic distance * relevance. If you select N source nodes,
-        the turn score is round(sum(edgeScores) / sqrt(N)), so multiple sources can help only when each connection
-        is meaningful. The first connecting move after the opening topic receives an opening bonus:
+        You must choose one or more source nodes for this move. Do not default to the most recent node.
+        First scan the full board and choose the move you expect to receive the highest final score.
+        A single excellent edge is often better than several merely plausible edges. Select multiple
+        source nodes only when the same new topic makes each selected edge strong enough to overcome
+        the multi-source penalty.
+        Each selected source creates a separate edge to your new topic. Each edge is scored as semantic
+        distance * relevance. If you select N source nodes, the turn score is round(sum(edgeScores) / sqrt(N)),
+        so adding a source helps only if its additional edge raises that penalized final score. The first connecting move after
+        the opening topic receives an opening bonus:
         round(edgeScore * sqrt(2)), because only one source node is available.
 
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
@@ -203,7 +213,7 @@ function getAiSourceSelectionPrompt(
     return `- ${details.join('; ')}`;
   }).join('\n');
   const selectionInstruction = sourceSelectionMode === 'free'
-    ? 'No source node is preselected for you. Choose freely from the full list based on the strongest move you can make, not recency or UI selection.'
+    ? 'No source node is preselected for you. Choose freely from the full list based on the strongest final-scoring move you can make, not recency or UI selection. Compare one-source, two-source, and three-source options using round(sum(edgeScores) / sqrt(N)); use multiple sources only when the penalized combined score is likely higher than the best single-source move.'
     : 'You may keep the currently selected source, replace it with another node, or select multiple nodes.';
 
   return `

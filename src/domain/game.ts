@@ -98,6 +98,7 @@ export type GraphRenderNode = {
   topic: string;
   playerId?: string;
   playerKind?: PlayerKind;
+  createdTurnScore?: number;
   subjectCategory?: SubjectCategoryId;
   isRoot: boolean;
   isCurrent: boolean;
@@ -111,6 +112,7 @@ export type GraphRenderEdge = {
   destinationNodeId: string;
   playerId: string;
   playerKind?: PlayerKind;
+  playerTurnIndex?: number;
   semanticDistanceScore?: number;
   strengthScore?: number;
   totalScore?: number;
@@ -557,12 +559,14 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
   return {
     nodes: Object.values(state.nodesById).map(node => {
       const player = node.createdByPlayerId ? state.playersById[node.createdByPlayerId] : undefined;
+      const createdTurn = node.createdTurnId ? state.turnsById[node.createdTurnId] : undefined;
       return {
         id: node.id,
         label: node.topic,
         topic: node.topic,
         playerId: node.createdByPlayerId,
         playerKind: player?.kind,
+        createdTurnScore: node.isRoot ? 100 : createdTurn?.totalScore,
         subjectCategory: node.subjectCategory,
         isRoot: node.isRoot,
         isCurrent: currentSourceNodeIds.has(node.id),
@@ -578,6 +582,7 @@ export function selectGraphRenderData(state: GameState): { nodes: GraphRenderNod
         destinationNodeId: edge.destinationNodeId,
         playerId: edge.playerId,
         playerKind: player?.kind,
+        playerTurnIndex: state.playerOrder.indexOf(edge.playerId),
         semanticDistanceScore: edge.semanticDistanceScore,
         strengthScore: edge.strengthScore,
         totalScore: edge.totalScore,
