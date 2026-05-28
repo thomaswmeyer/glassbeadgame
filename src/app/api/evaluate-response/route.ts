@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const { topic, response, difficulty } = body;
+    const { topic, response, difficulty, modelKey } = body;
     
     console.log('Request body received:', {
       topic,
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     
     try {
       // Evaluate the response using our LLM service
-      const evaluationData = await evaluateResponse(topic, response, difficulty);
+      const evaluationData = await evaluateResponse(topic, response, difficulty, modelKey);
       console.log('Evaluation completed successfully');
       
       return NextResponse.json(evaluationData);

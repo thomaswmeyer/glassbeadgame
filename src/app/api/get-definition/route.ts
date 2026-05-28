@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   console.log('=== GET DEFINITION ROUTE CALLED ===');
   
   try {
-    const { topic } = await request.json();
+    const { topic, modelKey } = await request.json();
     
     if (!topic) {
       return NextResponse.json(
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     
     try {
       // Get definition using our LLM service
-      const definition = await getDefinition(topic);
+      const definition = await getDefinition(topic, modelKey);
       cacheDefinition(topic, definition);
       console.log('Definition generated successfully');
       

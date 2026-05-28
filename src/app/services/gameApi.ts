@@ -56,6 +56,7 @@ export const gameApi: GameFlowServices & {
   async generateTopic(request: GenerateTopicRequest) {
     const result = await axios.post('/api/generate-topic', {
       difficulty: request.difficulty,
+      modelKey: request.modelKey,
     });
     return {
       topic: result.data.topic,
@@ -68,6 +69,7 @@ export const gameApi: GameFlowServices & {
       topic: request.topic,
       response: request.response,
       difficulty: request.difficulty,
+      modelKey: request.modelKey,
     });
   },
 
@@ -79,6 +81,7 @@ export const gameApi: GameFlowServices & {
       sourceSelectionMode: request.sourceSelectionMode,
       gameHistory: toLegacyAiGameHistory(request.gameHistory),
       difficulty: request.difficulty,
+      modelKey: request.modelKey,
     });
 
     return result.data.response;

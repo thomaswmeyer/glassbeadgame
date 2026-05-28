@@ -96,6 +96,7 @@ export function useGameController({
       sourceSelectionMode: 'free',
       gameHistory: context.gameHistory,
       difficulty: context.difficulty,
+      modelKey: context.player.modelKey,
     });
     const parsedMove = parseAiMoveResponse(aiResponse);
     console.log('Parsed AI move:', parsedMove || {

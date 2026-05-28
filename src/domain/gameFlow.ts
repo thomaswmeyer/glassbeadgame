@@ -40,6 +40,7 @@ export type CurrentEvaluation = {
 
 export type GenerateTopicRequest = {
   difficulty: DifficultyLevel;
+  modelKey?: string;
 };
 
 export type GeneratedTopic = {
@@ -51,6 +52,7 @@ export type EvaluateTurnRequest = {
   topic: string;
   response: string;
   difficulty: DifficultyLevel;
+  modelKey?: string;
 };
 
 export type TurnContextHistoryItem = {
@@ -76,6 +78,7 @@ export type GenerateAiResponseRequest = {
   selectedSourceNodeIds: string[];
   sourceSelectionMode: AiSourceSelectionMode;
   difficulty: DifficultyLevel;
+  modelKey?: string;
   gameHistory: TurnContextHistoryItem[];
 };
 

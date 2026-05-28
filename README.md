@@ -44,7 +44,8 @@ inspected as it develops.
 - Cached definition lookup for selected topics.
 - Branching concept graph visualization using D3.
 - Multi-source turns where a new topic can connect to several existing topics.
-- Gemini-powered topic generation, definitions, AI moves, and scoring.
+- Provider-backed LLM topic generation, definitions, AI moves, and scoring.
+  Gemini, OpenAI, and Claude model keys are supported.
 
 ## Tech Stack
 
@@ -53,7 +54,7 @@ inspected as it develops.
 - TypeScript
 - Tailwind CSS
 - D3
-- Google Gemini API
+- Google Gemini API, OpenAI API, or Anthropic API
 
 ## Project Structure
 
@@ -78,8 +79,9 @@ src/config/llm.ts                        Model configuration
 - npm
 - At least one LLM API key
 
-Gemini is the default provider in `src/config/llm.ts`, so `GEMINI_API_KEY` is
-the simplest key to start with.
+Gemini Flash-Lite is the default model key in `src/config/llm.ts`, so
+`GEMINI_API_KEY` is the simplest key to start with. OpenAI and Anthropic keys
+can be added when assigning those models to players or judges.
 
 ## Setup
 
@@ -89,18 +91,36 @@ npm install
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local` and add your Gemini key:
+Edit `.env.local` and add the key for whichever provider you want to use:
 
 ```bash
 GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
-Gemini is the only configured LLM provider. The default model is
-`gemini-3.1-flash-lite`. To compare against the higher-end Gemini reasoning
-model, set:
+Model selection is done by model key. The built-in keys are:
+
+- `gemini_flash`
+- `gemini_pro`
+- `openai_frontier`
+- `openai_fast`
+- `claude_opus`
+- `claude_sonnet`
+
+Use the public player variables to assign default AI players independently:
 
 ```bash
-GEMINI_MODEL=gemini-2.5-pro
+NEXT_PUBLIC_GBG_AI_PLAYER_1_MODEL_KEY=gemini_pro
+NEXT_PUBLIC_GBG_AI_PLAYER_2_MODEL_KEY=claude_sonnet
+```
+
+Use server-only variables to choose model ids and the independent judge model:
+
+```bash
+GBG_JUDGE_MODEL_KEY=openai_frontier
+OPENAI_FRONTIER_MODEL=gpt-5.2
+ANTHROPIC_SONNET_MODEL=claude-sonnet-4-20250514
 ```
 
 ## Run Locally
@@ -139,7 +159,10 @@ secrets in a private file:
 ```bash
 cat > /home/tomto/.gbg.env <<'EOF'
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.1-flash-lite
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GBG_DEFAULT_AI_MODEL_KEY=gemini_flash
+GBG_JUDGE_MODEL_KEY=gemini_flash
 EOF
 chmod 600 /home/tomto/.gbg.env
 ```
@@ -590,9 +613,9 @@ when it supports the next feature pass.
    keep owning layout for now, but rendering should consume a stable view model
    so a future WebGL or glass-bead renderer can be swapped in without changing
    game logic.
-2. Split provider-specific LLM clients out of `src/services/llm.ts` if that
-   file starts growing again. Prompt construction and response parsing are
-   already separate.
+2. Split provider-specific LLM clients from `src/services/llm.ts` into separate
+   files if that orchestration file starts growing again. Prompt construction,
+   response parsing, and provider/model configuration are already separate.
 3. Continue moving UI-only copy and formatting into small display helpers when
    components start duplicating rules, labels, or score text.
 4. Keep README feature and architecture sections current as the app moves from
@@ -741,8 +764,19 @@ shared evolving graph state.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | For Gemini | Topic generation, AI responses, definitions, and scoring with Gemini |
-| `GEMINI_MODEL` | No | Gemini model id. Defaults to `gemini-3.1-flash-lite`; use `gemini-2.5-pro` for the higher-end reasoning model. |
+| `GEMINI_API_KEY` | For Gemini model keys | Topic generation, AI responses, definitions, or scoring through Gemini |
+| `OPENAI_API_KEY` | For OpenAI model keys | AI players or judges using OpenAI models |
+| `ANTHROPIC_API_KEY` | For Claude model keys | AI players or judges using Anthropic Claude models |
+| `GBG_DEFAULT_AI_MODEL_KEY` | No | Server-side fallback model key for AI responses. Defaults to `gemini_flash`. |
+| `GBG_JUDGE_MODEL_KEY` | No | Server-side judge/scoring model key. Defaults to the default AI model key. |
+| `GBG_TOPIC_MODEL_KEY` | No | Server-side opening-topic generator model key. |
+| `GBG_DEFINITION_MODEL_KEY` | No | Server-side definition lookup model key. |
+| `NEXT_PUBLIC_GBG_DEFAULT_AI_MODEL_KEY` | No | Browser-visible default model key used when creating AI players. |
+| `NEXT_PUBLIC_GBG_AI_PLAYER_1_MODEL_KEY` | No | Browser-visible model key for the first configured AI player. |
+| `NEXT_PUBLIC_GBG_AI_PLAYER_2_MODEL_KEY` | No | Browser-visible model key for the second configured AI player. |
+| `GEMINI_FLASH_MODEL` / `GEMINI_PRO_MODEL` | No | Provider model-id overrides for Gemini model keys. |
+| `OPENAI_FRONTIER_MODEL` / `OPENAI_FAST_MODEL` | No | Provider model-id overrides for OpenAI model keys. |
+| `ANTHROPIC_OPUS_MODEL` / `ANTHROPIC_SONNET_MODEL` | No | Provider model-id overrides for Claude model keys. |
 
 ## License
 

@@ -22,6 +22,7 @@ import {
   turnSources,
   turns,
 } from '../db/schema';
+import { resolveModelProviderInfo } from '../../config/llm';
 
 type SourceEnvironment = 'local' | 'test' | 'render_prod' | 'render_preview' | 'imported' | 'external';
 
@@ -143,11 +144,11 @@ function toPersistedControllerKind(player: Player) {
 }
 
 function getProvider(player: Player) {
-  return player.kind === 'ai' ? 'google' : null;
+  return player.kind === 'ai' ? resolveModelProviderInfo(player.modelKey).provider : null;
 }
 
 function getModelId(player: Player) {
-  return player.kind === 'ai' ? 'gemini' : null;
+  return player.kind === 'ai' ? resolveModelProviderInfo(player.modelKey).modelId : null;
 }
 
 function getSubjectCategory(node: TopicNode): SubjectCategoryId | 'other' {

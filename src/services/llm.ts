@@ -2,9 +2,8 @@ import axios from 'axios';
 import {
   LLM_CONFIG,
   LlmTask,
-  getCurrentModelConfig,
-  resolveGeminiMaxOutputTokens,
-  resolveGeminiThinkingConfig,
+  ResolvedLlmModelConfig,
+  resolveModelConfig,
 } from '@/config/llm';
 import {
   AiSourceSelectionMode,
@@ -32,6 +31,18 @@ type TextPromptRequest = {
   maxTokens: number;
   temperature: number;
   responseJson?: boolean;
+};
+
+type AnthropicTextBlock = {
+  type?: string;
+  text?: string;
+};
+
+type OpenAiResponseOutputItem = {
+  content?: {
+    type?: string;
+    text?: string;
+  }[];
 };
 
 function getErrorMessage(error: unknown) {
@@ -64,20 +75,30 @@ async function callWithRetry<T>(
   throw lastError;
 }
 
-async function callGeminiAPI(request: TextPromptRequest) {
-  const apiKey = process.env.GEMINI_API_KEY || '';
+function getProviderApiKey(modelConfig: ResolvedLlmModelConfig) {
+  const apiKey = process.env[modelConfig.provider.apiKeyEnvVar] || '';
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
+    throw new Error(`${modelConfig.provider.apiKeyEnvVar} is not configured`);
   }
 
-  const modelConfig = getCurrentModelConfig();
-  const maxOutputTokens = resolveGeminiMaxOutputTokens(
+  return apiKey;
+}
+
+async function callGeminiAPI(
+  request: TextPromptRequest,
+  modelConfig: ResolvedLlmModelConfig
+) {
+  const apiKey = getProviderApiKey(modelConfig);
+  const maxOutputTokens = modelConfig.provider.resolveMaxOutputTokens(
     modelConfig.model,
     request.task,
     request.maxTokens
   );
-  const thinkingConfig = resolveGeminiThinkingConfig(modelConfig.model, request.task);
-  const url = `${LLM_CONFIG.endpoints.gemini}/models/${modelConfig.model}:generateContent`;
+  const generationOptions = modelConfig.provider.resolveGenerationOptions?.(
+    modelConfig.model,
+    request.task
+  );
+  const url = `${modelConfig.provider.endpoint}/models/${modelConfig.model}:generateContent`;
   const response = await axios.post(
     url,
     {
@@ -93,7 +114,7 @@ async function callGeminiAPI(request: TextPromptRequest) {
       generationConfig: {
         temperature: request.temperature,
         maxOutputTokens,
-        ...(thinkingConfig ? { thinkingConfig } : {}),
+        ...(generationOptions || {}),
         ...(request.responseJson ? { responseMimeType: 'application/json' } : {}),
       },
     },
@@ -115,7 +136,7 @@ async function callGeminiAPI(request: TextPromptRequest) {
       model: modelConfig.model,
       task: request.task,
       maxOutputTokens,
-      thinkingConfig,
+      generationOptions,
       finishReason: candidate?.finishReason,
       usageMetadata: response.data?.usageMetadata,
       promptFeedback: response.data?.promptFeedback,
@@ -126,27 +147,150 @@ async function callGeminiAPI(request: TextPromptRequest) {
   return text.trim();
 }
 
+function shouldSendOpenAiTemperature(modelId: string) {
+  return !modelId.startsWith('gpt-5') && !modelId.startsWith('o');
+}
+
+async function callOpenAiAPI(
+  request: TextPromptRequest,
+  modelConfig: ResolvedLlmModelConfig
+) {
+  const apiKey = getProviderApiKey(modelConfig);
+  const maxOutputTokens = modelConfig.provider.resolveMaxOutputTokens(
+    modelConfig.model,
+    request.task,
+    request.maxTokens
+  );
+  const response = await axios.post(
+    `${modelConfig.provider.endpoint}/responses`,
+    {
+      model: modelConfig.model,
+      instructions: request.systemPrompt,
+      input: request.userMessage,
+      max_output_tokens: maxOutputTokens,
+      ...(shouldSendOpenAiTemperature(modelConfig.model) ? { temperature: request.temperature } : {}),
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 60_000,
+    }
+  );
+
+  const outputText = response.data?.output_text;
+  const fallbackOutput = Array.isArray(response.data?.output)
+    ? response.data.output
+      .flatMap((item: OpenAiResponseOutputItem) => item.content || [])
+      .map((content: { text?: string }) => content.text || '')
+      .join('')
+    : '';
+  const text = typeof outputText === 'string' ? outputText : fallbackOutput;
+
+  if (!text.trim()) {
+    console.warn('OpenAI returned no visible text', {
+      model: modelConfig.model,
+      task: request.task,
+      maxOutputTokens,
+      responseId: response.data?.id,
+      status: response.data?.status,
+    });
+    throw new Error(`OpenAI returned no visible text for ${request.task}`);
+  }
+
+  return text.trim();
+}
+
+async function callAnthropicAPI(
+  request: TextPromptRequest,
+  modelConfig: ResolvedLlmModelConfig
+) {
+  const apiKey = getProviderApiKey(modelConfig);
+  const maxTokens = modelConfig.provider.resolveMaxOutputTokens(
+    modelConfig.model,
+    request.task,
+    request.maxTokens
+  );
+  const response = await axios.post(
+    `${modelConfig.provider.endpoint}/messages`,
+    {
+      model: modelConfig.model,
+      system: request.systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: request.userMessage,
+        },
+      ],
+      max_tokens: maxTokens,
+      temperature: request.temperature,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      timeout: 60_000,
+    }
+  );
+
+  const text = Array.isArray(response.data?.content)
+    ? response.data.content
+      .map((block: AnthropicTextBlock) => block.type === 'text' || block.text ? block.text || '' : '')
+      .join('')
+    : '';
+
+  if (!text.trim()) {
+    console.warn('Anthropic returned no visible text', {
+      model: modelConfig.model,
+      task: request.task,
+      maxTokens,
+      stopReason: response.data?.stop_reason,
+      usage: response.data?.usage,
+    });
+    throw new Error(`Anthropic returned no visible text for ${request.task}`);
+  }
+
+  return text.trim();
+}
+
+const providerClients = {
+  gemini: callGeminiAPI,
+  openai: callOpenAiAPI,
+  anthropic: callAnthropicAPI,
+};
+
 export function getModelConfig() {
+  const modelConfig = resolveModelConfig();
+
   return {
-    ...getCurrentModelConfig(),
+    model: modelConfig.model,
+    provider: modelConfig.providerId,
+    displayName: modelConfig.displayName,
+    modelKey: modelConfig.key,
     temperature: LLM_CONFIG.temperature,
   };
 }
 
-async function callTextPrompt(request: TextPromptRequest) {
-  const modelConfig = getCurrentModelConfig();
-  console.log('Using Gemini API with model:', modelConfig.model);
-  return callWithRetry(() => callGeminiAPI(request));
+async function callTextPrompt(request: TextPromptRequest, modelKey?: string) {
+  const modelConfig = resolveModelConfig(request.task, modelKey);
+  const client = providerClients[modelConfig.providerId];
+  console.log(`Using ${modelConfig.provider.displayName} API with model:`, modelConfig.model);
+
+  return callWithRetry(() => client(request, modelConfig));
 }
 
 export async function generateTopic(
   category: string,
   subcategory: string,
   difficulty: string,
-  recentTopics: string[] = []
+  recentTopics: string[] = [],
+  modelKey?: string
 ): Promise<string> {
   console.log('=== GENERATE TOPIC API CALL ===');
-  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
+  console.log('Current model config:', JSON.stringify(resolveModelConfig('topic', modelKey)));
 
   const { systemPrompt, userMessage } = buildGenerateTopicPrompt({
     category,
@@ -162,15 +306,15 @@ export async function generateTopic(
     task: 'topic',
     maxTokens: LLM_CONFIG.maxTokens.topic,
     temperature: LLM_CONFIG.temperature.creative,
-  });
+  }, modelKey);
 
   console.log('API request successful');
   return topic;
 }
 
-export async function getDefinition(topic: string): Promise<string> {
+export async function getDefinition(topic: string, modelKey?: string): Promise<string> {
   console.log('=== GET DEFINITION API CALL ===');
-  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
+  console.log('Current model config:', JSON.stringify(resolveModelConfig('definition', modelKey)));
 
   const { systemPrompt, userMessage } = buildDefinitionPrompt(topic);
 
@@ -181,7 +325,7 @@ export async function getDefinition(topic: string): Promise<string> {
       task: 'definition',
       maxTokens: LLM_CONFIG.maxTokens.definition,
       temperature: LLM_CONFIG.temperature.factual,
-    });
+    }, modelKey);
 
     return trimIncompleteTrailingSentence(definition);
   } catch (error) {
@@ -196,10 +340,11 @@ export async function getAiResponse(
   difficulty: string,
   availableNodes: AiResponsePromptNode[] = [],
   selectedSourceNodeIds: string[] = [],
-  sourceSelectionMode: AiSourceSelectionMode = 'suggested'
+  sourceSelectionMode: AiSourceSelectionMode = 'suggested',
+  modelKey?: string
 ): Promise<string> {
   console.log('=== GET AI RESPONSE API CALL ===');
-  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
+  console.log('Current model config:', JSON.stringify(resolveModelConfig('response', modelKey)));
 
   const { systemPrompt, userMessage } = buildAiResponsePrompt({
     topic,
@@ -219,7 +364,7 @@ export async function getAiResponse(
       maxTokens: LLM_CONFIG.maxTokens.response,
       temperature: LLM_CONFIG.temperature.creative,
       responseJson: true,
-    });
+    }, modelKey);
   } catch (error) {
     console.error('Error getting AI response:', error);
     throw error;
@@ -229,10 +374,11 @@ export async function getAiResponse(
 export async function evaluateResponse(
   topic: string,
   response: string,
-  difficulty: string
+  difficulty: string,
+  modelKey?: string
 ): Promise<LlmEvaluationResponse> {
   console.log('=== EVALUATE RESPONSE API CALL ===');
-  console.log('Current model config:', JSON.stringify(getCurrentModelConfig()));
+  console.log('Current model config:', JSON.stringify(resolveModelConfig('evaluation', modelKey)));
 
   const { systemPrompt, userMessage } = buildEvaluationPrompt({
     topic,
@@ -248,7 +394,7 @@ export async function evaluateResponse(
       maxTokens: LLM_CONFIG.maxTokens.evaluation,
       temperature: LLM_CONFIG.temperature.evaluation,
       responseJson: true,
-    });
+    }, modelKey);
 
     return parseEvaluationResponse(evaluationText);
   } catch (error) {

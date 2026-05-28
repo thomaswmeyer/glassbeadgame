@@ -103,7 +103,7 @@ export default function GameInterface() {
   const activeSourceRows = selectActiveSourceRows(gameState);
   const sourceSelectionLocked = showingResults || isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
-  const productionModelName = 'the configured Gemini model';
+  const productionModelName = 'the configured LLM model';
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {

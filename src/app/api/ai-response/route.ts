@@ -13,6 +13,7 @@ export async function POST(request: Request) {
       availableNodes,
       selectedSourceNodeIds,
       sourceSelectionMode,
+      modelKey,
     } = body;
     
     console.log('Request body received:', {
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
         difficulty,
         availableNodes || [],
         selectedSourceNodeIds || [],
-        sourceSelectionMode || 'suggested'
+        sourceSelectionMode || 'suggested',
+        modelKey
       );
       
       console.log('AI response generated successfully');

@@ -26,10 +26,15 @@ type EdgeRow = {
   relevance_score: number;
   final_edge_score: number;
 };
+type PlayerRow = {
+  display_name: string;
+  provider: string | null;
+  model_id: string | null;
+};
 
 const players: Player[] = [
-  { id: 'player-a', name: 'AI 1', kind: 'ai', modelKey: 'gemini-pro' },
-  { id: 'player-b', name: 'AI 2', kind: 'ai', modelKey: 'claude-sonnet' },
+  { id: 'player-a', name: 'AI 1', kind: 'ai', modelKey: 'gemini_pro' },
+  { id: 'player-b', name: 'AI 2', kind: 'ai', modelKey: 'claude_sonnet' },
 ];
 
 function createPersistableState(): GameState {
@@ -128,6 +133,16 @@ test('Drizzle SQLite repository saves a game snapshot into normalized tables', a
       assert.equal(savedGame.current_round, 1);
       assert.equal(typeof savedGame.current_game_player_id, 'string');
       assert.equal(typeof savedGame.root_topic_id, 'string');
+
+      const savedPlayers = db
+        .prepare('SELECT display_name, provider, model_id FROM players ORDER BY display_name')
+        .all() as PlayerRow[];
+      assert.equal(savedPlayers[0].display_name, 'AI 1');
+      assert.equal(savedPlayers[0].provider, 'gemini');
+      assert.equal(typeof savedPlayers[0].model_id, 'string');
+      assert.equal(savedPlayers[1].display_name, 'AI 2');
+      assert.equal(savedPlayers[1].provider, 'anthropic');
+      assert.equal(typeof savedPlayers[1].model_id, 'string');
 
       const edge = db
         .prepare('SELECT semantic_distance_score, relevance_score, final_edge_score FROM edges')

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   console.log('=== GENERATE TOPIC ROUTE CALLED ===');
   
   try {
-    const { difficulty } = await request.json();
+    const { difficulty, modelKey } = await request.json();
     console.log('Requested difficulty level:', difficulty);
     
     // Select a random category and subcategory
@@ -27,7 +27,8 @@ export async function POST(request: Request) {
       randomCategory.promptName,
       randomSubcategory,
       difficulty,
-      recentTopics
+      recentTopics,
+      modelKey
     );
     
     // Add to recent topics and maintain max length
