@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { dirname, resolve } from 'node:path';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { sqliteSchema } from './schema';
+import { sqliteSchema } from './schema.sqlite';
 
 const DEFAULT_DATABASE_PATH = 'data/glassbeadgame.dev.sqlite';
 const SQLITE_FILE_URL_PREFIX = 'file:';

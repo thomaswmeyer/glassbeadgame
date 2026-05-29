@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       createEmptyGameState(maxRounds, initialPlayerId, players),
       'awaitingResponse'
     );
-    saveGameSnapshot({
+    await saveGameSnapshot({
       gameId,
       state,
       difficulty,

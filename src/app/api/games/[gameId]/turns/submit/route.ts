@@ -49,7 +49,7 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'responseText is required' }, { status: 400 });
     }
 
-    const snapshot = loadGameSnapshot(gameId);
+    const snapshot = await loadGameSnapshot(gameId);
     if (!snapshot) {
       return NextResponse.json({ error: 'game not found' }, { status: 404 });
     }

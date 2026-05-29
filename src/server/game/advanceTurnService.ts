@@ -26,8 +26,8 @@ function invalidAdvance(message: string): never {
   throw new AdvanceTurnValidationError(message);
 }
 
-export function advancePersistedTurn(command: AdvanceTurnCommand): AdvanceTurnResult {
-  const snapshot = loadGameSnapshot(command.gameId);
+export async function advancePersistedTurn(command: AdvanceTurnCommand): Promise<AdvanceTurnResult> {
+  const snapshot = await loadGameSnapshot(command.gameId);
   if (!snapshot) {
     invalidAdvance(`Unknown game: ${command.gameId}`);
   }
@@ -46,7 +46,7 @@ export function advancePersistedTurn(command: AdvanceTurnCommand): AdvanceTurnRe
     incrementRound: !currentEvaluation.isOpeningTurn,
   });
 
-  saveGameSnapshot({
+  await saveGameSnapshot({
     gameId: command.gameId,
     state: advancedState,
     difficulty: snapshot.difficulty,

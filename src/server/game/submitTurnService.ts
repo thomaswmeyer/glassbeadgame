@@ -106,14 +106,14 @@ function latestTurnId(state: GameState) {
   return state.turnOrder[state.turnOrder.length - 1];
 }
 
-function commitTurn(params: {
+async function commitTurn(params: {
   gameId: string;
   state: GameState;
   committedTurnId: string;
   difficulty: DifficultyLevel;
   sourceEnvironment?: SourceEnvironment;
 }) {
-  commitCompletedTurn({
+  await commitCompletedTurn({
     gameId: params.gameId,
     state: params.state,
     turnId: params.committedTurnId,
@@ -137,7 +137,7 @@ export async function submitTurn(command: SubmitTurnCommand): Promise<SubmitTurn
       incrementRound: false,
     });
 
-    commitTurn({
+    await commitTurn({
       gameId: command.gameId,
       state: advancedState,
       committedTurnId,
@@ -186,7 +186,7 @@ export async function submitTurn(command: SubmitTurnCommand): Promise<SubmitTurn
     stateToReturn = advanceGameTurn(result.state, getNextPlayerId(result.state));
   }
 
-  commitTurn({
+  await commitTurn({
     gameId: command.gameId,
     state: stateToReturn,
     committedTurnId,

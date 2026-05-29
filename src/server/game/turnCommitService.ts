@@ -86,10 +86,10 @@ function assertValidCommittedTurn(state: GameState, turnId: string) {
   });
 }
 
-export function commitCompletedTurn(command: CommitCompletedTurnCommand) {
+export async function commitCompletedTurn(command: CommitCompletedTurnCommand) {
   assertValidCommittedTurn(command.state, command.turnId);
 
-  return saveGameSnapshot({
+  return await saveGameSnapshot({
     gameId: command.gameId,
     state: command.state,
     difficulty: command.difficulty,

@@ -92,17 +92,17 @@ test('Drizzle SQLite repository saves a game snapshot into normalized tables', a
     const gameId = '11111111-1111-4111-8111-111111111111';
     const state = createPersistableState();
 
-    saveGameSnapshot({
+    await saveGameSnapshot({
       gameId,
       state,
       sourceEnvironment: 'test',
     });
-    saveGameSnapshot({
+    await saveGameSnapshot({
       gameId,
       state,
       sourceEnvironment: 'test',
     });
-    const loaded = loadGameSnapshot(gameId);
+    const loaded = await loadGameSnapshot(gameId);
     assert.ok(loaded);
     assert.equal(loaded.gameId, gameId);
     assert.equal(loaded.difficulty, 'undergrad');
@@ -178,7 +178,7 @@ test('server turn command rejects incomplete scored turns before persistence', a
     },
   };
 
-  assert.throws(() => commitCompletedTurn({
+  await assert.rejects(() => commitCompletedTurn({
     gameId: '22222222-2222-4222-8222-222222222222',
     state: invalidState,
     turnId: latestTurnId,
@@ -206,7 +206,7 @@ test('server turn command rejects edges that do not match turn sources', async (
     },
   };
 
-  assert.throws(() => commitCompletedTurn({
+  await assert.rejects(() => commitCompletedTurn({
     gameId: '33333333-3333-4333-8333-333333333333',
     state: invalidState,
     turnId: latestTurnId,
@@ -311,13 +311,13 @@ test('server submit turn command honors selected source ids over persisted activ
       currentRound: 2,
       currentPlayerId: 'player-a',
     }, 'awaitingResponse');
-    saveGameSnapshot({
+    await saveGameSnapshot({
       gameId,
       state: staleActiveSourceState,
       sourceEnvironment: 'test',
     });
 
-    const loaded = loadGameSnapshot(gameId);
+    const loaded = await loadGameSnapshot(gameId);
     assert.ok(loaded);
 
     const rootNodeId = loaded.state.rootNodeId;
@@ -392,13 +392,13 @@ test('server advance turn command persists the next current player before automa
   try {
     const gameId = '66666666-6666-4666-8666-666666666666';
     const showingResultsState = createPersistableState();
-    saveGameSnapshot({
+    await saveGameSnapshot({
       gameId,
       state: showingResultsState,
       sourceEnvironment: 'test',
     });
 
-    const result = advancePersistedTurn({
+    const result = await advancePersistedTurn({
       gameId,
       sourceEnvironment: 'test',
     });
@@ -407,7 +407,7 @@ test('server advance turn command persists the next current player before automa
     assert.equal(result.state.currentPlayerId, 'player-a');
     assert.equal(result.state.currentRound, 2);
 
-    const loaded = loadGameSnapshot(gameId);
+    const loaded = await loadGameSnapshot(gameId);
     assert.ok(loaded);
     assert.equal(loaded.state.gameStatus, 'awaitingResponse');
     assert.equal(loaded.state.currentPlayerId, 'player-a');

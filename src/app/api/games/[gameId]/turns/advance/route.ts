@@ -29,7 +29,7 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'gameId is required' }, { status: 400 });
     }
 
-    const result = advancePersistedTurn({
+    const result = await advancePersistedTurn({
       gameId,
       sourceEnvironment: resolveSourceEnvironment(),
     });

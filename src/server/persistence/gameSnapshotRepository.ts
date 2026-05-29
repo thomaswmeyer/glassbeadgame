@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Drizzle's SQLite and Postgres drivers do not share a practical typed execution interface; keep dialect casts inside this repository boundary. */
 import { createHash } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import {
@@ -11,17 +12,7 @@ import {
   selectPlayerScoreTotals,
 } from '../../domain/game';
 import { SubjectCategoryId } from '../../domain/subjectCategories';
-import { getSqliteDatabase } from '../db/sqlite';
-import {
-  edges,
-  gamePlayers,
-  games,
-  players,
-  topicDefinitions,
-  topics,
-  turnSources,
-  turns,
-} from '../db/schema';
+import { getGameDatabase } from '../db/database';
 import { resolveModelProviderInfo } from '../../config/llm';
 
 type SourceEnvironment = 'local' | 'test' | 'render_prod' | 'render_preview' | 'imported' | 'external';
@@ -38,6 +29,32 @@ type LoadGameSnapshotResult = {
   difficulty: 'secondary' | 'undergrad' | 'grad' | 'unlimited';
   state: GameState;
 };
+
+type MaybePromise<T> = T | Promise<T>;
+type AnyDatabase = any;
+
+function isPromise<T>(value: MaybePromise<T>): value is Promise<T> {
+  return typeof (value as Promise<T> | undefined)?.then === 'function';
+}
+
+function chain<T>(previous: MaybePromise<unknown>, next: () => MaybePromise<T>): MaybePromise<T> {
+  return isPromise(previous) ? previous.then(next) : next();
+}
+
+function runMutation(query: any): MaybePromise<unknown> {
+  return typeof query.run === 'function' ? query.run() : query;
+}
+
+async function allRows<T>(query: any): Promise<T[]> {
+  return typeof query.all === 'function' ? query.all() : await query;
+}
+
+async function firstRow<T>(query: any): Promise<T | undefined> {
+  if (typeof query.get === 'function') return query.get();
+
+  const rows = await query.limit(1);
+  return rows[0];
+}
 
 const DEFAULT_RULES_VERSION = 'prototype-v1';
 const DEFAULT_SCORING_VERSION = 'multiplicative-v1';
@@ -213,21 +230,38 @@ function getEdgeMetadata(edge: TopicEdge) {
   });
 }
 
-export function saveGameSnapshot({
+export async function saveGameSnapshot({
   gameId,
   state,
   sourceEnvironment = 'local',
   difficulty = 'undergrad',
 }: SaveGameSnapshotParams) {
-  const db = getSqliteDatabase();
+  const connection = getGameDatabase();
+  const db: AnyDatabase = connection.db;
+  const schema: any = connection.schema;
+  const {
+    edges,
+    gamePlayers,
+    games,
+    players,
+    topicDefinitions,
+    topics,
+    turnSources,
+    turns,
+  } = schema;
   const scoreTotals = selectPlayerScoreTotals(state);
   const winningPlayerId = getWinningPlayerId(state);
 
-  db.transaction(() => {
-    db.delete(games).where(eq(games.id, gameId)).run();
+  const writeSnapshot = (tx: AnyDatabase) => {
+    let pending: MaybePromise<unknown> = undefined;
+    const enqueue = (query: any) => {
+      pending = chain(pending, () => runMutation(query));
+    };
+
+    enqueue(tx.delete(games).where(eq(games.id, gameId)));
 
     Object.values(state.playersById).forEach(player => {
-      db.insert(players)
+      enqueue(tx.insert(players)
         .values({
           id: persistedPlayerId(player.id),
           displayName: player.name,
@@ -251,11 +285,10 @@ export function saveGameSnapshot({
               modelKey: player.modelKey,
             }),
           },
-        })
-        .run();
+        }));
     });
 
-    db.insert(games)
+    enqueue(tx.insert(games)
       .values({
         id: gameId,
         status: toPersistedGameStatus(state.gameStatus),
@@ -272,14 +305,13 @@ export function saveGameSnapshot({
           selectedNodeIds: state.selectedNodeIds,
           inMemoryCurrentPlayerId: state.currentPlayerId,
         }),
-      })
-      .run();
+      }));
 
     state.playerOrder.forEach((playerId, seatIndex) => {
       const player = state.playersById[playerId];
       if (!player) return;
 
-      db.insert(gamePlayers)
+      enqueue(tx.insert(gamePlayers)
         .values({
           id: persistedGamePlayerId(gameId, player.id),
           gameId,
@@ -295,12 +327,11 @@ export function saveGameSnapshot({
             ? `${getProvider(player) || 'unknown'}:${getModelId(player) || player.id}:${player.modelKey || 'default'}`
             : `human:${player.id}`,
           metadata: json({ inMemoryPlayerId: player.id }),
-        })
-        .run();
+        }));
     });
 
     Object.values(state.nodesById).forEach(node => {
-      db.insert(topics)
+      enqueue(tx.insert(topics)
         .values({
           id: persistedTopicId(gameId, node.id),
           gameId,
@@ -313,15 +344,14 @@ export function saveGameSnapshot({
             inMemoryNodeId: node.id,
             definitionVisible: node.definitionVisible,
           }),
-        })
-        .run();
+        }));
     });
 
     Object.values(state.nodesById)
       .filter(node => Boolean(node.definition))
       .forEach(node => {
         const definitionId = persistedDefinitionId(gameId, node.id);
-        db.insert(topicDefinitions)
+        enqueue(tx.insert(topicDefinitions)
           .values({
             id: definitionId,
             topicId: persistedTopicId(gameId, node.id),
@@ -333,18 +363,16 @@ export function saveGameSnapshot({
             metadata: json({
               definitionVisible: node.definitionVisible,
             }),
-          })
-          .run();
+          }));
 
-        db.update(topics)
+        enqueue(tx.update(topics)
           .set({ selectedDefinitionId: definitionId })
-          .where(eq(topics.id, persistedTopicId(gameId, node.id)))
-          .run();
+          .where(eq(topics.id, persistedTopicId(gameId, node.id))));
       });
 
     state.turnOrder.forEach(turnId => {
       const turn = state.turnsById[turnId];
-      db.insert(turns)
+      enqueue(tx.insert(turns)
         .values({
           id: persistedTurnId(gameId, turn.id),
           gameId,
@@ -355,23 +383,21 @@ export function saveGameSnapshot({
           combinedScore: turn.totalScore || 0,
           appliedAt: new Date().toISOString(),
           metadata: getTurnCreatedAtMetadata(turn),
-        })
-        .run();
+        }));
 
       turn.sourceNodeIds.forEach((sourceNodeId, sourceOrder) => {
-        db.insert(turnSources)
+        enqueue(tx.insert(turnSources)
           .values({
             id: persistedTurnSourceId(gameId, turn.id, sourceNodeId),
             turnId: persistedTurnId(gameId, turn.id),
             sourceTopicId: persistedTopicId(gameId, sourceNodeId),
             sourceOrder,
-          })
-          .run();
+          }));
       });
     });
 
     Object.values(state.edgesById).forEach(edge => {
-      db.insert(edges)
+      enqueue(tx.insert(edges)
         .values({
           id: persistedEdgeId(gameId, edge.id),
           gameId,
@@ -387,20 +413,18 @@ export function saveGameSnapshot({
           semanticDistanceDescription: edge.semanticDistanceDescription || null,
           relevanceDescription: edge.strengthDescription || null,
           metadata: getEdgeMetadata(edge),
-        })
-        .run();
+        }));
     });
 
     Object.values(state.nodesById).forEach(node => {
       if (!node.createdTurnId) return;
 
-      db.update(topics)
+      enqueue(tx.update(topics)
         .set({ createdTurnId: persistedTurnId(gameId, node.createdTurnId) })
-        .where(eq(topics.id, persistedTopicId(gameId, node.id)))
-        .run();
+        .where(eq(topics.id, persistedTopicId(gameId, node.id))));
     });
 
-    db.update(games)
+    enqueue(tx.update(games)
       .set({
         currentGamePlayerId: state.currentPlayerId
           ? persistedGamePlayerId(gameId, state.currentPlayerId)
@@ -409,25 +433,41 @@ export function saveGameSnapshot({
         winnerGamePlayerId: winningPlayerId ? persistedGamePlayerId(gameId, winningPlayerId) : null,
         completedAt: state.gameStatus === 'completed' ? new Date().toISOString() : null,
       })
-      .where(eq(games.id, gameId))
-      .run();
-  });
+      .where(eq(games.id, gameId)));
+
+    return pending;
+  };
+
+  await db.transaction((tx: AnyDatabase) => writeSnapshot(tx));
 
   return { gameId };
 }
 
-export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null {
-  const db = getSqliteDatabase();
-  const game = db.select().from(games).where(eq(games.id, gameId)).get();
+export async function loadGameSnapshot(gameId: string): Promise<LoadGameSnapshotResult | null> {
+  const connection = getGameDatabase();
+  const db: AnyDatabase = connection.db;
+  const schema: any = connection.schema;
+  const {
+    edges,
+    gamePlayers,
+    games,
+    players,
+    topicDefinitions,
+    topics,
+    turnSources,
+    turns,
+  } = schema;
+  const game = await firstRow<any>(
+    db.select().from(games).where(eq(games.id, gameId))
+  );
   if (!game) return null;
 
   const gameMetadata = parseJsonObject(game.metadata);
-  const gamePlayerRows = db.select()
+  const gamePlayerRows = await allRows<any>(db.select()
     .from(gamePlayers)
     .where(eq(gamePlayers.gameId, gameId))
-    .orderBy(asc(gamePlayers.seatIndex))
-    .all();
-  const playerRows = db.select().from(players).all();
+    .orderBy(asc(gamePlayers.seatIndex)));
+  const playerRows = await allRows<any>(db.select().from(players));
   const playerRowsById = new Map(playerRows.map(player => [player.id, player]));
   const inMemoryPlayerIdByGamePlayerId = new Map<string, string>();
 
@@ -451,11 +491,10 @@ export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null 
   const playersById = Object.fromEntries(playerEntries.map(player => [player.id, player]));
   const playerOrder = playerEntries.map(player => player.id);
 
-  const topicRows = db.select()
+  const topicRows = await allRows<any>(db.select()
     .from(topics)
-    .where(eq(topics.gameId, gameId))
-    .all();
-  const definitionRows = db.select().from(topicDefinitions).all();
+    .where(eq(topics.gameId, gameId)));
+  const definitionRows = await allRows<any>(db.select().from(topicDefinitions));
   const definitionsById = new Map(definitionRows.map(definition => [definition.id, definition]));
   const inMemoryNodeIdByTopicId = new Map<string, string>();
 
@@ -467,11 +506,10 @@ export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null 
     inMemoryNodeIdByTopicId.set(topic.id, inMemoryNodeId);
   });
 
-  const turnRows = db.select()
+  const turnRows = await allRows<any>(db.select()
     .from(turns)
     .where(eq(turns.gameId, gameId))
-    .orderBy(asc(turns.roundNumber))
-    .all();
+    .orderBy(asc(turns.roundNumber)));
   const persistedTurnIdToInMemoryTurnId = new Map<string, string>();
   turnRows.forEach((turn, index) => {
     persistedTurnIdToInMemoryTurnId.set(turn.id, `turn-${index}`);
@@ -502,7 +540,7 @@ export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null 
     return [node.id, node];
   }));
 
-  const turnSourceRows = db.select().from(turnSources).all();
+  const turnSourceRows = await allRows<any>(db.select().from(turnSources));
   const turnSourcesByTurnId = new Map<string, string[]>();
   turnSourceRows
     .filter(turnSource => persistedTurnIdToInMemoryTurnId.has(turnSource.turnId))
@@ -539,10 +577,9 @@ export function loadGameSnapshot(gameId: string): LoadGameSnapshotResult | null 
   }));
   const turnOrder = turnRows.map((turn, index) => persistedTurnIdToInMemoryTurnId.get(turn.id) || `turn-${index}`);
 
-  const edgeRows = db.select()
+  const edgeRows = await allRows<any>(db.select()
     .from(edges)
-    .where(eq(edges.gameId, gameId))
-    .all();
+    .where(eq(edges.gameId, gameId)));
   const edgesById = Object.fromEntries(edgeRows.map(edge => {
     const turnId = persistedTurnIdToInMemoryTurnId.get(edge.turnId) || edge.turnId;
     const turn = turnsById[turnId];

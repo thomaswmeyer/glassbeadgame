@@ -137,19 +137,46 @@ Then open:
 http://localhost:4321
 ```
 
-To create or update the local SQLite database used for persistence work:
+To create or update the configured database:
 
 ```bash
 npm run db:migrate
 ```
 
-By default this uses:
+By default local development uses SQLite:
 
 ```text
 DATABASE_URL=file:./data/glassbeadgame.dev.sqlite
 ```
 
+If `DATABASE_URL` starts with `postgres://` or `postgresql://`, the same
+command applies the Postgres migrations instead. For Render, set:
+
+```text
+DATABASE_URL=<your Render Postgres internal database URL>
+DATABASE_SSL=true
+```
+
 ## Deploy
+
+On Render, configure the web service with:
+
+```bash
+npm install
+npm run db:migrate
+npm run build
+```
+
+and start it with:
+
+```bash
+npm run start
+```
+
+Set `DATABASE_URL` from the Render Postgres database, plus the relevant LLM API
+keys and model variables. The app selects SQLite or Postgres from
+`DATABASE_URL`, so local experiments can stay on SQLite while the hosted app
+uses Postgres.
 
 `npm run upload` builds the app, stages the standalone Next.js runtime with
 static assets and `public/`, then syncs one complete bundle to
