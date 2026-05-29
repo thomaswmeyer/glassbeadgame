@@ -6,7 +6,7 @@ import {
 import { AdvanceTurnResult } from '../../domain/gameFlow';
 import {
   loadGameSnapshot,
-  saveGameSnapshot,
+  updatePersistedGameProgress,
 } from '../persistence/gameSnapshotRepository';
 import { SourceEnvironment } from './turnCommitService';
 
@@ -46,11 +46,9 @@ export async function advancePersistedTurn(command: AdvanceTurnCommand): Promise
     incrementRound: !currentEvaluation.isOpeningTurn,
   });
 
-  await saveGameSnapshot({
+  await updatePersistedGameProgress({
     gameId: command.gameId,
     state: advancedState,
-    difficulty: snapshot.difficulty,
-    sourceEnvironment: command.sourceEnvironment,
   });
 
   return {

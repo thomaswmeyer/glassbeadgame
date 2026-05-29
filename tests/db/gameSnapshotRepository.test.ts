@@ -289,6 +289,120 @@ test('server submit turn command evaluates, applies, and persists a scored turn'
   }
 });
 
+test('server gameplay persistence appends turns without deleting existing game rows', async () => {
+  const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-append-only-')), 'game.sqlite');
+  process.env.DATABASE_URL = `file:${databasePath}`;
+
+  const {
+    createGameRecord,
+  } = await import('../../src/server/persistence/gameSnapshotRepository');
+  const {
+    submitTurn,
+  } = await import('../../src/server/game/submitTurnService');
+  const {
+    closeSqliteDatabaseForTests,
+  } = await import('../../src/server/db/sqlite');
+
+  try {
+    const gameId = '77777777-7777-4777-8777-777777777777';
+    const createdState = setGameStatus(
+      createEmptyGameState(4, 'player-a', players),
+      'awaitingResponse'
+    );
+
+    await createGameRecord({
+      gameId,
+      state: createdState,
+      difficulty: 'undergrad',
+      sourceEnvironment: 'test',
+    });
+
+    closeSqliteDatabaseForTests();
+    let db = new Database(databasePath);
+    try {
+      db.exec(`
+        CREATE TRIGGER reject_game_deletes BEFORE DELETE ON games
+        BEGIN
+          SELECT RAISE(ABORT, 'gameplay must not delete games');
+        END;
+      `);
+    } finally {
+      db.close();
+    }
+
+    const openingResult = await submitTurn({
+      gameId,
+      state: createdState,
+      playerId: 'player-a',
+      responseText: 'Apophenia',
+      difficulty: 'undergrad',
+      destinationSubjectCategory: 'psychology',
+      sourceEnvironment: 'test',
+      services: {
+        async evaluateTurn() {
+          throw new Error('opening topic should not be evaluated');
+        },
+      },
+    });
+
+    closeSqliteDatabaseForTests();
+    db = new Database(databasePath);
+    try {
+      db.exec(`
+        CREATE TRIGGER reject_topic_deletes BEFORE DELETE ON topics
+        BEGIN
+          SELECT RAISE(ABORT, 'gameplay must not delete topics');
+        END;
+
+        CREATE TRIGGER reject_turn_deletes BEFORE DELETE ON turns
+        BEGIN
+          SELECT RAISE(ABORT, 'gameplay must not delete turns');
+        END;
+      `);
+    } finally {
+      db.close();
+    }
+
+    const scoredResult = await submitTurn({
+      gameId,
+      state: openingResult.state,
+      playerId: 'player-b',
+      responseText: 'Augury',
+      difficulty: 'undergrad',
+      selectedSourceNodeIds: [openingResult.state.rootNodeId],
+      sourceEnvironment: 'test',
+      services: {
+        async evaluateTurn() {
+          return {
+            evaluation: 'A symbolic practice for pattern-finding in signs.',
+            destinationSubjectCategory: 'religion',
+            scores: {
+              semanticDistance: 7,
+              relevanceQuality: 10,
+              total: 70,
+            },
+          };
+        },
+      },
+    });
+
+    assert.equal(scoredResult.state.turnOrder.length, 2);
+
+    closeSqliteDatabaseForTests();
+    db = new Database(databasePath, { readonly: true });
+    try {
+      assert.equal(tableCount(db, 'games'), 1);
+      assert.equal(tableCount(db, 'topics'), 2);
+      assert.equal(tableCount(db, 'turns'), 2);
+      assert.equal(tableCount(db, 'edges'), 1);
+    } finally {
+      db.close();
+    }
+  } finally {
+    closeSqliteDatabaseForTests();
+  }
+});
+
 test('server submit turn command honors selected source ids over persisted active source fallback', async () => {
   const databasePath = join(mkdtempSync(join(tmpdir(), 'gbg-submit-multi-source-')), 'game.sqlite');
   process.env.DATABASE_URL = `file:${databasePath}`;

@@ -1,5 +1,5 @@
 import { GameState } from '@/domain/game';
-import { saveGameSnapshot } from '../persistence/gameSnapshotRepository';
+import { persistCommittedTurn } from '../persistence/gameSnapshotRepository';
 
 export type SourceEnvironment = 'local' | 'test' | 'render_prod' | 'render_preview' | 'imported' | 'external';
 export type Difficulty = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
@@ -89,9 +89,10 @@ function assertValidCommittedTurn(state: GameState, turnId: string) {
 export async function commitCompletedTurn(command: CommitCompletedTurnCommand) {
   assertValidCommittedTurn(command.state, command.turnId);
 
-  return await saveGameSnapshot({
+  return await persistCommittedTurn({
     gameId: command.gameId,
     state: command.state,
+    turnId: command.turnId,
     difficulty: command.difficulty,
     sourceEnvironment: command.sourceEnvironment,
   });

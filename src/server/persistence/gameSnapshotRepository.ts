@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Drizzle's SQLite and Postgres drivers do not share a practical typed execution interface; keep dialect casts inside this repository boundary. */
 import { createHash } from 'node:crypto';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import {
   GameStatus,
   GameState,
@@ -230,6 +230,429 @@ function getEdgeMetadata(edge: TopicEdge) {
   });
 }
 
+function createMutationQueue() {
+  let pending: MaybePromise<unknown> = undefined;
+
+  return {
+    enqueue(query: any) {
+      pending = chain(pending, () => runMutation(query));
+    },
+    done() {
+      return pending;
+    },
+  };
+}
+
+function getPersistenceContext() {
+  const connection = getGameDatabase();
+  return {
+    db: connection.db as AnyDatabase,
+    schema: connection.schema as any,
+  };
+}
+
+function getGameMetadata(state: GameState) {
+  return json({
+    activeSourceNodeIds: state.activeSourceNodeIds,
+    selectedNodeIds: state.selectedNodeIds,
+    inMemoryCurrentPlayerId: state.currentPlayerId,
+  });
+}
+
+function enqueuePlayerUpserts(tx: AnyDatabase, schema: any, state: GameState, queue: ReturnType<typeof createMutationQueue>) {
+  const { players } = schema;
+
+  Object.values(state.playersById).forEach(player => {
+    queue.enqueue(tx.insert(players)
+      .values({
+        id: persistedPlayerId(player.id),
+        displayName: player.name,
+        kind: toPersistedPlayerKind(player),
+        provider: getProvider(player),
+        modelId: getModelId(player),
+        metadata: json({
+          inMemoryPlayerId: player.id,
+          modelKey: player.modelKey,
+        }),
+      })
+      .onConflictDoUpdate({
+        target: players.id,
+        set: {
+          displayName: player.name,
+          kind: toPersistedPlayerKind(player),
+          provider: getProvider(player),
+          modelId: getModelId(player),
+          metadata: json({
+            inMemoryPlayerId: player.id,
+            modelKey: player.modelKey,
+          }),
+        },
+      }));
+  });
+}
+
+function enqueueGameShellUpsert(
+  tx: AnyDatabase,
+  schema: any,
+  {
+    gameId,
+    state,
+    sourceEnvironment = 'local',
+    difficulty = 'undergrad',
+  }: SaveGameSnapshotParams,
+  queue: ReturnType<typeof createMutationQueue>
+) {
+  const { games } = schema;
+
+  queue.enqueue(tx.insert(games)
+    .values({
+      id: gameId,
+      status: toPersistedGameStatus(state.gameStatus),
+      mode: 'casual',
+      difficulty,
+      maxRounds: state.maxRounds,
+      currentRound: state.currentRound,
+      rulesVersion: DEFAULT_RULES_VERSION,
+      scoringVersion: DEFAULT_SCORING_VERSION,
+      promptSetVersion: DEFAULT_PROMPT_SET_VERSION,
+      sourceEnvironment,
+      metadata: getGameMetadata(state),
+    })
+    .onConflictDoUpdate({
+      target: games.id,
+      set: {
+        status: toPersistedGameStatus(state.gameStatus),
+        difficulty,
+        maxRounds: state.maxRounds,
+        currentRound: state.currentRound,
+        rulesVersion: DEFAULT_RULES_VERSION,
+        scoringVersion: DEFAULT_SCORING_VERSION,
+        promptSetVersion: DEFAULT_PROMPT_SET_VERSION,
+        sourceEnvironment,
+        metadata: getGameMetadata(state),
+      },
+    }));
+}
+
+function enqueueGamePlayerUpserts(
+  tx: AnyDatabase,
+  schema: any,
+  gameId: string,
+  state: GameState,
+  queue: ReturnType<typeof createMutationQueue>
+) {
+  const { gamePlayers } = schema;
+  const scoreTotals = selectPlayerScoreTotals(state);
+
+  state.playerOrder.forEach((playerId, seatIndex) => {
+    const player = state.playersById[playerId];
+    if (!player) return;
+
+    queue.enqueue(tx.insert(gamePlayers)
+      .values({
+        id: persistedGamePlayerId(gameId, player.id),
+        gameId,
+        playerId: persistedPlayerId(player.id),
+        seatIndex,
+        displayName: player.name,
+        controllerKind: toPersistedControllerKind(player),
+        provider: getProvider(player),
+        modelId: getModelId(player),
+        promptConfigVersion: player.modelKey || null,
+        finalScore: scoreTotals[player.id] || 0,
+        ratingParticipantKey: player.kind === 'ai'
+          ? `${getProvider(player) || 'unknown'}:${getModelId(player) || player.id}:${player.modelKey || 'default'}`
+          : `human:${player.id}`,
+        metadata: json({ inMemoryPlayerId: player.id }),
+      })
+      .onConflictDoUpdate({
+        target: gamePlayers.id,
+        set: {
+          seatIndex,
+          displayName: player.name,
+          controllerKind: toPersistedControllerKind(player),
+          provider: getProvider(player),
+          modelId: getModelId(player),
+          promptConfigVersion: player.modelKey || null,
+          finalScore: scoreTotals[player.id] || 0,
+          ratingParticipantKey: player.kind === 'ai'
+            ? `${getProvider(player) || 'unknown'}:${getModelId(player) || player.id}:${player.modelKey || 'default'}`
+            : `human:${player.id}`,
+          metadata: json({ inMemoryPlayerId: player.id }),
+        },
+      }));
+  });
+}
+
+function enqueueGameProgressUpdate(
+  tx: AnyDatabase,
+  schema: any,
+  {
+    gameId,
+    state,
+  }: {
+    gameId: string;
+    state: GameState;
+  },
+  queue: ReturnType<typeof createMutationQueue>
+) {
+  const { games } = schema;
+  const winningPlayerId = getWinningPlayerId(state);
+
+  queue.enqueue(tx.update(games)
+    .set({
+      status: toPersistedGameStatus(state.gameStatus),
+      currentRound: state.currentRound,
+      currentGamePlayerId: state.currentPlayerId
+        ? persistedGamePlayerId(gameId, state.currentPlayerId)
+        : null,
+      rootTopicId: state.rootNodeId ? persistedTopicId(gameId, state.rootNodeId) : null,
+      winnerGamePlayerId: winningPlayerId ? persistedGamePlayerId(gameId, winningPlayerId) : null,
+      metadata: getGameMetadata(state),
+      completedAt: state.gameStatus === 'completed' ? new Date().toISOString() : null,
+    })
+    .where(eq(games.id, gameId)));
+}
+
+function enqueueTopicUpsert(
+  tx: AnyDatabase,
+  schema: any,
+  gameId: string,
+  state: GameState,
+  node: TopicNode,
+  queue: ReturnType<typeof createMutationQueue>
+) {
+  const { topics } = schema;
+
+  queue.enqueue(tx.insert(topics)
+    .values({
+      id: persistedTopicId(gameId, node.id),
+      gameId,
+      text: node.topic,
+      normalizedText: normalizeTopicText(node.topic),
+      subjectCategory: getSubjectCategory(node),
+      createdByGamePlayerId: persistedGamePlayerId(gameId, node.createdByPlayerId || state.playerOrder[0] || ''),
+      isRoot: node.isRoot ? 1 : 0,
+      metadata: json({
+        inMemoryNodeId: node.id,
+        definitionVisible: node.definitionVisible,
+      }),
+    })
+    .onConflictDoUpdate({
+      target: topics.id,
+      set: {
+        text: node.topic,
+        normalizedText: normalizeTopicText(node.topic),
+        subjectCategory: getSubjectCategory(node),
+        createdByGamePlayerId: persistedGamePlayerId(gameId, node.createdByPlayerId || state.playerOrder[0] || ''),
+        isRoot: node.isRoot ? 1 : 0,
+        metadata: json({
+          inMemoryNodeId: node.id,
+          definitionVisible: node.definitionVisible,
+        }),
+      },
+    }));
+}
+
+function enqueueDefinitionUpsert(
+  tx: AnyDatabase,
+  schema: any,
+  gameId: string,
+  node: TopicNode,
+  queue: ReturnType<typeof createMutationQueue>
+) {
+  if (!node.definition) return;
+
+  const { topicDefinitions, topics } = schema;
+  const definitionId = persistedDefinitionId(gameId, node.id);
+
+  queue.enqueue(tx.insert(topicDefinitions)
+    .values({
+      id: definitionId,
+      topicId: persistedTopicId(gameId, node.id),
+      definition: node.definition,
+      provider: 'unknown',
+      modelId: 'unknown',
+      promptVersion: 'unknown',
+      isSelected: 1,
+      metadata: json({
+        definitionVisible: node.definitionVisible,
+      }),
+    })
+    .onConflictDoUpdate({
+      target: topicDefinitions.id,
+      set: {
+        definition: node.definition,
+        isSelected: 1,
+        metadata: json({
+          definitionVisible: node.definitionVisible,
+        }),
+      },
+    }));
+
+  queue.enqueue(tx.update(topics)
+    .set({ selectedDefinitionId: definitionId })
+    .where(eq(topics.id, persistedTopicId(gameId, node.id))));
+}
+
+export async function createGameRecord(params: SaveGameSnapshotParams) {
+  const { db, schema } = getPersistenceContext();
+
+  await db.transaction((tx: AnyDatabase) => {
+    const queue = createMutationQueue();
+    enqueuePlayerUpserts(tx, schema, params.state, queue);
+    enqueueGameShellUpsert(tx, schema, params, queue);
+    enqueueGamePlayerUpserts(tx, schema, params.gameId, params.state, queue);
+    enqueueGameProgressUpdate(tx, schema, params, queue);
+
+    return queue.done();
+  });
+
+  return { gameId: params.gameId };
+}
+
+export async function persistCommittedTurn({
+  gameId,
+  state,
+  turnId,
+  sourceEnvironment = 'local',
+  difficulty = 'undergrad',
+}: SaveGameSnapshotParams & { turnId: string }) {
+  const { db, schema } = getPersistenceContext();
+  const {
+    edges,
+    topics,
+    turns,
+    turnSources,
+  } = schema;
+  const turn = state.turnsById[turnId];
+  if (!turn) throw new Error(`Cannot persist unknown turn: ${turnId}`);
+
+  await db.transaction((tx: AnyDatabase) => {
+    const queue = createMutationQueue();
+    enqueuePlayerUpserts(tx, schema, state, queue);
+    enqueueGameShellUpsert(tx, schema, { gameId, state, sourceEnvironment, difficulty }, queue);
+    enqueueGamePlayerUpserts(tx, schema, gameId, state, queue);
+
+    Object.values(state.nodesById).forEach(node => {
+      enqueueTopicUpsert(tx, schema, gameId, state, node, queue);
+      enqueueDefinitionUpsert(tx, schema, gameId, node, queue);
+    });
+
+    queue.enqueue(tx.insert(turns)
+      .values({
+        id: persistedTurnId(gameId, turn.id),
+        gameId,
+        roundNumber: turn.round,
+        gamePlayerId: persistedGamePlayerId(gameId, turn.playerId),
+        destinationTopicId: persistedTopicId(gameId, turn.destinationNodeId),
+        responseText: state.nodesById[turn.destinationNodeId]?.topic || '',
+        combinedScore: turn.totalScore || 0,
+        appliedAt: new Date().toISOString(),
+        metadata: getTurnCreatedAtMetadata(turn),
+      })
+      .onConflictDoUpdate({
+        target: turns.id,
+        set: {
+          roundNumber: turn.round,
+          gamePlayerId: persistedGamePlayerId(gameId, turn.playerId),
+          destinationTopicId: persistedTopicId(gameId, turn.destinationNodeId),
+          responseText: state.nodesById[turn.destinationNodeId]?.topic || '',
+          combinedScore: turn.totalScore || 0,
+          appliedAt: new Date().toISOString(),
+          metadata: getTurnCreatedAtMetadata(turn),
+        },
+      }));
+
+    turn.sourceNodeIds.forEach((sourceNodeId, sourceOrder) => {
+      queue.enqueue(tx.insert(turnSources)
+        .values({
+          id: persistedTurnSourceId(gameId, turn.id, sourceNodeId),
+          turnId: persistedTurnId(gameId, turn.id),
+          sourceTopicId: persistedTopicId(gameId, sourceNodeId),
+          sourceOrder,
+        })
+        .onConflictDoUpdate({
+          target: turnSources.id,
+          set: {
+            sourceTopicId: persistedTopicId(gameId, sourceNodeId),
+            sourceOrder,
+          },
+        }));
+    });
+
+    turn.edgeIds.forEach(edgeId => {
+      const edge = state.edgesById[edgeId];
+      if (!edge) return;
+
+      queue.enqueue(tx.insert(edges)
+        .values({
+          id: persistedEdgeId(gameId, edge.id),
+          gameId,
+          turnId: persistedTurnId(gameId, edge.turnId),
+          sourceTopicId: persistedTopicId(gameId, edge.sourceNodeId),
+          destinationTopicId: persistedTopicId(gameId, edge.destinationNodeId),
+          gamePlayerId: persistedGamePlayerId(gameId, edge.playerId),
+          semanticDistanceScore: edge.semanticDistanceScore || null,
+          relevanceScore: edge.strengthScore || null,
+          rawEdgeScore: edge.totalScore || null,
+          finalEdgeScore: edge.totalScore || null,
+          scoringDescription: edge.scoringDescription || null,
+          semanticDistanceDescription: edge.semanticDistanceDescription || null,
+          relevanceDescription: edge.strengthDescription || null,
+          metadata: getEdgeMetadata(edge),
+        })
+        .onConflictDoUpdate({
+          target: edges.id,
+          set: {
+            semanticDistanceScore: edge.semanticDistanceScore || null,
+            relevanceScore: edge.strengthScore || null,
+            rawEdgeScore: edge.totalScore || null,
+            finalEdgeScore: edge.totalScore || null,
+            scoringDescription: edge.scoringDescription || null,
+            semanticDistanceDescription: edge.semanticDistanceDescription || null,
+            relevanceDescription: edge.strengthDescription || null,
+            metadata: getEdgeMetadata(edge),
+          },
+        }));
+    });
+
+    Object.values(state.nodesById).forEach(node => {
+      if (!node.createdTurnId) return;
+
+      queue.enqueue(tx.update(topics)
+        .set({ createdTurnId: persistedTurnId(gameId, node.createdTurnId) })
+        .where(eq(topics.id, persistedTopicId(gameId, node.id))));
+    });
+
+    enqueueGameProgressUpdate(tx, schema, { gameId, state }, queue);
+
+    return queue.done();
+  });
+
+  return { gameId };
+}
+
+export async function updatePersistedGameProgress({
+  gameId,
+  state,
+}: {
+  gameId: string;
+  state: GameState;
+}) {
+  const { db, schema } = getPersistenceContext();
+
+  await db.transaction((tx: AnyDatabase) => {
+    const queue = createMutationQueue();
+    enqueueGamePlayerUpserts(tx, schema, gameId, state, queue);
+    enqueueGameProgressUpdate(tx, schema, { gameId, state }, queue);
+
+    return queue.done();
+  });
+
+  return { gameId };
+}
+
 export async function saveGameSnapshot({
   gameId,
   state,
@@ -251,6 +674,14 @@ export async function saveGameSnapshot({
   } = schema;
   const scoreTotals = selectPlayerScoreTotals(state);
   const winningPlayerId = getWinningPlayerId(state);
+  const existingTurnRows = await allRows<{ id: string }>(
+    db.select({ id: turns.id }).from(turns).where(eq(turns.gameId, gameId))
+  );
+  const existingTopicRows = await allRows<{ id: string }>(
+    db.select({ id: topics.id }).from(topics).where(eq(topics.gameId, gameId))
+  );
+  const existingTurnIds = existingTurnRows.map(row => row.id);
+  const existingTopicIds = existingTopicRows.map(row => row.id);
 
   const writeSnapshot = (tx: AnyDatabase) => {
     let pending: MaybePromise<unknown> = undefined;
@@ -258,6 +689,23 @@ export async function saveGameSnapshot({
       pending = chain(pending, () => runMutation(query));
     };
 
+    enqueue(tx.update(games)
+      .set({
+        currentGamePlayerId: null,
+        rootTopicId: null,
+        winnerGamePlayerId: null,
+      })
+      .where(eq(games.id, gameId)));
+    enqueue(tx.delete(edges).where(eq(edges.gameId, gameId)));
+    if (existingTurnIds.length > 0) {
+      enqueue(tx.delete(turnSources).where(inArray(turnSources.turnId, existingTurnIds)));
+    }
+    enqueue(tx.delete(turns).where(eq(turns.gameId, gameId)));
+    if (existingTopicIds.length > 0) {
+      enqueue(tx.delete(topicDefinitions).where(inArray(topicDefinitions.topicId, existingTopicIds)));
+    }
+    enqueue(tx.delete(topics).where(eq(topics.gameId, gameId)));
+    enqueue(tx.delete(gamePlayers).where(eq(gamePlayers.gameId, gameId)));
     enqueue(tx.delete(games).where(eq(games.id, gameId)));
 
     Object.values(state.playersById).forEach(player => {

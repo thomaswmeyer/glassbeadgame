@@ -5,7 +5,7 @@ import {
   setGameStatus,
 } from '@/domain/game';
 import { Difficulty } from '@/server/game/turnCommitService';
-import { saveGameSnapshot } from '@/server/persistence/gameSnapshotRepository';
+import { createGameRecord } from '@/server/persistence/gameSnapshotRepository';
 
 export const runtime = 'nodejs';
 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       createEmptyGameState(maxRounds, initialPlayerId, players),
       'awaitingResponse'
     );
-    await saveGameSnapshot({
+    await createGameRecord({
       gameId,
       state,
       difficulty,
