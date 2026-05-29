@@ -6,7 +6,6 @@ import {
   resolveModelConfig,
 } from '@/config/llm';
 import {
-  AiSourceSelectionMode,
   AiResponsePromptNode,
   LegacyAiGameHistoryItem,
   buildAiResponsePrompt,
@@ -18,9 +17,11 @@ import {
 } from '@/domain/llmPrompts';
 import {
   LlmEvaluationResponse,
+  parseAiMoveResponse,
   parseEvaluationResponse,
   trimIncompleteTrailingSentence,
 } from '@/domain/llmParsing';
+import { validateConceptLength } from '@/domain/conceptRules';
 
 export { difficultyPrompts, evaluationDifficultyPrompts };
 
@@ -32,6 +33,8 @@ type TextPromptRequest = {
   temperature: number;
   responseJson?: boolean;
 };
+
+const MAX_CONCEPT_GENERATION_ATTEMPTS = 3;
 
 type AnthropicTextBlock = {
   type?: string;
@@ -354,22 +357,36 @@ export async function generateTopic(
     timestamp: new Date().toISOString(),
   });
 
-  const topic = await callTextPrompt({
-    systemPrompt,
-    userMessage,
-    task: 'topic',
-    maxTokens: LLM_CONFIG.maxTokens.topic,
-    temperature: LLM_CONFIG.temperature.creative,
-    responseJson: true,
-  }, modelKey);
+  let lastInvalidTopic = '';
 
-  const parsedTopic = parseGeneratedTopicResponse(topic);
-  if (!parsedTopic) {
-    throw new Error('Generated topic response did not contain a topic');
+  for (let attempt = 1; attempt <= MAX_CONCEPT_GENERATION_ATTEMPTS; attempt += 1) {
+    const topic = await callTextPrompt({
+      systemPrompt,
+      userMessage: lastInvalidTopic
+        ? `${userMessage}\n\nThe previous generated topic was invalid because it exceeded five words or was not concise: "${lastInvalidTopic}". Return a different topic with five words or fewer.`
+        : userMessage,
+      task: 'topic',
+      maxTokens: LLM_CONFIG.maxTokens.topic,
+      temperature: LLM_CONFIG.temperature.creative,
+      responseJson: true,
+    }, modelKey);
+
+    const parsedTopic = parseGeneratedTopicResponse(topic);
+    const validation = validateConceptLength(parsedTopic);
+    if (validation.valid) {
+      console.log('API request successful');
+      return parsedTopic;
+    }
+
+    lastInvalidTopic = parsedTopic || topic;
+    console.warn(`Generated topic failed concept validation on attempt ${attempt}:`, {
+      topic: parsedTopic,
+      wordCount: validation.wordCount,
+      message: validation.message,
+    });
   }
 
-  console.log('API request successful');
-  return parsedTopic;
+  throw new Error(`Generated topic exceeded five words after ${MAX_CONCEPT_GENERATION_ATTEMPTS} attempts`);
 }
 
 export async function getDefinition(topic: string, modelKey?: string): Promise<string> {
@@ -399,8 +416,6 @@ export async function getAiResponse(
   gameHistory: LegacyAiGameHistoryItem[],
   difficulty: string,
   availableNodes: AiResponsePromptNode[] = [],
-  selectedSourceNodeIds: string[] = [],
-  sourceSelectionMode: AiSourceSelectionMode = 'suggested',
   modelKey?: string
 ): Promise<string> {
   console.log('=== GET AI RESPONSE API CALL ===');
@@ -409,22 +424,42 @@ export async function getAiResponse(
   const { systemPrompt, userMessage } = buildAiResponsePrompt({
     topic,
     availableNodes,
-    selectedSourceNodeIds,
-    sourceSelectionMode,
     gameHistory: gameHistory || [],
     difficulty,
     timestamp: new Date().toISOString(),
   });
 
   try {
-    return await callTextPrompt({
-      systemPrompt,
-      userMessage,
-      task: 'response',
-      maxTokens: LLM_CONFIG.maxTokens.response,
-      temperature: LLM_CONFIG.temperature.creative,
-      responseJson: true,
-    }, modelKey);
+    let lastInvalidResponse = '';
+
+    for (let attempt = 1; attempt <= MAX_CONCEPT_GENERATION_ATTEMPTS; attempt += 1) {
+      const response = await callTextPrompt({
+        systemPrompt,
+        userMessage: lastInvalidResponse
+          ? `${userMessage}\n\nThe previous response topic was invalid because it exceeded five words or was not concise: "${lastInvalidResponse}". Return a different responseText with five words or fewer.`
+          : userMessage,
+        task: 'response',
+        maxTokens: LLM_CONFIG.maxTokens.response,
+        temperature: LLM_CONFIG.temperature.creative,
+        responseJson: true,
+      }, modelKey);
+
+      const parsedMove = parseAiMoveResponse(response);
+      const responseText = parsedMove?.responseText || response;
+      const validation = validateConceptLength(responseText);
+      if (validation.valid) {
+        return response;
+      }
+
+      lastInvalidResponse = responseText;
+      console.warn(`AI response failed concept validation on attempt ${attempt}:`, {
+        responseText,
+        wordCount: validation.wordCount,
+        message: validation.message,
+      });
+    }
+
+    throw new Error(`AI response exceeded five words after ${MAX_CONCEPT_GENERATION_ATTEMPTS} attempts`);
   } catch (error) {
     console.error('Error getting AI response:', error);
     throw error;

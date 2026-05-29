@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   getConfiguredGraphRendererKind,
-  getNextGraphRendererKind,
   normalizeGraphRendererKind,
 } from '../../src/app/components/graph/graphRendererTypes';
 
@@ -14,11 +13,6 @@ test('graph renderer selection defaults to SVG', () => {
 
 test('graph renderer selection can opt into WebGL', () => {
   assert.equal(normalizeGraphRendererKind('webgl'), 'webgl');
-});
-
-test('graph renderer selection toggles between SVG and WebGL', () => {
-  assert.equal(getNextGraphRendererKind('svg'), 'webgl');
-  assert.equal(getNextGraphRendererKind('webgl'), 'svg');
 });
 
 test('configured graph renderer reads the public environment setting', () => {

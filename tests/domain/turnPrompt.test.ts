@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canSubmitTurnResponse,
+  getTurnResponseValidationMessage,
   getTurnResponsePanelTitle,
   getTurnResponsePlaceholder,
 } from '../../src/domain/turnPrompt';
@@ -50,4 +51,12 @@ test('turn response submit state requires non-empty text and no active evaluatio
   assert.equal(canSubmitTurnResponse({ response: '  ', isEvaluating: false }), false);
   assert.equal(canSubmitTurnResponse({ response: 'Fugue', isEvaluating: true }), false);
   assert.equal(canSubmitTurnResponse({ response: 'Fugue', isEvaluating: false }), true);
+  assert.equal(canSubmitTurnResponse({
+    response: 'The hermeneutic significance of textual criticism',
+    isEvaluating: false,
+  }), false);
+  assert.match(
+    getTurnResponseValidationMessage('The hermeneutic significance of textual criticism'),
+    /5 words or fewer/
+  );
 });

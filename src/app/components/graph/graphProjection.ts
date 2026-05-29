@@ -49,7 +49,7 @@ export function projectedBeadScreenRadius(
   return Math.max(node.radius, Math.hypot(edge.x - center.x, edge.y - center.y));
 }
 
-function shaderScreenPointForWorldPoint(
+export function shaderScreenPointForWorldPoint(
   point: { x: number; y: number; z: number },
   width: number,
   height: number

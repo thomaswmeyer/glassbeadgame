@@ -77,8 +77,6 @@ export const gameApi: GameFlowServices & {
     const result = await axios.post('/api/ai-response', {
       topic: request.topic,
       availableNodes: request.availableNodes,
-      selectedSourceNodeIds: request.selectedSourceNodeIds,
-      sourceSelectionMode: request.sourceSelectionMode,
       gameHistory: toLegacyAiGameHistory(request.gameHistory),
       difficulty: request.difficulty,
       modelKey: request.modelKey,

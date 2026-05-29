@@ -15,6 +15,7 @@ import {
   TurnEvaluation,
   evaluateAndApplyTurn,
 } from '../../domain/gameFlow';
+import { validateConceptLength } from '../../domain/conceptRules';
 import { resolveSubmittedSourceNodeIds } from '../../domain/playerController';
 import {
   SourceEnvironment,
@@ -89,6 +90,11 @@ function assertCanSubmitTurn(state: GameState, playerId: string, responseText: s
 
   if (!responseText.trim()) {
     invalidTurnSubmission('Submitted topic is required');
+  }
+
+  const conceptValidation = validateConceptLength(responseText);
+  if (!conceptValidation.valid) {
+    invalidTurnSubmission(conceptValidation.message || 'Submitted topic is invalid');
   }
 
   if (state.gameStatus !== 'awaitingResponse' && state.gameStatus !== 'aiThinking') {

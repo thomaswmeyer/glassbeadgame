@@ -56,7 +56,3 @@ export function normalizeGraphRendererKind(value: string | undefined): GraphRend
 export function getConfiguredGraphRendererKind(): GraphRendererKind {
   return normalizeGraphRendererKind(process.env.NEXT_PUBLIC_GBG_GRAPH_RENDERER);
 }
-
-export function getNextGraphRendererKind(renderer: GraphRendererKind): GraphRendererKind {
-  return renderer === 'webgl' ? 'svg' : 'webgl';
-}

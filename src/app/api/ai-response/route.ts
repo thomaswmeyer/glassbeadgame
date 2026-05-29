@@ -11,8 +11,6 @@ export async function POST(request: Request) {
       gameHistory,
       difficulty,
       availableNodes,
-      selectedSourceNodeIds,
-      sourceSelectionMode,
       modelKey,
     } = body;
     
@@ -38,8 +36,6 @@ export async function POST(request: Request) {
         gameHistory || [],
         difficulty,
         availableNodes || [],
-        selectedSourceNodeIds || [],
-        sourceSelectionMode || 'suggested',
         modelKey
       );
       

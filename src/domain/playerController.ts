@@ -13,7 +13,6 @@ export type PlayerTurnContext = {
   player: Player;
   topic: string;
   availableNodes: TopicNode[];
-  selectedSourceNodeIds: string[];
   difficulty: DifficultyLevel;
   gameHistory: TurnContextHistoryItem[];
 };

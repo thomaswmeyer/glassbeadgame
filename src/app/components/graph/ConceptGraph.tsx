@@ -18,7 +18,6 @@ import {
   SimulationEdge,
   SimulationNode,
   getConfiguredGraphRendererKind,
-  getNextGraphRendererKind,
 } from './graphRendererTypes';
 
 type ConceptGraphProps = ConceptGraphRendererProps & {
@@ -65,7 +64,6 @@ export default function ConceptGraph({
   const simulationRef = useRef<d3.Simulation<SimulationNode, SimulationEdge> | null>(null);
   const transformRef = useRef<GraphViewportTransform>(INITIAL_TRANSFORM);
   const transformAnimationRef = useRef<number | null>(null);
-  const [activeRenderer, setActiveRenderer] = useState(renderer);
   const [dimensions, setDimensions] = useState({
     width: props.width ?? 800,
     height: props.height ?? 600,
@@ -117,10 +115,6 @@ export default function ConceptGraph({
 
     transformAnimationRef.current = window.requestAnimationFrame(animateTransform);
   }, []);
-
-  useEffect(() => {
-    setActiveRenderer(renderer);
-  }, [renderer]);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -237,27 +231,7 @@ export default function ConceptGraph({
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      const isEditableTarget = target instanceof HTMLElement && (
-        target.isContentEditable ||
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT'
-      );
-
-      if (isEditableTarget || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key.toLowerCase() !== 'g') return;
-
-      setActiveRenderer(currentRenderer => getNextGraphRendererKind(currentRenderer));
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const Renderer = graphRenderers[activeRenderer];
+  const Renderer = graphRenderers[renderer];
   return (
     <div
       ref={containerRef}

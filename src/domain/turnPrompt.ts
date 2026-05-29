@@ -28,5 +28,12 @@ export function canSubmitTurnResponse(params: {
   response: string;
   isEvaluating: boolean;
 }) {
-  return !params.isEvaluating && Boolean(params.response.trim());
+  return !params.isEvaluating && validateConceptLength(params.response).valid;
 }
+
+export function getTurnResponseValidationMessage(response: string) {
+  if (!response.trim()) return '';
+
+  return validateConceptLength(response).message || '';
+}
+import { validateConceptLength } from './conceptRules';

@@ -3,8 +3,10 @@
 import { DifficultyLevel } from '@/domain/gameFlow';
 import { GamePlayerMode } from '@/domain/playerSetup';
 import { formatDifficultyLabel, getTurnsEachLabel } from '@/domain/setupDisplay';
+import { GameVisualTheme, cx, isBeadTableTheme } from './gameVisualTheme';
 
 type GameSetupPanelProps = {
+  visualTheme?: GameVisualTheme;
   maxRounds: number;
   roundOptions: readonly number[];
   playerMode: GamePlayerMode;
@@ -24,6 +26,7 @@ type GameSetupPanelProps = {
 };
 
 export default function GameSetupPanel({
+  visualTheme,
   maxRounds,
   roundOptions,
   playerMode,
@@ -41,17 +44,42 @@ export default function GameSetupPanel({
   onDifficultyChange,
   onStartGame,
 }: GameSetupPanelProps) {
+  const useBeadTableTheme = isBeadTableTheme(visualTheme);
+  const panelClassName = cx(
+    'mb-4 max-w-md mx-auto rounded-lg border p-4',
+    useBeadTableTheme
+      ? 'border-[#c4a565] bg-[#e2d0a7] shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]'
+      : 'border-gray-200 bg-gray-50'
+  );
+  const labelClassName = cx(
+    'block text-left mb-2 font-medium',
+    useBeadTableTheme && 'text-[#3a2a17]'
+  );
+  const sectionHeadingClassName = cx(
+    'font-bold text-left',
+    useBeadTableTheme && 'gbg-small-caps font-serif text-[#2d1d12]'
+  );
+  const selectedButtonClassName = useBeadTableTheme
+    ? 'bg-[#6e4a22] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+    : 'bg-blue-600 text-white';
+  const unselectedButtonClassName = useBeadTableTheme
+    ? 'border border-[#b99a58] bg-[#f7e7bd] text-[#4a321d] hover:bg-[#fff0c2]'
+    : 'bg-gray-200 text-gray-700 hover:bg-gray-300';
+
   return (
     <div className="text-center">
-      <p className="mb-6 text-lg">
+      <p className={cx(
+        'mb-6 text-lg',
+        useBeadTableTheme ? 'text-[#4a321d]' : undefined
+      )}>
         Welcome to the Glass Bead Game, a turn-based graph of connected concepts.
       </p>
 
-      <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <h3 className="font-bold mb-3 text-left">Game Settings:</h3>
+      <div className={panelClassName}>
+        <h3 className={cx(sectionHeadingClassName, 'mb-3')}>Game Settings:</h3>
 
         <div className="mb-4">
-          <label className="block text-left mb-2 font-medium">Number of Rounds:</label>
+          <label className={labelClassName}>Number of Rounds:</label>
           <div className="flex flex-wrap gap-2 justify-center">
             {roundOptions.map(option => (
               <button
@@ -59,8 +87,8 @@ export default function GameSetupPanel({
                 onClick={() => onMaxRoundsChange(option)}
                 className={`px-3 py-1 rounded-full text-sm ${
                   maxRounds === option
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? selectedButtonClassName
+                    : unselectedButtonClassName
                 }`}
               >
                 {option}
@@ -70,7 +98,7 @@ export default function GameSetupPanel({
         </div>
 
         <div className="mb-4">
-          <label className="block text-left mb-2 font-medium">Players:</label>
+          <label className={labelClassName}>Players:</label>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => {
@@ -79,8 +107,8 @@ export default function GameSetupPanel({
               }}
               className={`px-4 py-2 rounded ${
                 playerMode === 'human-vs-ai'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? selectedButtonClassName
+                  : unselectedButtonClassName
               }`}
             >
               You vs AI
@@ -92,8 +120,8 @@ export default function GameSetupPanel({
               }}
               className={`px-4 py-2 rounded ${
                 playerMode === 'ai-vs-ai'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? selectedButtonClassName
+                  : unselectedButtonClassName
               }`}
             >
               AI vs AI
@@ -102,14 +130,14 @@ export default function GameSetupPanel({
         </div>
 
         <div className="mb-4">
-          <label className="block text-left mb-2 font-medium">Who Goes First:</label>
+          <label className={labelClassName}>Who Goes First:</label>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => onAiGoesFirstChange(false)}
               className={`px-4 py-2 rounded ${
                 !aiGoesFirst
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? selectedButtonClassName
+                  : unselectedButtonClassName
               }`}
             >
               {firstPlayerName} First
@@ -118,8 +146,8 @@ export default function GameSetupPanel({
               onClick={() => onAiGoesFirstChange(true)}
               className={`px-4 py-2 rounded ${
                 aiGoesFirst
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? selectedButtonClassName
+                  : unselectedButtonClassName
               }`}
             >
               {secondPlayerName} First
@@ -128,11 +156,16 @@ export default function GameSetupPanel({
         </div>
 
         <div>
-          <label className="block text-left mb-2 font-medium">Game Difficulty:</label>
+          <label className={labelClassName}>Game Difficulty:</label>
           <select
             value={difficulty}
             onChange={(event) => onDifficultyChange(event.target.value as DifficultyLevel)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={cx(
+              'w-full rounded-md border p-2 focus:outline-none focus:ring-2',
+              useBeadTableTheme
+                ? 'border-[#b99a58] bg-[#fbf0d3] text-[#20150d] focus:border-[#8f5b23] focus:ring-[#c9943c]/30'
+                : 'border-gray-300 focus:ring-blue-500'
+            )}
           >
             {difficultyLevels.map(level => (
               <option key={level} value={level}>
@@ -140,15 +173,18 @@ export default function GameSetupPanel({
               </option>
             ))}
           </select>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className={cx(
+            'text-sm mt-1',
+            useBeadTableTheme ? 'text-[#725c37]' : 'text-gray-500'
+          )}>
             {difficultyDescriptions[difficulty]}
           </p>
         </div>
       </div>
 
-      <div className="mb-4 max-w-md mx-auto p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <h3 className="font-bold mb-2 text-left">AI Model:</h3>
-        <p className="text-sm">
+      <div className={panelClassName}>
+        <h3 className={cx(sectionHeadingClassName, 'mb-2')}>AI Model:</h3>
+        <p className={cx('text-sm', useBeadTableTheme && 'text-[#4a321d]')}>
           This game uses {productionModelName} for all AI interactions.
         </p>
       </div>
@@ -157,14 +193,27 @@ export default function GameSetupPanel({
         <button
           onClick={onStartGame}
           disabled={isGeneratingTopic}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+          className={cx(
+            'rounded-lg px-6 py-3 text-white transition-colors disabled:cursor-not-allowed',
+            useBeadTableTheme
+              ? 'bg-[#6e4a22] hover:bg-[#80572a] disabled:bg-[#b89c6a]'
+              : 'bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400'
+          )}
         >
           {isGeneratingTopic ? 'Generating Topic...' : 'Start Game'}
         </button>
       </div>
 
-      <div className="mb-6 text-left max-w-md mx-auto">
-        <h3 className="font-bold mb-2">Rules:</h3>
+      <div className={cx(
+        'mb-6 max-w-md mx-auto text-left',
+        useBeadTableTheme && 'text-[#3a2a17]'
+      )}>
+        <h3 className={cx(
+          'font-bold mb-2',
+          useBeadTableTheme && 'gbg-small-caps font-serif text-[#2d1d12]'
+        )}>
+          Rules:
+        </h3>
         <ol className="list-decimal pl-5 space-y-2">
           <li>The first player chooses the opening topic as turn 0.</li>
           <li>Players take turns adding a new topic connected to the selected source topic.</li>

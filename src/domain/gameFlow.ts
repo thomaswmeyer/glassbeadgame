@@ -18,7 +18,6 @@ import {
   normalizeScore,
 } from './turnScoring';
 import { SubjectCategoryId, normalizeSubjectCategoryId } from './subjectCategories';
-import type { AiSourceSelectionMode } from './llmPrompts';
 
 export type DifficultyLevel = 'secondary' | 'undergrad' | 'grad' | 'unlimited';
 
@@ -75,8 +74,6 @@ export type GenerateAiResponseRequest = {
     subjectCategory?: string;
     isCurrentSource: boolean;
   }[];
-  selectedSourceNodeIds: string[];
-  sourceSelectionMode: AiSourceSelectionMode;
   difficulty: DifficultyLevel;
   modelKey?: string;
   gameHistory: TurnContextHistoryItem[];
@@ -276,10 +273,8 @@ export async function generateAiResponseForCurrentTurn(params: {
       topic: node.topic,
       definition: node.definition,
       subjectCategory: node.subjectCategory,
-      isCurrentSource: false,
+      isCurrentSource: params.state.activeSourceNodeIds.includes(node.id),
     })),
-    selectedSourceNodeIds: [],
-    sourceSelectionMode: 'free',
     difficulty: params.difficulty,
     gameHistory: selectTurnContextHistory(params.state),
   });

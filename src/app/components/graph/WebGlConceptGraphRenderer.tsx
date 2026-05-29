@@ -14,6 +14,7 @@ import {
 import {
   projectedBeadScreenRadius,
   shaderFloorPointForScreenPoint,
+  shaderScreenPointForWorldPoint,
 } from './graphProjection';
 
 type PointerDragState = {
@@ -32,10 +33,14 @@ type WebGlResources = {
 
 const INTERACTION_ALPHA_TARGET = 0.12;
 const BACKGROUND_ALPHA_TARGET = 0.018;
-const MAX_SHADER_BEADS = 64;
-const MAX_SHADER_CONNECTIONS = 128;
+const MAX_SHADER_BEADS = 24;
+const MAX_SHADER_CONNECTIONS = 72;
+const MAX_SHADER_CONTROLS = 24;
 const GRAPH_LABEL_FONT_SIZE = 21.6;
-const GRAPH_LABEL_GAP = 13;
+const GRAPH_LABEL_GAP = -6;
+const NORTHEAST_DIAGONAL = Math.SQRT1_2;
+const CONTROL_RADIAL_FACTOR = 0.68;
+const CONTROL_GLYPH_SIZE = 18;
 const BACKGROUND_VERTEX_SHADER = `
   attribute vec2 a_position;
 
@@ -50,16 +55,17 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
   uniform vec2 u_graphTranslate;
   uniform float u_graphScale;
   uniform int u_nodeCount;
-  uniform vec3 u_centers[64];
-  uniform float u_radii[64];
-  uniform vec3 u_absorb[64];
+  uniform vec3 u_centers[24];
+  uniform vec3 u_absorb[24];
+  uniform vec2 u_nodeInfo[24];
   uniform int u_connectionCount;
-  uniform vec3 u_connectionA[128];
-  uniform vec3 u_connectionB[128];
-  uniform float u_connectionRadiusA[128];
-  uniform float u_connectionRadiusB[128];
-  uniform vec3 u_connectionColor[128];
-  uniform float u_connectionWidth[128];
+  uniform vec3 u_connectionA[72];
+  uniform vec3 u_connectionB[72];
+  uniform vec3 u_connectionColor[72];
+  uniform vec3 u_connectionInfo[72];
+  uniform int u_controlCount;
+  uniform vec4 u_control[24];
+  uniform float u_time;
 
   float n21(vec2 p) {
     const vec3 s = vec3(7.0, 157.0, 0.0);
@@ -81,12 +87,12 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
   float wood(vec2 p) { p.x *= 71.; p.y *= 1.9; return n11(n21(p) * 30.); }
 
   vec3 woodColor(vec2 p) {
-    vec3 dark  = vec3(0.04, 0.022, 0.008);
-    vec3 mid   = vec3(0.09, 0.052, 0.018);
-    vec3 light = vec3(0.12, 0.080, 0.032);
+    vec3 dark  = vec3(0.0195, 0.009, 0.003);
+    vec3 mid   = vec3(0.049, 0.0255, 0.008);
+    vec3 light = vec3(0.0825, 0.0465, 0.015);
     vec3 col = mix(mid, dark, wood(p));
     col = mix(col, light, 0.3 * wood(p * 0.2));
-    return pow(col * 2.1, vec3(0.45));
+    return pow(col * 1.925, vec3(0.485));
   }
 
   float hash(float n) { return fract(sin(n) * 43758.5453); }
@@ -134,6 +140,13 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
     return length((pa + s * ba) - (ro + (d + s * b) * rd));
   }
 
+  float segDist2(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / max(0.001, dot(ba, ba)), 0., 1.);
+    return length(pa - ba * h);
+  }
+
   vec3 world(vec3 ro, vec3 rd) {
     if (rd.y < 0.) {
         float t = -ro.y / rd.y;
@@ -146,11 +159,12 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
         float stretch = length(ld.xz) / ld.y;
 
         float shad = 1.;
-        for (int i = 0; i < 64; i++) {
+        vec3 tableGlow = vec3(0.);
+        for (int i = 0; i < 24; i++) {
           if (i >= u_nodeCount) break;
 
           vec3  sc = u_centers[i];
-          float sr = u_radii[i];
+          float sr = u_nodeInfo[i].x;
 
           vec2 shadowCenter = sc.xz - (sc.y / ld.y) * ld.xz;
 
@@ -159,8 +173,13 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
           float perp  = length(delta - along * lightXZ);
           float dist = length(vec2(along / (1. + stretch * 0.25), perp)) / sr;
           shad *= smoothstep(0.9, 1.08, dist);
+
+          float selected = u_nodeInfo[i].y;
+          float glowDist = length(fp.xz - sc.xz) / max(0.001, sr);
+          float diffuseGlow = selected * 0.35 * exp(-glowDist * glowDist * 0.60);
+          tableGlow += vec3(1.0, 0.955, 0.82) * diffuseGlow;
         }
-        return col * mix(0.3, 1.0, shad);
+        return col * mix(0.24, 0.91, shad) + tableGlow;
       }
     }
     return skyColor(rd);
@@ -183,10 +202,11 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
     float bestIOR = 1.5;
     vec3  bestAbsorb = vec3(1.);
     vec3  bestGlow = vec3(1.);
-    for (int i = 0; i < 64; i++) {
+    float bestSelected = 0.;
+    for (int i = 0; i < 24; i++) {
       if (i >= u_nodeCount) break;
       vec3  sc = u_centers[i];
-      float sr = u_radii[i];
+      float sr = u_nodeInfo[i].x;
       vec2 t = iSphere(ro, rd, sc, sr);
       if (t.x > 0.001 && t.x < bestT) {
         bestT = t.x;
@@ -196,6 +216,7 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
         bestIOR = sIOR(i);
         bestAbsorb = u_absorb[i];
         bestGlow = sGlowCol(u_absorb[i]);
+        bestSelected = u_nodeInfo[i].y;
       }
     }
 
@@ -223,23 +244,64 @@ const WOOD_BACKGROUND_FRAGMENT_SHADER = `
       float fwdS = pow(max(0., dot(rd2, ld)), 4.0) * 1.2;
       float caustic = pow(max(0., dot(rd2, ld)), 24.0) * 6.0;
       vec3 iGlow = bestGlow * lit * (fwdS + caustic);
+      float centerLight = pow(max(0., dot(-rd, n1)), 2.0);
+      vec3 selectedGlow = vec3(1.0, 0.96, 0.82) * bestSelected * (0.018 + centerLight * 0.055);
 
-      col = mix(world(p2, rd3) * absorption, world(p1, reflect(rd,n1)), fre) + spe + iGlow;
+      col = mix(world(p2, rd3) * absorption, world(p1, reflect(rd,n1)), fre) + spe + iGlow + selectedGlow;
     } else {
       col = world(ro, rd);
     }
 
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 72; i++) {
       if (i >= u_connectionCount) break;
       vec3 ca = u_connectionA[i], cb = u_connectionB[i], dir = normalize(cb - ca);
-      vec3 pa = ca + dir * u_connectionRadiusA[i], pb = cb - dir * u_connectionRadiusB[i];
+      vec3 pa = ca + dir * u_connectionInfo[i].x, pb = cb - dir * u_connectionInfo[i].y;
       float dist = raySegDist(ro, rd, pa, pb);
-      float width = u_connectionWidth[i];
+      float width = u_connectionInfo[i].z;
       float widthFactor = mix(0.45, 3.6, clamp((width - 2.2) / 10.8, 0., 1.));
       float scaledDist = dist / widthFactor;
       float g = .00042 / (scaledDist * scaledDist + .0015)
               + .00008 / (scaledDist * scaledDist + .04);
       col += u_connectionColor[i] * g;
+    }
+
+    for (int i = 0; i < 24; i++) {
+      if (i >= u_nodeCount) break;
+      if (u_nodeInfo[i].y < 0.5) continue;
+
+      vec2 beadScreen = floorPointToScreenPoint(ro, u_centers[i]);
+      float d = length(fragCoord - beadScreen);
+      float radius = u_nodeInfo[i].x * 170.0;
+      float glow = 0.010 * exp(-d * d / max(1.0, radius * radius * 0.55));
+      col += vec3(1.0, 0.96, 0.82) * glow;
+    }
+
+    for (int i = 0; i < 24; i++) {
+      if (i >= u_controlCount) break;
+
+      vec2 center = u_control[i].xy;
+      float size = u_control[i].w;
+      vec2 p = fragCoord - center;
+      float halfSize = size * 0.45;
+      float horizontal = segDist2(p, vec2(-halfSize, 0.), vec2(halfSize, 0.));
+      float vertical = segDist2(p, vec2(0., -halfSize), vec2(0., halfSize));
+      float horizontalMask = exp(-horizontal * horizontal / 0.18);
+      float verticalMask = exp(-vertical * vertical / 0.18) * step(0.5, u_control[i].z);
+      float beamMask = max(horizontalMask, verticalMask);
+      float glowMask = max(
+        exp(-horizontal * horizontal / 9.0),
+        exp(-vertical * vertical / 9.0) * step(0.5, u_control[i].z)
+      );
+      float wideGlowMask = max(
+        exp(-horizontal * horizontal / 38.0),
+        exp(-vertical * vertical / 38.0) * step(0.5, u_control[i].z)
+      );
+      float flow = 0.86 + 0.14 * sin((p.x - p.y) * 0.55 - u_time * 5.0);
+      float beam = beamMask * flow;
+      float glow = glowMask * 0.62 + wideGlowMask * 0.22;
+      float endFade = smoothstep(size * 0.62, size * 0.42, length(p));
+      col += vec3(1.0, 0.98, 0.90) * beam * endFade * 1.7;
+      col += vec3(0.64, 0.88, 1.0) * glow * endFade;
     }
 
     fragColor = vec4(pow(col * 1.4, vec3(0.9)), 1.);
@@ -433,25 +495,25 @@ export default function WebGlConceptGraphRenderer({
     const graphScaleLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_graphScale');
     const nodeCountLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_nodeCount');
     const centersLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_centers[0]');
-    const radiiLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_radii[0]');
     const absorbLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_absorb[0]');
+    const nodeInfoLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_nodeInfo[0]');
     const connectionCountLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionCount');
     const connectionALocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionA[0]');
     const connectionBLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionB[0]');
-    const connectionRadiusALocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionRadiusA[0]');
-    const connectionRadiusBLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionRadiusB[0]');
     const connectionColorLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionColor[0]');
-    const connectionWidthLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionWidth[0]');
+    const connectionInfoLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_connectionInfo[0]');
+    const controlCountLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_controlCount');
+    const controlLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_control[0]');
+    const timeLocation = gl.getUniformLocation(resources.backgroundProgram, 'u_time');
     const shaderNodeCount = Math.min(graphDataRef.current.nodes.length, MAX_SHADER_BEADS);
     const shaderCenters = new Float32Array(MAX_SHADER_BEADS * 3);
-    const shaderRadii = new Float32Array(MAX_SHADER_BEADS);
     const shaderAbsorb = new Float32Array(MAX_SHADER_BEADS * 3);
+    const shaderNodeInfo = new Float32Array(MAX_SHADER_BEADS * 2);
     const shaderConnectionA = new Float32Array(MAX_SHADER_CONNECTIONS * 3);
     const shaderConnectionB = new Float32Array(MAX_SHADER_CONNECTIONS * 3);
-    const shaderConnectionRadiusA = new Float32Array(MAX_SHADER_CONNECTIONS);
-    const shaderConnectionRadiusB = new Float32Array(MAX_SHADER_CONNECTIONS);
     const shaderConnectionColor = new Float32Array(MAX_SHADER_CONNECTIONS * 3);
-    const shaderConnectionWidth = new Float32Array(MAX_SHADER_CONNECTIONS);
+    const shaderConnectionInfo = new Float32Array(MAX_SHADER_CONNECTIONS * 3);
+    const shaderControl = new Float32Array(MAX_SHADER_CONTROLS * 4);
     const shaderNodeDataById = new Map<string, {
       center: [number, number, number];
       radius: number;
@@ -460,6 +522,7 @@ export default function WebGlConceptGraphRenderer({
       x: dimensions.width / 2,
       y: dimensions.height / 2,
     };
+    const pixelRatio = canvas.width / dimensions.width || 1;
 
     graphDataRef.current.nodes.slice(0, MAX_SHADER_BEADS).forEach((node, index) => {
       const point = screenPoint(node, transformRef.current, shaderFallback);
@@ -471,10 +534,11 @@ export default function WebGlConceptGraphRenderer({
       shaderCenters[index * 3] = floorPoint.x;
       shaderCenters[index * 3 + 1] = radius;
       shaderCenters[index * 3 + 2] = floorPoint.z;
-      shaderRadii[index] = radius;
       shaderAbsorb[index * 3] = absorption[0];
       shaderAbsorb[index * 3 + 1] = absorption[1];
       shaderAbsorb[index * 3 + 2] = absorption[2];
+      shaderNodeInfo[index * 2] = radius;
+      shaderNodeInfo[index * 2 + 1] = node.isActiveSource ? 1 : 0;
       shaderNodeDataById.set(node.id, {
         center: [floorPoint.x, radius, floorPoint.z],
         radius,
@@ -496,16 +560,44 @@ export default function WebGlConceptGraphRenderer({
       const color = hexToRgb(edge.color);
       shaderConnectionA.set(sourceData.center, connectionIndex * 3);
       shaderConnectionB.set(targetData.center, connectionIndex * 3);
-      shaderConnectionRadiusA[connectionIndex] = sourceData.radius;
-      shaderConnectionRadiusB[connectionIndex] = targetData.radius;
       shaderConnectionColor[connectionIndex * 3] = Math.min(1, color[0] * 1.5 + 0.12);
       shaderConnectionColor[connectionIndex * 3 + 1] = Math.min(1, color[1] * 1.5 + 0.12);
       shaderConnectionColor[connectionIndex * 3 + 2] = Math.min(1, color[2] * 1.5 + 0.12);
-      shaderConnectionWidth[connectionIndex] = getGraphEdgeStrokeWidth(edge);
+      shaderConnectionInfo[connectionIndex * 3] = sourceData.radius;
+      shaderConnectionInfo[connectionIndex * 3 + 1] = targetData.radius;
+      shaderConnectionInfo[connectionIndex * 3 + 2] = getGraphEdgeStrokeWidth(edge);
       shaderConnectionCount += 1;
     });
 
-    const pixelRatio = canvas.width / dimensions.width || 1;
+    let shaderControlCount = 0;
+    if (!interactionsDisabled) {
+      graphDataRef.current.nodes.slice(0, MAX_SHADER_BEADS).forEach(node => {
+        if (shaderControlCount >= MAX_SHADER_CONTROLS) return;
+
+        const canRemove = node.isActiveSource && activeSourceCount > 1;
+        const canAdd = !node.isActiveSource;
+        if (!canAdd && !canRemove) return;
+
+        const point = screenPoint(node, transformRef.current, shaderFallback);
+        const visualRadius = projectedBeadScreenRadius(node, point, dimensions.width, dimensions.height);
+        const floorPoint = shaderFloorPointForScreenPoint(point, dimensions.width, dimensions.height);
+        const beadRadius = getGraphNodeBeadRadius(node);
+        const beadCenter = shaderScreenPointForWorldPoint(
+          { x: floorPoint.x, y: beadRadius, z: floorPoint.z },
+          dimensions.width,
+          dimensions.height
+        );
+        const controlX = beadCenter.x + visualRadius * CONTROL_RADIAL_FACTOR * NORTHEAST_DIAGONAL;
+        const controlY = beadCenter.y - visualRadius * CONTROL_RADIAL_FACTOR * NORTHEAST_DIAGONAL;
+
+        shaderControl[shaderControlCount * 4] = controlX * pixelRatio;
+        shaderControl[shaderControlCount * 4 + 1] = canvas.height - controlY * pixelRatio;
+        shaderControl[shaderControlCount * 4 + 2] = canRemove ? -1 : 1;
+        shaderControl[shaderControlCount * 4 + 3] = CONTROL_GLYPH_SIZE * pixelRatio;
+        shaderControlCount += 1;
+      });
+    }
+
     const graphTransform = transformRef.current;
 
     gl.uniform2f(backgroundResolutionLocation, canvas.width, canvas.height);
@@ -517,15 +609,16 @@ export default function WebGlConceptGraphRenderer({
     gl.uniform1f(graphScaleLocation, graphTransform.scale * pixelRatio);
     gl.uniform1i(nodeCountLocation, shaderNodeCount);
     gl.uniform3fv(centersLocation, shaderCenters);
-    gl.uniform1fv(radiiLocation, shaderRadii);
     gl.uniform3fv(absorbLocation, shaderAbsorb);
+    gl.uniform2fv(nodeInfoLocation, shaderNodeInfo);
     gl.uniform1i(connectionCountLocation, shaderConnectionCount);
     gl.uniform3fv(connectionALocation, shaderConnectionA);
     gl.uniform3fv(connectionBLocation, shaderConnectionB);
-    gl.uniform1fv(connectionRadiusALocation, shaderConnectionRadiusA);
-    gl.uniform1fv(connectionRadiusBLocation, shaderConnectionRadiusB);
     gl.uniform3fv(connectionColorLocation, shaderConnectionColor);
-    gl.uniform1fv(connectionWidthLocation, shaderConnectionWidth);
+    gl.uniform3fv(connectionInfoLocation, shaderConnectionInfo);
+    gl.uniform1i(controlCountLocation, shaderControlCount);
+    gl.uniform4fv(controlLocation, shaderControl);
+    gl.uniform1f(timeLocation, performance.now() / 1000);
     gl.bindBuffer(gl.ARRAY_BUFFER, resources.backgroundPositionBuffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -543,7 +636,7 @@ export default function WebGlConceptGraphRenderer({
     gl.vertexAttribPointer(backgroundPositionLocation, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-  }, [dimensions.height, dimensions.width]);
+  }, [activeSourceCount, dimensions.height, dimensions.width, interactionsDisabled]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -674,10 +767,18 @@ export default function WebGlConceptGraphRenderer({
 
     return graphData.nodes.map(node => {
       const point = screenPoint(node, transform, fallback);
+      const floorPoint = shaderFloorPointForScreenPoint(point, dimensions.width, dimensions.height);
+      const beadRadius = getGraphNodeBeadRadius(node);
+      const beadCenter = shaderScreenPointForWorldPoint(
+        { x: floorPoint.x, y: beadRadius, z: floorPoint.z },
+        dimensions.width,
+        dimensions.height
+      );
 
       return {
         node,
         point,
+        beadCenter,
         visualRadius: projectedBeadScreenRadius(node, point, dimensions.width, dimensions.height),
       };
     });
@@ -696,13 +797,13 @@ export default function WebGlConceptGraphRenderer({
         onPointerCancel={handlePointerUp}
       />
       <div className="pointer-events-none absolute inset-0">
-        {overlayNodes.map(({ node, point, visualRadius }) => (
+        {overlayNodes.map(({ node, beadCenter, visualRadius }) => (
           <div
             key={node.id}
-            className="absolute text-center font-medium text-gray-900"
+            className="gbg-small-caps absolute text-center font-serif font-medium text-gray-900"
             style={{
-              left: point.x,
-              top: point.y + visualRadius + GRAPH_LABEL_GAP,
+              left: beadCenter.x,
+              top: beadCenter.y + visualRadius + GRAPH_LABEL_GAP,
               transform: 'translateX(-50%)',
               fontSize: GRAPH_LABEL_FONT_SIZE,
               lineHeight: 1.1,
@@ -715,7 +816,7 @@ export default function WebGlConceptGraphRenderer({
       </div>
       {!interactionsDisabled && (
         <div className="pointer-events-none absolute inset-0">
-          {overlayNodes.map(({ node, point, visualRadius }) => {
+          {overlayNodes.map(({ node, beadCenter, visualRadius }) => {
             const canRemove = node.isActiveSource && activeSourceCount > 1;
             const canAdd = !node.isActiveSource;
             if (!canAdd && !canRemove) return null;
@@ -725,10 +826,10 @@ export default function WebGlConceptGraphRenderer({
                 key={node.id}
                 type="button"
                 aria-label={canRemove ? `Remove ${node.label} from selected topics` : `Add ${node.label} to selected topics`}
-                className="pointer-events-auto absolute flex h-4 w-4 items-center justify-center rounded-full border border-gray-500 bg-white text-[11px] font-bold leading-none text-gray-700 shadow-sm"
+                className="pointer-events-auto absolute h-9 w-9 bg-transparent opacity-0"
                 style={{
-                  left: point.x + visualRadius,
-                  top: point.y - visualRadius,
+                  left: beadCenter.x + visualRadius * CONTROL_RADIAL_FACTOR * NORTHEAST_DIAGONAL,
+                  top: beadCenter.y - visualRadius * CONTROL_RADIAL_FACTOR * NORTHEAST_DIAGONAL,
                   transform: 'translate(-50%, -50%)',
                 }}
                 onClick={() => {
@@ -738,9 +839,7 @@ export default function WebGlConceptGraphRenderer({
                     onAddSourceNode(node.id);
                   }
                 }}
-              >
-                {canRemove ? '-' : '+'}
-              </button>
+              />
             );
           })}
         </div>

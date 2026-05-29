@@ -70,7 +70,6 @@ test('explicit player controllers override the default controller for that playe
     player: aiPlayer,
     topic: 'Cathedrals',
     availableNodes: Object.values(state.nodesById),
-    selectedSourceNodeIds: [state.rootNodeId],
     difficulty: 'undergrad',
     gameHistory: [],
   }), {

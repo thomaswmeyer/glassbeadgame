@@ -1,5 +1,6 @@
 import { formatScoringCalibrationExamples } from './scoringCalibration';
 import { formatSubjectCategoryPromptOptions } from './subjectCategories';
+import { MAX_CONCEPT_WORDS } from './conceptRules';
 
 export type LegacyAiGameHistoryItem = {
   topic: string;
@@ -14,8 +15,6 @@ export type AiResponsePromptNode = {
   subjectCategory?: string;
   isCurrentSource?: boolean;
 };
-
-export type AiSourceSelectionMode = 'suggested' | 'free';
 
 export const difficultyPrompts = {
   secondary: 'Use familiar high school level concepts and vocabulary. Prefer concepts commonly taught in secondary school or widely understood from everyday life. Do not use named theorems, conjectures, graduate mathematics, specialized academic terminology, obscure references, or research-level ideas. If the category is mathematics, use topics like symmetry, fractions, probability, triangles, graphs, prime numbers, or ratios rather than advanced named results.',
@@ -53,6 +52,10 @@ export function buildGenerateTopicPrompt(params: {
     systemPrompt: `You are an assistant for the Glass Bead Game. Generate a single, specific topic for players to respond to. 
     
     The topic should be a single concept, idea, term, or work related to the category: ${params.category}, specifically in the area of ${params.subcategory}.
+    The topic must be ${MAX_CONCEPT_WORDS} words or fewer. Prefer 1-3 words.
+    Do not return a sentence, research question, subtitle, explanation, compound prompt, or multiple topics joined by "+", "/", or ":".
+    Bad opening topic: "The hermeneutic significance of the Masoretic Text's qere/ketiv distinctions in interpreting paradoxical divine pronouncements in the Pentateuch + textual criticism"
+    Good opening topics: "Textual criticism", "Masoretic Text", "Hermeneutics", "Pentateuch".
     
     ${difficultyPrompts[params.difficulty as keyof typeof difficultyPrompts]}
     
@@ -100,34 +103,22 @@ export function buildDefinitionPrompt(topic: string): LlmPrompt {
 export function buildAiResponsePrompt(params: {
   topic: string;
   availableNodes?: AiResponsePromptNode[];
-  selectedSourceNodeIds?: string[];
-  sourceSelectionMode?: AiSourceSelectionMode;
   gameHistory: LegacyAiGameHistoryItem[];
   difficulty: string;
   timestamp: string;
 }): LlmPrompt {
   const { historyContext, responsesToAvoid } = getAiHistoryContext(params.gameHistory);
   const difficultyPrompt = difficultyPrompts[params.difficulty as keyof typeof difficultyPrompts];
-  const sourceSelectionPrompt = getAiSourceSelectionPrompt(
-    params.availableNodes || [],
-    params.selectedSourceNodeIds || [],
-    params.sourceSelectionMode || 'suggested'
-  );
-  const hasFreeSourceSelection = (params.sourceSelectionMode || 'suggested') === 'free';
-  const sourceTaskDescription = hasFreeSourceSelection
-    ? 'choose one or more source nodes from the board'
-    : 'respond to the current topic';
-  const sourceContextDescription = hasFreeSourceSelection
-    ? 'There is no required current topic. You have complete freedom to choose any one or more source nodes from the available list.'
-    : `Current topic: "${params.topic}"`;
+  const sourceSelectionPrompt = getAiSourceSelectionPrompt(params.availableNodes || []);
 
   return {
     systemPrompt: `You are playing the Glass Bead Game, a game of conceptual connections. 
         
-        Your task is to ${sourceTaskDescription} and give a brief, thoughtful response that creates
+        Your task is to choose one or more source nodes from the board and give a brief, thoughtful response that creates
         an interesting conceptual connection. Your response will become the next topic in the game.
         
-        Your response MUST be brief - ideally just a single word or short phrase (1-5 words maximum).
+        Your response MUST be brief - ideally just a single word or short phrase (${MAX_CONCEPT_WORDS} words maximum).
+        If your response would be more than ${MAX_CONCEPT_WORDS} words, choose a shorter established topic instead.
         This brevity is an essential part of the game. DO NOT provide explanations or elaborations.
         Your response must be a recognizable topic that could plausibly have a concise encyclopedia-style
         definition: a concept, term, object, event, work, practice, theory, place, or phenomenon.
@@ -148,9 +139,7 @@ export function buildAiResponsePrompt(params: {
         the multi-source penalty.
         Each selected source creates a separate edge to your new topic. Each edge is scored as semantic
         distance * relevance. If you select N source nodes, the turn score is round(sum(edgeScores) / sqrt(N)),
-        so adding a source helps only if its additional edge raises that penalized final score. The first connecting move after
-        the opening topic receives an opening bonus:
-        round(edgeScore * sqrt(2)), because only one source node is available.
+        so adding a source helps only if its additional edge raises that penalized final score.
 
         IMPORTANT GUIDELINES FOR CREATIVE CONNECTIONS:
         - Aim to make connections ACROSS DIFFERENT domains of knowledge (e.g., connecting science to art, history to mathematics, etc.)
@@ -185,42 +174,32 @@ export function buildAiResponsePrompt(params: {
         Do not include any text before or after the JSON. Only return the JSON object.`,
     userMessage: `${historyContext}
         
-        ${sourceContextDescription}
+        There is no required current topic. You have complete freedom to choose any one or more source nodes from the available list.
         ${sourceSelectionPrompt}
         
-        Please choose source nodes and provide your brief response (1-5 words maximum) at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
+        Please choose source nodes and provide your brief response (${MAX_CONCEPT_WORDS} words maximum) at a ${params.difficulty} difficulty level. Be creative and avoid obvious connections or any responses that have been used before in this game.`,
   };
 }
 
-function getAiSourceSelectionPrompt(
-  availableNodes: AiResponsePromptNode[],
-  selectedSourceNodeIds: string[],
-  sourceSelectionMode: AiSourceSelectionMode
-) {
+function getAiSourceSelectionPrompt(availableNodes: AiResponsePromptNode[]) {
   if (availableNodes.length === 0) return '';
 
-  const selectedNodeIds = new Set(selectedSourceNodeIds);
-  const shouldMarkCurrentSources = sourceSelectionMode === 'suggested';
   const nodeList = availableNodes.map(node => {
     const details = [
       `id: ${node.id}`,
       `topic: "${node.topic}"`,
       node.subjectCategory ? `subject: ${node.subjectCategory}` : '',
-      shouldMarkCurrentSources && (selectedNodeIds.has(node.id) || node.isCurrentSource) ? 'currently selected' : '',
       node.definition ? `definition: ${node.definition}` : '',
     ].filter(Boolean);
 
     return `- ${details.join('; ')}`;
   }).join('\n');
-  const selectionInstruction = sourceSelectionMode === 'free'
-    ? 'No source node is preselected for you. Choose freely from the full list based on the strongest final-scoring move you can make, not recency or UI selection. Compare one-source, two-source, and three-source options using round(sum(edgeScores) / sqrt(N)); use multiple sources only when the penalized combined score is likely higher than the best single-source move.'
-    : 'You may keep the currently selected source, replace it with another node, or select multiple nodes.';
 
   return `
         Available source nodes:
 ${nodeList}
 
-        ${selectionInstruction}
+        No source node is preselected for you. Choose freely from the full list based on the strongest final-scoring move you can make, not recency or UI selection. Compare one-source, two-source, and three-source options using round(sum(edgeScores) / sqrt(N)); use multiple sources only when the penalized combined score is likely higher than the best single-source move.
         Only choose node ids from this list.`;
 }
 
@@ -270,7 +249,10 @@ export function buildEvaluationPrompt(params: {
         
         Provide a thoughtful evaluation explaining the connection between the topic and response, 
         and why it deserves the scores you've assigned. Focus on the quality of the conceptual connection,
-        not on the brevity of the response.
+        not on the brevity of the response.  It should not be based on highly poetic analogies, but on the
+        actual shapes of the two concepts.  Feel free to argue that it is weakly connected or not connected
+        at all, like axolotl and mortgage rates.  Would this connection work equally well if either concept
+        were replaced by a different concept from the same domain?
         
         Also classify the player's response into exactly one destination subject category.
         Allowed destinationSubjectCategory values: ${subjectCategoryOptions}.

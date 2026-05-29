@@ -25,11 +25,13 @@ test('topic generation prompt requests a structured topic-only response', () => 
 
   assert.match(prompt.systemPrompt, /Return only valid JSON/);
   assert.match(prompt.systemPrompt, /"topic": "single topic name"/);
+  assert.match(prompt.systemPrompt, /5 words or fewer/);
+  assert.match(prompt.systemPrompt, /Do not return a sentence, research question/);
   assert.match(prompt.systemPrompt, /Do not include explanations/);
   assert.match(prompt.userMessage, /Return only JSON/);
 });
 
-test('free AI response prompt asks the model to choose the highest expected penalized score', () => {
+test('AI response prompt always asks the model to choose freely from the full board', () => {
   const prompt = buildAiResponsePrompt({
     topic: 'Ignored current topic',
     availableNodes: [
@@ -37,8 +39,6 @@ test('free AI response prompt asks the model to choose the highest expected pena
       { id: 'node-1', topic: 'Augury' },
       { id: 'node-2', topic: 'Pareidolia' },
     ],
-    selectedSourceNodeIds: [],
-    sourceSelectionMode: 'free',
     gameHistory: [],
     difficulty: 'undergrad',
     timestamp: '2026-05-28T00:00:00.000Z',
@@ -51,4 +51,5 @@ test('free AI response prompt asks the model to choose the highest expected pena
   assert.match(prompt.userMessage, /No source node is preselected/);
   assert.match(prompt.userMessage, /Compare one-source, two-source, and three-source options/);
   assert.match(prompt.userMessage, /use multiple sources only when the penalized combined score is likely higher/);
+  assert.doesNotMatch(prompt.userMessage, /currently selected/);
 });

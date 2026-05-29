@@ -8,6 +8,7 @@ import ScoreTooltip from './ScoreTooltip';
 import ConceptGraph from './graph/ConceptGraph';
 import TurnResponsePanel from './TurnResponsePanel';
 import TurnHistoryTable from './TurnHistoryTable';
+import { GameVisualTheme, cx } from './gameVisualTheme';
 import {
   CurrentEvaluationEdgeScore,
   Score,
@@ -38,6 +39,7 @@ export default function GameInterface() {
   const [playerMode, setPlayerMode] = useState<GamePlayerMode>('human-vs-ai');
   const [aiGoesFirst, setAiGoesFirst] = useState<boolean>(false);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('undergrad');
+  const [isSkeuomorphic, setIsSkeuomorphic] = useState<boolean>(true);
   const configuredPlayers = useMemo(() => createConfiguredPlayers(playerMode), [playerMode]);
 
   const [tooltipData, setTooltipData] = useState<{
@@ -104,6 +106,9 @@ export default function GameInterface() {
   const sourceSelectionLocked = isEvaluating || isAiThinking || gameCompleted;
   const isOpeningTurn = gameStarted && !gameState.rootNodeId;
   const productionModelName = 'the configured LLM model';
+  const visualTheme: GameVisualTheme = isSkeuomorphic ? 'bead-table' : 'classic';
+  const isBeadTableTheme = visualTheme === 'bead-table';
+  const activeGraphRenderer = isSkeuomorphic ? 'webgl' : 'svg';
 
   const handleSelectHistoryItem = (historyItem: TurnHistoryRow) => {
     if (sourceSelectionLocked) {
@@ -207,38 +212,87 @@ export default function GameInterface() {
 
   if (!gameStarted) {
     return (
-      <div className="max-w-7xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold text-center mb-8">The Glass Bead Game</h1>
-        <GameSetupPanel
-          maxRounds={maxRounds}
-          roundOptions={DEFAULT_ROUND_OPTIONS}
-          playerMode={playerMode}
-          aiGoesFirst={aiGoesFirst}
-          difficulty={difficulty}
-          difficultyLevels={DEFAULT_DIFFICULTY_LEVELS}
-          difficultyDescriptions={difficultyDescriptions}
-          firstPlayerName={firstPlayerName}
-          secondPlayerName={secondPlayerName}
-          isGeneratingTopic={isGeneratingTopic}
-          productionModelName={productionModelName}
-          onMaxRoundsChange={setMaxRounds}
-          onPlayerModeChange={setPlayerMode}
-          onAiGoesFirstChange={setAiGoesFirst}
-          onDifficultyChange={setDifficulty}
-          onStartGame={startGame}
-        />
-        <ScoreTooltip tooltipData={tooltipData} />
+      <div className={cx(
+        'min-h-screen w-full p-4 lg:p-6',
+        isBeadTableTheme
+          ? 'bg-[#17100a] text-[#24180f]'
+          : 'bg-white text-gray-950'
+      )}>
+        <div className={cx(
+          'mx-auto max-w-7xl rounded-lg border p-6',
+          isBeadTableTheme
+            ? 'border-[#6d5730] bg-[#efe2c3] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_18px_40px_rgba(0,0,0,0.35)]'
+            : 'border-transparent bg-white shadow-lg'
+        )}>
+          <div className="mb-8 flex items-start justify-between gap-4">
+            <div className="w-32 shrink-0" aria-hidden="true" />
+            <h1 className={cx(
+              'text-center text-3xl font-bold',
+              isBeadTableTheme && 'gbg-small-caps font-serif tracking-normal text-[#2d1d12]'
+            )}>
+              The Glass Bead Game
+            </h1>
+            <SkeuomorphicToggle
+              enabled={isSkeuomorphic}
+              visualTheme={visualTheme}
+              onToggle={() => setIsSkeuomorphic(value => !value)}
+            />
+          </div>
+          <GameSetupPanel
+            visualTheme={visualTheme}
+            maxRounds={maxRounds}
+            roundOptions={DEFAULT_ROUND_OPTIONS}
+            playerMode={playerMode}
+            aiGoesFirst={aiGoesFirst}
+            difficulty={difficulty}
+            difficultyLevels={DEFAULT_DIFFICULTY_LEVELS}
+            difficultyDescriptions={difficultyDescriptions}
+            firstPlayerName={firstPlayerName}
+            secondPlayerName={secondPlayerName}
+            isGeneratingTopic={isGeneratingTopic}
+            productionModelName={productionModelName}
+            onMaxRoundsChange={setMaxRounds}
+            onPlayerModeChange={setPlayerMode}
+            onAiGoesFirstChange={setAiGoesFirst}
+            onDifficultyChange={setDifficulty}
+            onStartGame={startGame}
+          />
+          <ScoreTooltip visualTheme={visualTheme} tooltipData={tooltipData} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-white p-4 lg:p-6">
-      <h1 className="mb-4 text-3xl font-bold">The Glass Bead Game</h1>
+    <div className={cx(
+      'min-h-screen w-full p-4 lg:p-6',
+      isBeadTableTheme
+        ? 'bg-[#17100a] text-[#24180f]'
+        : 'bg-white text-gray-950'
+    )}>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <h1 className={cx(
+          'text-3xl font-bold',
+          isBeadTableTheme && 'gbg-small-caps font-serif tracking-normal text-[#f4e8cc]'
+        )}>
+          The Glass Bead Game
+        </h1>
+        <SkeuomorphicToggle
+          enabled={isSkeuomorphic}
+          visualTheme={visualTheme}
+          onToggle={() => setIsSkeuomorphic(value => !value)}
+        />
+      </div>
 
       <div className="flex min-h-0 w-full flex-col gap-4 lg:h-[calc(100vh-7rem)] lg:flex-row">
-        <div className="w-full shrink-0 overflow-y-auto rounded-md border border-gray-200 bg-white p-4 shadow-sm lg:w-[560px]">
+        <div className={cx(
+          'w-full shrink-0 overflow-y-auto rounded-md border p-4 lg:w-[560px]',
+          isBeadTableTheme
+            ? 'border-[#6d5730] bg-[#efe2c3] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_18px_40px_rgba(0,0,0,0.35)]'
+            : 'border-gray-200 bg-white shadow-sm'
+        )}>
           <CurrentTurnSourcesPanel
+            visualTheme={visualTheme}
             activeSourceRows={activeSourceRows}
             currentRound={currentRound}
             maxRounds={maxRounds}
@@ -252,6 +306,7 @@ export default function GameInterface() {
 
           {!showingResults && inlineEvaluation && (
             <EvaluationResultsPanel
+              visualTheme={visualTheme}
               currentEvaluation={inlineEvaluation}
               compact
               gameCompleted={false}
@@ -264,6 +319,7 @@ export default function GameInterface() {
 
           {!showingResults ? (
             <TurnResponsePanel
+              visualTheme={visualTheme}
               isCurrentPlayerManual={isCurrentPlayerManual}
               isOpeningTurn={isOpeningTurn}
               playerName={currentPlayerModel?.name}
@@ -275,6 +331,7 @@ export default function GameInterface() {
             />
           ) : currentEvaluation && (
             <EvaluationResultsPanel
+              visualTheme={visualTheme}
               currentEvaluation={currentEvaluation}
               gameCompleted={gameCompleted}
               playerScoreRows={playerScoreRows}
@@ -286,6 +343,7 @@ export default function GameInterface() {
 
           {gameState.rootNodeId && (
             <TurnHistoryTable
+              visualTheme={visualTheme}
               activeSourceNodeIds={gameState.activeSourceNodeIds}
               canSelectHistoryRows={!sourceSelectionLocked}
               showCurrentTurnRow={!showingResults}
@@ -314,6 +372,7 @@ export default function GameInterface() {
 
         <div className="min-h-[560px] min-w-0 flex-1 lg:h-full">
           <ConceptGraph
+            renderer={activeGraphRenderer}
             nodes={graphRenderData.nodes}
             edges={graphRenderData.edges}
             width={900}
@@ -326,7 +385,35 @@ export default function GameInterface() {
         </div>
       </div>
 
-      <ScoreTooltip tooltipData={tooltipData} />
+      <ScoreTooltip visualTheme={visualTheme} tooltipData={tooltipData} />
     </div>
+  );
+}
+
+function SkeuomorphicToggle({
+  enabled,
+  visualTheme,
+  onToggle,
+}: {
+  enabled: boolean;
+  visualTheme: GameVisualTheme;
+  onToggle: () => void;
+}) {
+  const isBeadTableTheme = visualTheme === 'bead-table';
+
+  return (
+    <button
+      type="button"
+      aria-pressed={enabled}
+      onClick={onToggle}
+      className={cx(
+        'w-32 shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+        isBeadTableTheme
+          ? 'border-[#b99a58] bg-[#f7e7bd] text-[#4a321d] hover:bg-[#fff0c2]'
+          : 'border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200'
+      )}
+    >
+      Skeuomorphic: {enabled ? 'On' : 'Off'}
+    </button>
   );
 }
